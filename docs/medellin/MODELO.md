@@ -350,6 +350,30 @@ Para los niveles de cada lado pasa el **menor** de los dos caudales. Con el agua
 
 **Cómo se dibuja** (`floodView.ts`): muros de cabecera con las tres bocas, tabiques, aletas a 45° y baranda abierta (en el cálculo no detiene el agua). Los troncos atascados en la entrada son tantos como pide la obstrucción calculada en cada momento. Con agua flotan a una profundidad fija bajo el nivel calculado en la entrada y, si el agua pasa sobre la vía, quedan contra la baranda. El rótulo muestra el caudal calculado por los cajones, el que pasa sobre la vía y el porcentaje tapado. En el mapa 2D, los cajones son líneas discontinuas bajo la vía y la obstrucción es una franja marrón en la entrada.
 
+### 6.7 Creciente desde la lluvia en la cuenca y aviso temprano
+
+En la herramienta «Creciente» se puede elegir el **origen de la creciente**: el hidrograma de ejemplo (secciones 6.4 y 6.5) o la **lluvia en la cuenca**. En el segundo caso, la misma lluvia configurada para el barrio cae sobre una cuenca didáctica aguas arriba del sector: 4 km², longitud hidráulica de 3,5 km y pendiente media de 20 %. El caudal que llega al sector se calcula con los métodos del NRCS (*National Engineering Handbook*, parte 630) en `src/city/sim/basin.ts`:
+
+| Paso | Ecuación | Notas |
+|---|---|---|
+| Escorrentía (cap. 10) | `Q = (P − Ia)² / (P − Ia + S)` si `P > Ia`; `S = 25 400/CN − 254` mm; `Ia = 0,2·S` | CN: bosque 70, mixta 80, urbanizada 90 (TR-55, suelos del grupo C). Con suelo húmedo, `CN_III = 23·CN/(10 + 0,13·CN)` |
+| Retardo (cap. 15) | `tL = ℓ^0,8·(S′ + 1)^0,7 / (1900·Y^0,5)` h | `ℓ` en pies, `S′ = 1000/CN − 10` pulgadas, `Y` en % |
+| Hidrograma unitario (cap. 16) | `tp = Δt/2 + tL`; `qp = 0,208·A·Q/tp`; base `2,67·tp` | triangular; `Δt` = 1 min; convolución con la escorrentía de cada minuto |
+
+El hidrograma se calcula cada minuto y entra completo por la quebrada (prueba W2); el lodo lo multiplica por `1/(1 − Cv)` como en el hidrograma de ejemplo. La cobertura de la cuenca es una intervención: A y B pueden tener cuencas distintas con la misma lluvia.
+
+**Aviso temprano.** Una estación de nivel a 2,5 km aguas arriba ve el mismo hidrograma adelantado el tiempo de viaje de la onda (4 m/s: 10 min; sin atenuación). Los umbrales son **didácticos**: aviso por lluvia con 20 mm o más en 30 minutos; alerta amarilla, naranja y roja cuando el caudal en la estación llega a 40 %, 70 % y 100 % de la capacidad del cauce en el sector. El motor registra el primer momento en que el agua llega a 10 cm junto a cada edificación; el **tiempo de aviso** es el que pasa entre una alerta y ese momento. En el Valle de Aburrá funciona un sistema de alerta temprana real, con sus propias estaciones y umbrales; este ejercicio no usa sus datos.
+
+**Resultados con 80 mm en una hora y suelo seco** (pruebas W1 y W2; 110 min simulados):
+
+| Cuenca | CN | Escorrentía | Retardo | Pico en el barrio | Alertas (min) | Agua en la primera casa | Edificaciones con agua |
+|---|---|---|---|---|---|---|---|
+| Bosque | 70 | 20 mm (25 %) | 40 min | 21 m³/s en el minuto 90 | lluvia 15; amarilla 71 | no llega | 0 |
+| Mixta | 80 | 35 mm (43 %) | 30 min | 42 m³/s en el minuto 77 | lluvia 15; amarilla 40; naranja 54 | no calculado | no calculado |
+| Urbanizada | 90 | 54 mm (67 %) | 21 min | 72 m³/s en el minuto 65 | lluvia 15; amarilla 19; naranja 27; roja 35 | minuto 40 (5 min después de la alerta roja) | 6 |
+
+La fila «Mixta» viene solo del hidrograma y de los umbrales; no se corrió en el sector, de modo que no tiene resultados de casas.
+
 ## 7. Tiempo, pausa y reproducibilidad
 
 - El tiempo de simulación es independiente del tiempo de dibujo.
@@ -404,6 +428,7 @@ En calles empinadas, la captación de los sumideros tiene una incertidumbre del 
 
 ## 10. Referencias
 
+- USDA NRCS (2004–2010). *National Engineering Handbook*, parte 630, *Hydrology*: capítulo 10 (escorrentía por número de curva), capítulo 15 (tiempo de concentración y ecuación del retardo) y capítulo 16 (hidrogramas). USDA NRCS (1986). *Urban Hydrology for Small Watersheds* (TR-55), tabla 2-2 (números de curva).
 - Schall, J. D., Thompson, P. L., Zerges, S. M., Kilgore, R. T. y Morris, J. L. (2012). *Hydraulic Design of Highway Culverts*, Hydraulic Design Series No. 5 (HDS-5), 3.ª ed. FHWA-HIF-12-026. Federal Highway Administration. Apéndice A (ecuaciones de control de entrada y tabla de coeficientes) y capítulo 3 (control de salida).
 - Australian Institute for Disaster Resilience (2014). *Technical flood risk management guideline: Flood hazard*, Australian Disaster Resilience Guideline 7-3 (2.ª ed.). Tablas 1 y 2: clases H1–H6 y sus límites.
 - Smith, G. P., Davey, E. K. y Cox, R. J. (2014). *Flood hazard*. UNSW Water Research Laboratory, Technical Report 2014/07.

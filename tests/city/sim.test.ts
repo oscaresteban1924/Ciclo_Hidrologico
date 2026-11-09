@@ -19,7 +19,8 @@ import { DEPTH_STOPS, NATURAL_STOPS, depthColor } from '../../src/city/render/pa
 import { depthRampTexture } from '../../src/city/render/stormFx';
 import { SewerModel, buildNodeTable, circ, fullFlow, inletCapture, normalDepth, windowK, type CompiledSewer, type SNode, type SPipe } from '../../src/city/sim/sewer';
 import { epmChecks } from '../../src/city/sim/sewerCheck';
-import { creekHydrograph } from '../../src/city/sim/engine';
+import { creekHydrograph, hyetograph } from '../../src/city/sim/engine';
+import { BASIN_COVER_LIST, basinHydrograph, curveNumber, lagHours, scsRunoff } from '../../src/city/sim/basin';
 import { barrelR, criticalDepth, culvertFlow, inletHeadwater, inletRating, qInlet, type CulvertGeom } from '../../src/city/sim/culvert';
 import { HAZARD, bulkingFactor, buildingRings, buildingExposure, damageSummary, exposureOf, hazardClass } from '../../src/city/sim/hazard';
 import { budgetTotal, budgetValues } from '../../src/city/ui/RainBudget';
@@ -1029,6 +1030,61 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
     tolerance: 'empieza libre; empieza a taparse cuando el caudal pasa de la mitad de la capacidad libre y llega al 90 % exactamente 180 s después; con la creciente igual a la capacidad del cauce el agua termina pasando por encima de la vía',
     measured: `empezó a taparse en ${fmt(prog.st.t0, 0)} s con la mitad de ${fmt(prog.cu.capacityFree, 1)} m³/s; llegó al 90 % en ${fmt(prog.tFull, 0)} s (${fmt(prog.tFull - prog.st.t0, 1)} s después); encima de la vía hasta ${fmt(prog.st.overMax, 1)} m³/s`,
     pass: prog.st.t0 > 0 && Math.abs(prog.tFull - prog.st.t0 - 180) < 1 && Math.abs(prog.st.obsMax - 0.9) < 1e-9 && prog.st.overMax > 5,
+  });
+}
+
+// ---------------------------------------------------------------- Creciente desde la lluvia en la cuenca y aviso
+{
+  // W1) Métodos del NRCS: número de curva, retardo e hidrograma unitario triangular
+  const S80 = 25400 / 80 - 254, Ia80 = 0.2 * S80;
+  const qHand = ((60 - Ia80) * (60 - Ia80)) / (60 - Ia80 + S80);
+  const eQ = Math.abs(scsRunoff(60, 80) - qHand);
+  const below = scsRunoff(Ia80 * 0.99, 80);
+  const cn3 = curveNumber('mixta', 'humedo'), cn3Hand = (23 * 80) / (10 + 0.13 * 80);
+  const lagHand = (Math.pow(3500 / 0.3048, 0.8) * Math.pow(1000 / 80 - 10 + 1, 0.7)) / (1900 * Math.sqrt(20));
+  const eLag = Math.abs(lagHours(3500, 80, 20) - lagHand);
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const basin = sc.creek!.basin!;
+  const hy = hyetograph({ ...sc.defaults.rain, intensityMmH: 80, durationMin: 60, pattern: 'constante', spatial: 'uniforme' });
+  const res = BASIN_COVER_LIST.map((cv) => basinHydrograph(hy, basin, cv, 'seco', 0, 600 * 60));
+  // volumen del hidrograma (sin caudal base) frente a la escorrentía por el área
+  const volErr = res.map((r) => {
+    let v = 0;
+    for (let k = 1; k < r.t.length; k++) v += 0.5 * (r.q[k] + r.q[k - 1]) * (r.t[k] - r.t[k - 1]);
+    return Math.abs(v - r.runoffMm * basin.areaKm2 * 1000) / (r.runoffMm * basin.areaKm2 * 1000);
+  });
+  const order = res[2].peak > res[1].peak && res[1].peak > res[0].peak && res[2].tPeak < res[1].tPeak && res[1].tPeak < res[0].tPeak;
+  record({
+    id: 'W1', kind: 'obligatoria', name: 'Creciente desde la lluvia: número de curva, retardo e hidrograma unitario del NRCS',
+    tolerance: 'escorrentía con CN 80 y 60 mm igual al cálculo a mano (error < 10⁻⁹ mm) y nula bajo la abstracción inicial; CN con suelo húmedo y retardo iguales a sus fórmulas (error < 10⁻⁹); el volumen del hidrograma es la escorrentía por el área de la cuenca (error < 1 %); con la misma lluvia, la cuenca urbanizada da un pico mayor y más temprano que la mixta, y esta que la de bosque',
+    measured: `escorrentía ${fmt(scsRunoff(60, 80), 3)} mm (a mano ${fmt(qHand, 3)}); bajo Ia ${fmt(below, 3)} mm; CN húmedo ${fmt(cn3, 2)} (a mano ${fmt(cn3Hand, 2)}); retardo ${fmt(lagHours(3500, 80, 20) * 60, 1)} min; error de volumen ${volErr.map((e) => `${fmt(e * 100, 2)} %`).join(' / ')}; con 80 mm en 1 h: ${res.map((r, i) => `${BASIN_COVER_LIST[i]} CN ${fmt(r.cn, 0)}, ${fmt(r.runoffMm, 1)} mm, pico ${fmt(r.peak, 1)} m³/s en el minuto ${fmt(r.tPeak / 60, 0)}`).join(' | ')}`,
+    pass: eQ < 1e-9 && below === 0 && Math.abs(cn3 - cn3Hand) < 1e-9 && eLag < 1e-9 && volErr.every((e) => e < 0.01) && order,
+  });
+}
+{
+  // W2) La creciente de la cuenca en el sector y el tiempo de aviso
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const run = (cover: 'bosque' | 'urbanizada') => {
+    const iv = baseInterventions(sc);
+    iv.basinCover = cover;
+    const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 80, durationMin: 60, pattern: 'constante', spatial: 'uniforme' }, simMinutes: 110, creek: { source: 'cuenca', peakM3s: 0, timeToPeakMin: 6, startMin: 0 } };
+    const sim = new CitySim(compile(sc, sh, iv), sh);
+    sim.runToEnd();
+    const hg = sim.creekHydro!;
+    let v = 0;
+    for (let k = 1; k < hg.t.length && hg.t[k] <= sim.endT + 1e-9; k++) v += 0.5 * (hg.q[k] + hg.q[k - 1]) * (hg.t[k] - hg.t[k - 1]);
+    return { sim, ind: indicators(sim), eV: Math.abs(sim.bal.creekIn - v) / v, res: Math.abs(sim.bal.residual) / (sim.bal.precipitation + sim.bal.inflow) };
+  };
+  const f = run('bosque'), u = run('urbanizada');
+  const ev = (r: typeof f, id: string) => r.ind.warning!.events.find((e) => e.id === id)!.t;
+  const seq = ['lluvia', 'amarilla', 'naranja', 'roja'].map((id) => ev(u, id));
+  const ordered = seq.every((t, i) => t >= 0 && (i === 0 || t >= seq[i - 1]));
+  const wetU = u.ind.warning!.firstWetT, wetF = f.ind.warning!.firstWetT;
+  record({
+    id: 'W2', kind: 'obligatoria', name: 'Creciente de la cuenca en el sector: volumen, daños y tiempo de aviso',
+    tolerance: 'con 80 mm en una hora, el volumen que entra por la quebrada es la integral del hidrograma calculado (error < 10⁻⁶) y el balance cierra (residuo < 10⁻⁹); con la cuenca de bosque no llega agua a las casas; con la cuenca urbanizada sí, las alertas se activan en orden (lluvia, amarilla, naranja, roja) y la alerta roja de la estación llega antes que el agua a la primera casa',
+    measured: `bosque: pico ${fmt(f.ind.basin!.peak, 1)} m³/s en el minuto ${fmt(f.ind.basin!.tPeak / 60, 0)}, error de volumen ${f.eV.toExponential(1)}, residuo ${f.res.toExponential(1)}, edificaciones con agua ${f.ind.damage.affected}${wetF >= 0 ? ` (desde el minuto ${fmt(wetF / 60, 1)})` : ''} | urbanizada: pico ${fmt(u.ind.basin!.peak, 1)} m³/s en el minuto ${fmt(u.ind.basin!.tPeak / 60, 0)}, error de volumen ${u.eV.toExponential(1)}, residuo ${u.res.toExponential(1)}; avisos en los minutos ${seq.map((t) => fmt(t / 60, 1)).join(', ')}; agua en la primera casa en el minuto ${fmt(wetU / 60, 1)} (${fmt((wetU - seq[3]) / 60, 1)} min después de la alerta roja); edificaciones con agua ${u.ind.damage.affected}`,
+    pass: f.eV < 1e-6 && u.eV < 1e-6 && f.res < 1e-9 && u.res < 1e-9 && f.ind.damage.affected === 0 && wetF < 0 && u.ind.damage.affected > 0 && ordered && wetU > seq[3],
   });
 }
 

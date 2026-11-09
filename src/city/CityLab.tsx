@@ -204,7 +204,7 @@ export default function CityLab() {
       const dx = c.shared && sc.resolutions.includes(c.shared.dx) ? c.shared.dx : sc.defaultResolution;
       // creciente de la misión: fracción de la capacidad de la sección de control, calculada con el escenario
       const cap = m.creek && sc.creek ? compile(sc, { ...sc.defaults, dx }, A).creek?.capacity ?? 0 : 0;
-      const creek = m.creek && cap > 0 ? { peakM3s: Math.round(m.creek.fraction * cap), timeToPeakMin: m.creek.timeToPeakMin, startMin: m.creek.startMin, sedimentCv: m.creek.sedimentCv ?? 0 } : null;
+      const creek = m.creek && cap > 0 ? { peakM3s: Math.round(m.creek.fraction * cap), timeToPeakMin: m.creek.timeToPeakMin, startMin: m.creek.startMin, sedimentCv: m.creek.sedimentCv ?? 0, source: m.creek.source ?? 'ejemplo' } : null;
       c.update({ shared: { ...sc.defaults, dx, rain: { ...sc.defaults.rain, ...m.rain }, simMinutes: m.simMinutes, creek }, A, B });
       c.setCompare(m.change.kind !== 'ninguno');
       c.start();

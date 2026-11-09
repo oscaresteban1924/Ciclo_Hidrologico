@@ -19,6 +19,8 @@ Que cada niña o niño **cambie una parte de la ciudad, vea un cambio coherente 
 
 Para la ladera hay una secuencia sobre la quebrada: «La creciente de la quebrada», «La cobertura tapada» y «La avenida torrencial». En «La cobertura tapada», la misma creciente que cabe por los cajones con la entrada libre se represa cuando los troncos tapan el 90 % y pasa por encima de la carrera. Conviene preguntar de dónde vienen los troncos y la basura y qué se puede hacer antes de las lluvias (limpiar las bocas, no arrojar escombros a las quebradas). La cobertura y su obstrucción son hipotéticas.
 
+La misión «La cuenca urbanizada» usa la creciente calculada desde la lluvia: el mismo aguacero de 80 mm en una hora cae sobre una cuenca con bosque (A) y sobre la misma cuenca urbanizada (B). Con bosque, la quebrada solo llega a alerta amarilla y el agua no alcanza las casas. Con la cuenca urbanizada, la creciente llega 25 minutos antes y es más de tres veces mayor. La alerta roja de la estación se activa 5 minutos antes de que el agua llegue a la primera casa. Conviene conversar sobre qué se puede hacer en esos minutos y por qué importan los bosques de las cuencas. La cuenca, la estación y los umbrales son didácticos.
+
 ## Preguntas para conversar
 
 - ¿Por qué el agua se junta en la esquina y no en la mitad de la calle?
@@ -27,6 +29,7 @@ Para la ladera hay una secuencia sobre la quebrada: «La creciente de la quebrad
 - ¿Qué pasaría si el suelo ya estaba húmedo antes de llover?
 - ¿Qué parte de la maqueta es real y qué parte es inventada para aprender?
 - Si la cobertura bajo la vía se tapa, ¿por dónde busca pasar el agua? ¿A quién afecta?
+- Si llueve igual, ¿por qué una cuenca urbanizada manda más agua y más rápido a la quebrada? ¿Para qué sirve una estación aguas arriba?
 
 ## Palabras clave
 
@@ -38,7 +41,7 @@ Para la ladera hay una secuencia sobre la quebrada: «La creciente de la quebrad
 | Rugosidad | Qué tan áspera es una superficie para el agua: el pasto la frena y el asfalto liso casi no. |
 | Almacenamiento | Agua que se queda un tiempo en charcos, jardines, depósitos o en el suelo. |
 
-También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento permeable*, *jardín de lluvia*, *cobertura de quebrada* y *represamiento*. Todas están en el glosario general. Desde la pestaña «Palabras» se puede abrir el paso correspondiente del recorrido del ciclo del agua.
+También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento permeable*, *jardín de lluvia*, *cobertura de quebrada*, *represamiento*, *cuenca* y *alerta temprana*. Todas están en el glosario general. Desde la pestaña «Palabras» se puede abrir el paso correspondiente del recorrido del ciclo del agua.
 
 ## Lectura de la maqueta
 

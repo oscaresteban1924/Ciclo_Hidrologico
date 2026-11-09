@@ -2,7 +2,8 @@
 // simulado, dominio, bordes, resolución, umbral y semilla. Solo cambian las intervenciones.
 
 import { compile, type Compiled } from './compile';
-import { CitySim, type SimOptions } from './engine';
+import { CitySim, hydroAt, type SimOptions } from './engine';
+import { warningEvents, type WarningEvent } from './basin';
 import { AFFECTED_DEPTH_M, damageSummary, exposureOf, hazardAreas } from './hazard';
 import type { Interventions, Scenario, Shared } from './scenario';
 
@@ -48,6 +49,10 @@ export interface Indicators {
    * y capacidad libre con el agua a la cota de la vía [m³/s].
    */
   culverts: { id: string; name: string; qMax: number; overMax: number; overVol: number; headOverRoad: number; obsMax: number; capacityFree: number }[];
+  /** Creciente desde la lluvia en la cuenca (null si la creciente es la de ejemplo o no hay). */
+  basin: { cover: string; cn: number; rainMm: number; runoffMm: number; lagMin: number; peak: number; tPeak: number } | null;
+  /** Avisos (momento de cada umbral, −1 si no se alcanzó) y primer momento con agua junto a una edificación [s]. */
+  warning: { events: WarningEvent[]; firstWetT: number } | null;
   /** Volumen captado por cada sumidero [m³]. */
   drainTotals: Record<string, number>;
   t: number;
@@ -102,6 +107,14 @@ export function indicators(sim: CitySim): Indicators {
       return { id: cu.id, name: cu.name, qMax: st.qMax, overMax: Math.max(0, st.overMax), overVol: st.overVol, headOverRoad: st.upMax - cu.crestZ, obsMax: st.obsMax, capacityFree: cu.capacityFree };
     }),
     drainTotals: Object.fromEntries(sim.c.drains.map((d, k) => [d.id, sim.drainTotal[k]])),
+    basin: sim.basin && sim.c.creek ? { cover: sim.c.creek.basinCover, cn: sim.basin.cn, rainMm: sim.basin.rainMm, runoffMm: sim.basin.runoffMm, lagMin: sim.basin.lagMin, peak: sim.basin.peak, tPeak: sim.basin.tPeak } : null,
+    warning: (() => {
+      const cr = sim.c.creek, hg = sim.creekHydro;
+      if (!sim.basin || !cr || !hg) return null;
+      let first = -1;
+      for (const t of sim.firstWet) if (t >= 0 && (first < 0 || t < first)) first = t;
+      return { events: warningEvents(sim.hyeto, (t) => hydroAt(hg, t), sim.basin.travelS, cr.capacity, sim.endT), firstWetT: first };
+    })(),
     t: sim.t,
   };
 }

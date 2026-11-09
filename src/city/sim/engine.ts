@@ -15,7 +15,8 @@
 import { G, H_FLOW_MIN, H_WET, INLET, NUMERICS, mmhToMs } from './constants';
 import type { Compiled } from './compile';
 import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from './drainage';
-import { HAZARD_WET_M, UNSTABLE_FROM, bulkingFactor, hazardClass } from './hazard';
+import { AFFECTED_DEPTH_M, HAZARD_WET_M, UNSTABLE_FROM, bulkingFactor, hazardClass, ringsFor } from './hazard';
+import { basinHydrograph, type BasinResult } from './basin';
 import { culvertFlow } from './culvert';
 
 /**
@@ -259,6 +260,10 @@ export class CitySim {
   private extIn: Float64Array;
   /** Hidrograma de la creciente (si hay). */
   readonly creekHydro: { t: number[]; q: number[] } | null;
+  /** Creciente calculada desde la lluvia en la cuenca (null si la creciente es la de ejemplo). */
+  readonly basin: BasinResult | null = null;
+  /** Momento en que el agua llegó por primera vez a 10 cm junto a cada edificación [s] (−1 si nunca). */
+  firstWet: Float64Array = new Float64Array(0);
   private lastSampleSewer = { out: [0, 0], overflow: [0, 0], toCreek: 0 };
 
   t = 0;
@@ -311,7 +316,11 @@ export class CitySim {
     this.sewer = c.sewer ? new SewerModel(c.sewer) : null;
     this.extraIn = new Float64Array(c.sewer ? c.sewer.nodes.length : 0);
     this.extIn = new Float64Array(this.extraIn.length);
-    this.creekHydro = c.creek && shared.creek ? creekHydrograph(shared.creek, c.creek.baseM3s) : null;
+    if (c.creek && shared.creek?.source === 'cuenca' && c.creek.basin) {
+      // creciente desde la lluvia en la cuenca: la misma lluvia del barrio, con la cobertura de la cuenca
+      this.basin = basinHydrograph(this.hyeto, c.creek.basin, c.creek.basinCover, shared.soilInitial, c.creek.baseM3s, this.endT, bulkingFactor(shared.creek.sedimentCv ?? 0));
+      this.creekHydro = { t: this.basin.t, q: this.basin.q };
+    } else this.creekHydro = c.creek && shared.creek ? creekHydrograph(shared.creek, c.creek.baseM3s) : null;
     // Caras del borde de cada jardín (para medir lo que entra y lo que rebosa)
     const gardens = new Set<number>();
     for (let k = 0; k < N; k++) if (c.garden[k] >= 0) gardens.add(c.garden[k]);
@@ -398,6 +407,7 @@ export class CitySim {
     this.diag = { steps: 0, dtMin: Infinity, dtMax: 0, froudeLimited: 0, faceUpdates: 0, limiterHits: 0, maxCourant: 0, computeMs: 0, nonFinite: 0, negativeFixes: 0 };
     this.samples = [];
     this.probeMax = c.probes.map(() => ({ depth: 0, t: 0 }));
+    this.firstWet = new Float64Array(c.buildings.length).fill(-1);
     this.maxAreaAbove = 0;
     this.lastSampleT = 0;
     this.lastSampleB = 0;
@@ -1053,6 +1063,17 @@ export class CitySim {
       this.lastSampleSewer = { out: [T.out[0], T.out[1]], overflow: [T.overflow[0], T.overflow[1]], toCreek: T.toCreek[0] };
     }
     if (c.creek) s.creek = this.creekSection();
+    // primer momento en que el agua llega a 10 cm junto a cada edificación (para el tiempo de aviso)
+    if (this.firstWet.length) {
+      const rings = ringsFor(c);
+      for (let b = 0; b < rings.length; b++) {
+        if (this.firstWet[b] >= 0) continue;
+        for (const k of rings[b]) if (this.h[k] >= AFFECTED_DEPTH_M) {
+          this.firstWet[b] = this.t;
+          break;
+        }
+      }
+    }
     if (this.culv.length) s.culverts = this.culv.map((u) => ({ q: u.q, over: u.over, up: u.up, obs: u.obs }));
     this.samples.push(s);
     this.lastSampleT = this.t;

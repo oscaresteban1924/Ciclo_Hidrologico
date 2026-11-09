@@ -187,6 +187,7 @@ export function laderaScenario(): Scenario {
         { layer: 'Alcantarillado', kind: 'hipotetico', note: 'Red separada de aguas lluvias (descarga a la quebrada) y de aguas residuales (sigue hacia el interceptor) trazada con criterios de la norma de diseño de EPM (GD-AS002). Es didáctica: no es la red real ni un diseño de ingeniería.' },
         { layer: 'Creciente', kind: 'hipotetico', note: 'Hidrograma triangular que entra por la quebrada, con lodo opcional (factor de volumen 1/(1 − Cv)). No es un caudal medido ni un pronóstico.' },
         { layer: 'Casas en la orilla', kind: 'didactico', note: 'Cuatro casas construidas a ras de la orilla norte, dentro del retiro de la quebrada, para mostrar la exposición. No representan viviendas reales.' },
+        { layer: 'Cuenca y estación de nivel', kind: 'didactico', note: 'Cuenca de 4 km² aguas arriba del barrio (longitud hidráulica 3,5 km, pendiente media 20 %) y estación de nivel a 2,5 km por el cauce. La creciente se calcula con la misma lluvia del barrio con los métodos del NRCS (número de curva, ecuación del retardo e hidrograma unitario triangular). Los umbrales de aviso son didácticos: no son los de ningún sistema oficial de alerta.' },
         { layer: 'Cobertura de la carrera', kind: 'didactico', note: 'La carrera cruza la quebrada sobre un terraplén con una cobertura de triple cajón de 3 × 2,3 m. Su hidráulica sigue las ecuaciones de la guía de diseño de alcantarillas de la FHWA (HDS-5); su obstrucción por troncos es una intervención hipotética.' },
         { layer: 'Vehículos y puente peatonal', kind: 'didactico', note: 'Dos carros y una moto estacionados cerca de la quebrada y un puente peatonal. El motor calcula si el agua mueve los vehículos (clase de peligro H2 o mayor); el puente no obstruye el agua en el cálculo.' },
         { layer: 'Coberturas del suelo', kind: 'estimado', note: 'Parámetros estimados de literatura general; no calibrados.' },
@@ -251,6 +252,7 @@ export function laderaScenario(): Scenario {
       section: { at: [SEC_X, yq(SEC_X)], halfWidthM: 13, bankHalfWidthM: CHANNEL.bankHalf, name: 'Sección de control' },
       baseM3s: 0.3,
       footbridge: { id: 'puente', name: 'Puente peatonal', x: PUENTE_X, halfLengthM: 7, widthM: 1.6, deckAboveBankM: 0.9, beamM: 0.35 },
+      basin: { name: 'Cuenca de la quebrada aguas arriba del barrio', areaKm2: 4, lengthM: 3500, slopePct: 20, gauge: { name: 'Estación de nivel aguas arriba', distanceM: 2500, celerityMs: 4 } },
     },
     culverts: [
       {

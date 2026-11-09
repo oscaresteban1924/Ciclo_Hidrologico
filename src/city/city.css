@@ -1725,3 +1725,101 @@
 .culvert-box > .btn-ghost {
   margin-top: 4px;
 }
+
+/* Creciente desde la lluvia en la cuenca y aviso temprano */
+.basin-box {
+  margin: 4px 0 12px;
+}
+.basin-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+.basin-facts > div {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: #fff;
+}
+.basin-facts dt {
+  font-size: 0.76rem;
+  color: var(--ink-2);
+}
+.basin-facts dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+.warn-box {
+  margin: 16px 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.warn-box > h4 {
+  margin-top: 0;
+}
+.warn-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 0.88rem;
+}
+.warn-now.is-amarilla {
+  background: #fff7dc;
+  border-color: #e7c35a;
+}
+.warn-now.is-naranja {
+  background: #fdebd8;
+  border-color: #e8903a;
+}
+.warn-now.is-roja {
+  background: #fbe3e3;
+  border-color: #c92a2a;
+}
+.warn-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+}
+.warn-timeline {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0 0 0 4px;
+  border-left: 2px solid var(--line);
+}
+.warn-timeline li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0 4px 10px;
+  margin-left: -7px;
+  font-size: 0.86rem;
+}
+.warn-timeline li .warn-dot {
+  align-self: center;
+}
+.warn-timeline li.is-future {
+  color: var(--ink-2);
+}
+.warn-timeline li.is-future .warn-dot {
+  opacity: 0.45;
+}
+.warn-t {
+  flex: 0 0 auto;
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.warn-result {
+  padding: 10px 12px;
+  border-radius: var(--r-s);
+  background: var(--water-wash, #e8f1fa);
+  font-size: 0.9rem;
+}

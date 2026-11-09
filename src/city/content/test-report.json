@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-09T22:13:20.044Z",
+  "generatedAt": "2026-11-09T22:35:21.082Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
-  "passed": 41,
-  "total": 41,
+  "passed": 43,
+  "total": 43,
   "results": [
     {
       "id": "1",
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 300 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 578 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5724 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 144 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 667 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5499 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -333,6 +333,22 @@
       "pass": true
     },
     {
+      "id": "W1",
+      "kind": "obligatoria",
+      "name": "Creciente desde la lluvia: número de curva, retardo e hidrograma unitario del NRCS",
+      "tolerance": "escorrentía con CN 80 y 60 mm igual al cálculo a mano (error < 10⁻⁹ mm) y nula bajo la abstracción inicial; CN con suelo húmedo y retardo iguales a sus fórmulas (error < 10⁻⁹); el volumen del hidrograma es la escorrentía por el área de la cuenca (error < 1 %); con la misma lluvia, la cuenca urbanizada da un pico mayor y más temprano que la mixta, y esta que la de bosque",
+      "measured": "escorrentía 20.192 mm (a mano 20.192); bajo Ia 0.000 mm; CN húmedo 90.20 (a mano 90.20); retardo 30.0 min; error de volumen 0.03 % / 0.03 % / 0.02 %; con 80 mm en 1 h: bosque CN 70, 20.3 mm, pico 21.0 m³/s en el minuto 90 | mixta CN 80, 34.6 mm, pico 42.1 m³/s en el minuto 77 | urbanizada CN 90, 53.9 mm, pico 71.9 m³/s en el minuto 65",
+      "pass": true
+    },
+    {
+      "id": "W2",
+      "kind": "obligatoria",
+      "name": "Creciente de la cuenca en el sector: volumen, daños y tiempo de aviso",
+      "tolerance": "con 80 mm en una hora, el volumen que entra por la quebrada es la integral del hidrograma calculado (error < 10⁻⁶) y el balance cierra (residuo < 10⁻⁹); con la cuenca de bosque no llega agua a las casas; con la cuenca urbanizada sí, las alertas se activan en orden (lluvia, amarilla, naranja, roja) y la alerta roja de la estación llega antes que el agua a la primera casa",
+      "measured": "bosque: pico 21.3 m³/s en el minuto 90, error de volumen 9.5e-15, residuo 6.9e-16, edificaciones con agua 0 | urbanizada: pico 72.2 m³/s en el minuto 65, error de volumen 3.5e-15, residuo 1.3e-14; avisos en los minutos 15.0, 19.3, 27.1, 35.1; agua en la primera casa en el minuto 40.0 (4.9 min después de la alerta roja); edificaciones con agua 6",
+      "pass": true
+    },
+    {
       "id": "R1",
       "kind": "revision",
       "name": "Sensibilidad al límite de Froude (ladera, 10 % de pendiente)",
@@ -353,7 +369,7 @@
       "area": 8,
       "res": -2.5579538487363607e-13,
       "steps": 2326,
-      "ms": 300.16096500000003
+      "ms": 144.14521199999945
     },
     {
       "dx": 1,
@@ -366,7 +382,7 @@
       "area": 0,
       "res": -6.110667527536862e-13,
       "steps": 3072,
-      "ms": 578.221423
+      "ms": 667.0359749999998
     },
     {
       "dx": 0.5,
@@ -379,7 +395,7 @@
       "area": 0,
       "res": -7.247535904753022e-13,
       "steps": 6227,
-      "ms": 5723.591886
+      "ms": 5499.274349
     }
   ],
   "froude": [

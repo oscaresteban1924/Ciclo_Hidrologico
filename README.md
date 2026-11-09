@@ -111,6 +111,7 @@ En el laboratorio, los estudiantes pueden:
 - ver bajo la calle las **dos redes separadas** de alcantarillado: aguas lluvias y aguas residuales. Son didácticas y se trazaron con criterios de la norma de diseño de EPM. Muestran las cámaras de inspección y de caída, el sentido y la velocidad del agua, los tramos en carga y el rebose; se pueden ver juntas o una sola, en corte de calle, en planta y en perfil. Incluyen la intervención «conexiones erradas»;
 - lanzar una **creciente** por la quebrada de la ladera, hasta una avenida torrencial con lodo, y ver en vivo la sección transversal, el hidrograma, el desborde sobre las casas de la orilla, los vehículos que arrastra, las marcas en las fachadas y los daños calculados por edificación;
 - tapar con troncos la **cobertura** por donde la quebrada pasa bajo la carrera (libre, 50 %, 90 % o «se tapa con la creciente») y ver cómo el agua se represa y cruza la vía; su hidráulica sigue la guía HDS-5 de la FHWA;
+- calcular la creciente **desde la lluvia en la cuenca** (bosque, mixta o urbanizada; métodos del NRCS) y seguir el **aviso temprano**: una estación aguas arriba con alertas amarilla, naranja y roja, y el tiempo que queda para avisar antes de que el agua llegue a las casas;
 - ver el **peligro** de cada lugar (clases H1–H6 según profundidad y velocidad; referencia técnica, no el mapa oficial de amenaza);
 - seguir el agua con gotas trazadoras y medir la profundidad en el tiempo;
 - comparar A y B con exactamente la misma lluvia.
@@ -118,7 +119,7 @@ En el laboratorio, los estudiantes pueden:
 Además hay:
 - una barra en vivo «¿Adónde fue la lluvia?», que muestra qué parte del agua sigue sobre el suelo, cuál salió, cuál entró al suelo, cuál tomaron los sumideros y cuál guardan los depósitos;
 - una guía de primeros pasos;
-- diez misiones (pregunta, predicción, cambio y explicación);
+- once misiones (pregunta, predicción, cambio y explicación);
 - botones para ocultar las etiquetas de la maqueta y para contraer el panel derecho, de modo que la maqueta ocupe todo el ancho (se recuerdan en el dispositivo);
 - un panel docente con supuestos, balance de agua, fuentes y pruebas.
 

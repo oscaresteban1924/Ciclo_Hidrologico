@@ -5,6 +5,7 @@ import { COVERS, COVER_LIST, G, NUMERICS, coverIndex, mmhToMs, type CoverId } fr
 import type { ExposedObject, Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
 import { buildNodeTable, fullFlow, windowK, type CompiledSewer, type SInlet, type SNode, type SPipe } from './sewer';
 import { barrelR, inletRating, qInlet, type CulvertGeom, type InletRating } from './culvert';
+import type { BasinCover, BasinSpec } from './basin';
 
 export interface CompiledBuilding {
   id: string;
@@ -136,6 +137,9 @@ export interface CompiledCreek {
   /** Capacidad con Manning en flujo uniforme, sin el límite de Froude del modelo [m³/s]. */
   capacityManning: number;
   name: string;
+  /** Cuenca aguas arriba y su cobertura (creciente desde la lluvia). */
+  basin?: BasinSpec;
+  basinCover: BasinCover;
 }
 
 export function pointInPolygon(x: number, y: number, poly: Polygon): boolean {
@@ -601,7 +605,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       capacity += Math.min(qm, qf) * dx;
       capacityManning += qm * dx;
     }
-    creek = { cells, baseM3s: ck.baseM3s, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name };
+    creek = { cells, baseM3s: ck.baseM3s, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name, basin: ck.basin, basinCover: iv.basinCover ?? 'mixta' };
   }
 
   // Coberturas: grupos de celdas a la entrada y a la salida, bateas, tabla de control de entrada
@@ -665,6 +669,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     h = fnv(h, iv.erradas ? 7 : 3);
   }
   for (const cu of culverts) h = fnv(h, Math.round(cu.obstruction * 1000) ^ (cu.progressive ? 1 << 20 : 0) ^ cu.inCells[0]);
+  if (creek?.basin) h = fnv(h, 11 + ['bosque', 'mixta', 'urbanizada'].indexOf(creek.basinCover));
 
   return {
     scenarioId: sc.id,

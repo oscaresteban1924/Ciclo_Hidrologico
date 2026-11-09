@@ -14,6 +14,7 @@ import { SEWER_COLORS, acometidas, mainPath, showsSystem, type NetFilter } from 
 import { buildingName } from '../render/floodNames';
 import { LineChart, type Series } from './Chart';
 import { Range } from './Range';
+import { BasinSection, CreekSource, WarningSection } from './BasinPanel';
 
 const lps = (v: number) => `${fmtNum(v * 1000, v * 1000 < 10 ? 1 : 0)} L/s`;
 const m3 = (v: number) => `${fmtNum(v, v < 10 ? 2 : 1)} m³`;
@@ -575,12 +576,16 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
   const overBank = now ? now.level - cr.bankLevel : 0;
   const moved = sim ? sim.drift.filter((o) => o.tMoved >= 0).length : 0;
   const cv = cf?.sedimentCv ?? 0;
+  const basinMode = cf?.source === 'cuenca' && !!sc.creek.basin;
   return (
     <section className="tool-body creek-tool" aria-label="Creciente de la quebrada">
       <h3>Creciente de la quebrada</h3>
       <p className="city-small">
         En la sección de control, frente a las casas de la orilla, el cauce lleva hasta <strong>{m3s(cap)}</strong>: la orilla está a {fmtNum(cr.bankLevel - cr.zBed, 2)} m del fondo y la pendiente es de {fmtNum(cr.slope * 100, 1)} %. Si llega más agua, se sale hacia el retiro y las casas construidas en él.
       </p>
+      <CreekSource ctrl={ctrl} sc={sc} />
+      {basinMode && <BasinSection ctrl={ctrl} sc={sc} sim={sim} />}
+      {!basinMode && (
       <div className="preset-grid" role="group" aria-label="Crecientes de ejemplo">
         {CREEK_PRESETS.map((p) => {
           const on = pick === p;
@@ -592,7 +597,8 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
           );
         })}
       </div>
-      {cf && (
+      )}
+      {cf && !basinMode && (
         <details className="city-summary creek-adjust">
           <summary>Ajustar la creciente</summary>
           <Range label="Caudal pico del agua" value={cf.peakM3s} min={1} max={Math.round(4 * cap)} step={1} unit="m³/s" onChange={(v) => set({ ...cf, peakM3s: v })} help={`${fmtNum(rel * 100, 0)} % de la capacidad del cauce en la sección.`} />
@@ -607,7 +613,7 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
           />
         </details>
       )}
-      {cf && <p className="city-small">Hidrograma triangular: sube en {cf.timeToPeakMin} min y baja en {fmtNum(1.67 * cf.timeToPeakMin, 0)} min, sobre un caudal base de {fmtNum(cr.baseM3s, 1)} m³/s. Es un ejercicio: no es un caudal medido ni un pronóstico de inundación.</p>}
+      {cf && !basinMode && <p className="city-small">Hidrograma triangular: sube en {cf.timeToPeakMin} min y baja en {fmtNum(1.67 * cf.timeToPeakMin, 0)} min, sobre un caudal base de {fmtNum(cr.baseM3s, 1)} m³/s. Es un ejercicio: no es un caudal medido ni un pronóstico de inundación.</p>}
       {now && sim && (
         <>
           <div className="stat-row">
@@ -616,6 +622,7 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
             <Stat label="Casas con agua" value={damage ? String(damage.sum.affected) : '0'} sub={damage && damage.sum.severe ? `${damage.sum.severe} con peligro H5 o más` : 'ninguna con daño estructural posible'} tone={damage && damage.sum.severe ? 'danger' : damage && damage.sum.affected ? 'warn' : 'ok'} />
             <Stat label="Vehículos movidos" value={`${moved} de ${sim.drift.length}`} sub={sim.drift.some((o) => o.state === 'fuera') ? `${sim.drift.filter((o) => o.state === 'fuera').length} salieron del sector` : 'por el agua'} tone={moved ? 'danger' : 'ok'} />
           </div>
+          {basinMode && <WarningSection ctrl={ctrl} sc={sc} sim={sim} />}
           <SectionChart sim={sim} sc={sc} />
           <LineChart title="Caudales en la sección de control" series={series} fmtY={(v) => `${fmtNum(v, 0)} m³/s`} yUnit="metros cúbicos por segundo" refY={{ y: cap, label: `capacidad del cauce: ${fmtNum(cap, 0)} m³/s` }} height={170} xMax={ctrl.shared.simMinutes} nowX={sim.t / 60} />
           {damage && damage.ex.length > 0 && (

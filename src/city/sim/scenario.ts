@@ -2,6 +2,7 @@
 // Coordenadas locales en metros: x hacia el este, y hacia el norte, origen en la esquina suroeste.
 
 import { COVER_LIST, DURATION_RANGE, RAIN_RANGE, type CoverId } from './constants';
+import { BASIN_COVER_LIST, type BasinCover, type BasinSpec } from './basin';
 
 export type Pt = [number, number];
 export type Polygon = Pt[];
@@ -204,10 +205,17 @@ export interface CreekSpec {
    * agua). El tablero queda `deckAboveBankM` sobre la orilla; la viga, `beamM` por debajo del tablero.
    */
   footbridge?: { id: string; name: string; x: number; halfLengthM: number; widthM: number; deckAboveBankM: number; beamM: number };
+  /** Cuenca aguas arriba del sector y estación de nivel (creciente desde la lluvia y aviso temprano). */
+  basin?: BasinSpec;
 }
 
-/** Creciente: hidrograma triangular (tiempo al pico tp, base 2,67·tp) sobre el caudal base. */
+/**
+ * Creciente: hidrograma triangular de ejemplo (tiempo al pico tp, base 2,67·tp) sobre el caudal base, o la
+ * calculada con la misma lluvia del barrio cayendo en la cuenca (`source: 'cuenca'`; pico y tiempos salen del
+ * cálculo y `peakM3s`, `timeToPeakMin` y `startMin` no se usan).
+ */
 export interface CreekFlood {
+  source?: 'ejemplo' | 'cuenca';
   peakM3s: number;
   timeToPeakMin: number;
   startMin: number;
@@ -419,6 +427,8 @@ export interface Interventions {
   erradas?: boolean;
   /** Estado de las coberturas (fracción tapada). */
   culverts?: Record<string, CulvertState>;
+  /** Cobertura de la cuenca de la quebrada aguas arriba (creciente desde la lluvia). */
+  basinCover?: BasinCover;
 }
 
 export interface CityConfig {
@@ -439,6 +449,7 @@ export function baseInterventions(sc: Scenario): Interventions {
     drains: Object.fromEntries(sc.drains.map((d) => [d.id, d.obstruction])),
     erradas: false,
     culverts: Object.fromEntries((sc.culverts ?? []).map((c) => [c.id, { obstruction: 0, progressive: false }])),
+    basinCover: 'mixta',
   };
 }
 
@@ -450,6 +461,7 @@ export function cloneInterventions(iv: Interventions): Interventions {
     drains: { ...iv.drains },
     erradas: iv.erradas ?? false,
     culverts: Object.fromEntries(Object.entries(iv.culverts ?? {}).map(([k, v]) => [k, { ...v }])),
+    basinCover: iv.basinCover ?? 'mixta',
   };
 }
 
@@ -494,6 +506,8 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
     if (sc && !sc.creek) errors.push('Este escenario no tiene quebrada: no admite creciente.');
     if (!isNum(cf.peakM3s, 0, 500) || !isNum(cf.timeToPeakMin, 1, 60) || !isNum(cf.startMin, 0, 60)) errors.push('Creciente mal definida (pico 0–500 m³/s, tiempo al pico 1–60 min, inicio 0–60 min).');
     if (cf.sedimentCv != null && !isNum(cf.sedimentCv, 0, 0.3)) errors.push('Lodo de la creciente fuera de rango (0–30 % en volumen).');
+    if (cf.source != null && cf.source !== 'ejemplo' && cf.source !== 'cuenca') errors.push('Origen de la creciente desconocido.');
+    if (cf.source === 'cuenca' && sc && !sc.creek?.basin) errors.push('Este escenario no tiene cuenca definida para calcular la creciente desde la lluvia.');
   }
   if (sc) {
     for (const key of ['A', 'B'] as const) {
@@ -518,6 +532,7 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
       }
       if (iv.erradas !== undefined && typeof iv.erradas !== 'boolean') errors.push(`${key}: «conexiones erradas» debe ser sí o no.`);
       if (iv.erradas && !sc.sewer) errors.push(`${key}: este escenario no tiene red separada (conexiones erradas).`);
+      if (iv.basinCover !== undefined && !BASIN_COVER_LIST.includes(iv.basinCover)) errors.push(`${key}: cobertura de la cuenca desconocida.`);
       for (const [cid, st] of Object.entries(iv.culverts ?? {})) {
         if (!(sc.culverts ?? []).some((c) => c.id === cid)) errors.push(`${key}: cobertura desconocida «${cid}».`);
         if (!st || !isNum(st.obstruction, 0, 1) || typeof st.progressive !== 'boolean') errors.push(`${key}: estado de la cobertura «${cid}» mal definido (fracción tapada 0–1 y si se tapa con la creciente).`);
@@ -534,6 +549,7 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
     drains: { ...base.drains, ...(iv.drains ?? {}) },
     erradas: iv.erradas ?? false,
     culverts: { ...base.culverts, ...(iv.culverts ?? {}) },
+    basinCover: iv.basinCover ?? 'mixta',
   });
   return { ok: true, errors: [], config: { format: 'medellin-lluvia/config', version: 1, shared: sh as Shared, A: fill(o.A as Interventions), B: fill(o.B as Interventions) } };
 }

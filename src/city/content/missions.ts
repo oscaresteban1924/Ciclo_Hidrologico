@@ -33,7 +33,7 @@ export interface Mission {
   rain: Partial<RainConfig>;
   simMinutes: number;
   /** Creciente de la quebrada como fracción de la capacidad de su sección de control (misiones de quebrada). */
-  creek?: { fraction: number; timeToPeakMin: number; startMin: number; sedimentCv?: number };
+  creek?: { fraction: number; timeToPeakMin: number; startMin: number; sedimentCv?: number; source?: 'ejemplo' | 'cuenca' };
   /** Configuración del escenario A (base) de la misión. */
   setupA?: (iv: Interventions) => void;
   /** Cambio que se propone en B. «presupuesto» deja que el estudiante elija. */
@@ -420,6 +420,67 @@ export const MISSIONS: Mission[] = [
     },
     explain: 'Una cobertura deja pasar solo el agua que cabe por su boca. Si troncos, ramas o basura la tapan, cabe mucho menos: el agua se represa detrás del terraplén, sube hasta la vía y pasa por encima, con fuerza, hacia donde no debía ir. Por eso las bocas de las coberturas se limpian antes de las temporadas de lluvia y no se arrojan basuras ni escombros a las quebradas.',
     terms: ['cobertura-de-quebrada', 'represamiento', 'creciente', 'capacidad-hidraulica', 'peligro-de-inundacion'],
+  },
+  {
+    id: 'cuenca-urbanizada',
+    title: 'La cuenca urbanizada',
+    scenarioId: 'ladera-quebrada',
+    question: 'Cae un aguacero muy fuerte, 80 mm en una hora, sobre el barrio y sobre toda la cuenca de la quebrada. En A la cuenca tiene bosque; en B está urbanizada. ¿Qué cambia en el barrio?',
+    context: 'A y B reciben exactamente la misma lluvia. La creciente se calcula con esa lluvia cayendo en una cuenca de 4 km² aguas arriba; una estación de nivel a 2,5 km da las alertas. Solo cambia cómo está la cuenca.',
+    options: [
+      { id: 'igual', text: 'Casi nada: la lluvia es la misma, así que la quebrada crece igual' },
+      { id: 'mas', text: 'Llega más agua a la quebrada, pero no alcanza a llegar a las casas' },
+      { id: 'menos-tiempo', text: 'Llega más agua y más rápido: la quebrada se desborda y hay menos tiempo para avisar' },
+    ],
+    rain: { intensityMmH: 80, durationMin: 60, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 110,
+    creek: { fraction: 0, timeToPeakMin: 6, startMin: 0, source: 'cuenca' },
+    setupA: (iv) => {
+      iv.basinCover = 'bosque';
+    },
+    change: {
+      kind: 'auto',
+      describe: 'En B, la cuenca de la quebrada está urbanizada: techos, vías y barrios densos en vez de bosque.',
+      apply: (iv) => {
+        iv.basinCover = 'urbanizada';
+      },
+    },
+    evaluate: (a, b) => {
+      const ba = a.basin!, bb = b!.basin!;
+      const wa = a.warning!, wb = b!.warning!;
+      const m3s = (v: number) => `${fmtNum(v, v < 10 ? 1 : 0)}\u00a0m³/s`;
+      const min = (t: number) => `minuto ${fmtNum(t / 60, 0)}`;
+      const top = (w: typeof wa) => [...w.events].reverse().find((e) => e.id !== 'lluvia' && e.t >= 0);
+      const roja = (w: typeof wa) => w.events.find((e) => e.id === 'roja')!;
+      const casa = (w: typeof wa, name: string) => {
+        if (w.firstWetT < 0) return `En ${name} no llegó agua a ninguna casa.`;
+        const r = roja(w);
+        const lead = r.t >= 0 ? w.firstWetT - r.t : null;
+        return `En ${name} el agua llegó a la primera casa en el ${min(w.firstWetT)}${lead === null ? ', sin alerta roja antes' : lead >= 0 ? `: ${fmtNum(lead / 60, 0)} min después de la alerta roja` : `: ${fmtNum(-lead / 60, 0)} min antes de la alerta roja`}.`;
+      };
+      const flooded = b!.damage.affected > a.damage.affected || (wb.firstWetT >= 0 && wa.firstWetT < 0);
+      const earlier = bb.tPeak < ba.tPeak - 60;
+      return {
+        outcome: bb.peak < 1.1 * ba.peak ? 'igual' : flooded ? 'menos-tiempo' : 'mas',
+        observed: [
+          `Cayeron ${fmtNum(ba.rainMm, 0)} mm. Con bosque corrieron hacia la quebrada ${fmtNum(ba.runoffMm, 0)} mm (${fmtNum((ba.runoffMm / ba.rainMm) * 100, 0)} %); con la cuenca urbanizada, ${fmtNum(bb.runoffMm, 0)} mm (${fmtNum((bb.runoffMm / bb.rainMm) * 100, 0)} %).`,
+          `Pico en el barrio: A ${m3s(ba.peak)} en el ${min(ba.tPeak)}; B ${m3s(bb.peak)} en el ${min(bb.tPeak)}${earlier ? `, ${fmtNum((ba.tPeak - bb.tPeak) / 60, 0)} min antes` : ''}. La cuenca urbanizada responde en ${fmtNum(bb.lagMin, 0)} min; la de bosque, en ${fmtNum(ba.lagMin, 0)} min.`,
+          `Alertas en la estación: A ${top(wa) ? `llegó a ${top(wa)!.name.toLowerCase()} (${min(top(wa)!.t)})` : 'sin alerta por nivel'}; B ${top(wb) ? `llegó a ${top(wb)!.name.toLowerCase()} (${min(top(wb)!.t)})` : 'sin alerta por nivel'}.`,
+          casa(wa, 'A'),
+          casa(wb, 'B'),
+          `Edificaciones con agua: A ${a.damage.affected}, B ${b!.damage.affected}. Vehículos movidos: A ${a.vehicles.moved}, B ${b!.vehicles.moved}.`,
+        ],
+        rows: [
+          { label: 'Escorrentía de la cuenca', a: `${fmtNum(ba.runoffMm, 0)}\u00a0mm`, b: `${fmtNum(bb.runoffMm, 0)}\u00a0mm`, change: changeText(ba.runoffMm, bb.runoffMm, 0.1, (v) => `${fmtNum(v, 0)}\u00a0mm`) },
+          { label: 'Caudal pico en el barrio', a: m3s(ba.peak), b: m3s(bb.peak), change: changeText(ba.peak, bb.peak, 0.05, m3s) },
+          { label: 'Minuto del pico', a: fmtNum(ba.tPeak / 60, 0), b: fmtNum(bb.tPeak / 60, 0), change: changeText(ba.tPeak / 60, bb.tPeak / 60, 0.5, (v) => `${fmtNum(v, 0)}\u00a0min`) },
+          { label: 'Edificaciones con agua', a: String(a.damage.affected), b: String(b!.damage.affected), change: changeText(a.damage.affected, b!.damage.affected, 0.5, (v) => fmtNum(v, 0)) },
+        ],
+        caveat: 'Cuenca, estación y umbrales de aviso didácticos; métodos del NRCS (número de curva, retardo e hidrograma unitario). No es un pronóstico ni el sistema de alerta real del Valle de Aburrá.',
+      };
+    },
+    explain: 'Con bosque, buena parte de la lluvia entra al suelo y el agua que corre tarda en llegar a la quebrada. Cuando la cuenca se llena de techos y vías, casi toda la lluvia corre y llega junta y rápido: la creciente es más grande y más temprana. Por eso importa cuidar los bosques de las cuencas y por eso existen las estaciones y las alertas: cada minuto de aviso sirve para salir de la orilla.',
+    terms: ['cuenca', 'alerta-temprana', 'escorrentia', 'infiltracion', 'creciente', 'caudal-pico'],
   },
 ];
 
