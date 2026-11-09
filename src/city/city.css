@@ -494,9 +494,70 @@
   border-color: #e7c35a;
 }
 
+/* Grupo superior derecho de la maqueta: «Mostrar panel» (si está contraído) y «Vista y cámara» */
+.city-topright {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+.city-topright > .city-ov {
+  position: relative;
+  inset: auto;
+  pointer-events: auto;
+}
+.city-topright > .city-viewbar {
+  max-width: 312px;
+}
+.city-peek {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 4px 12px 4px 10px;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.city-peek:hover {
+  background: #fff;
+  border-color: var(--line-2);
+}
+.city-peek .icon {
+  width: 18px;
+  height: 18px;
+}
+
 /* Panel */
 .city-panel {
   min-height: 0;
+}
+.city-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.city-disclaimer > p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.city-hide-panel {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  margin: -2px -10px -2px 0;
+}
+.city-hide-panel .icon {
+  width: 18px;
+  height: 18px;
 }
 .city-disclaimer {
   padding: 10px 20px;
@@ -1050,6 +1111,30 @@
     top: 8px;
     right: 8px;
     max-width: calc(100% - 16px);
+  }
+  .city-topright {
+    top: 8px;
+    right: 8px;
+    max-width: calc(100% - 16px);
+    gap: 6px;
+  }
+  .city-topright > .city-viewbar {
+    max-width: calc(100vw - 72px);
+  }
+  /* en el celular, «Mostrar panel» queda solo con su ícono */
+  .city-peek {
+    padding: 4px 9px;
+  }
+  .city-peek span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .layout-city.is-collapsed .city-crumb {
+    max-width: calc(100% - 160px);
   }
   .city-simbar {
     left: 8px;
@@ -1626,4 +1711,17 @@
   .hazard-legend .haz-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* Cobertura bajo la carrera (dentro de la herramienta «Creciente») */
+.culvert-box {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.culvert-box > h4 {
+  margin-top: 0;
+}
+.culvert-box > .btn-ghost {
+  margin-top: 4px;
 }

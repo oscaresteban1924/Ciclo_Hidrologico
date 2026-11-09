@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-09T19:08:52.015Z",
+  "generatedAt": "2026-11-09T22:13:20.044Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
-  "passed": 37,
-  "total": 37,
+  "passed": 41,
+  "total": 41,
   "results": [
     {
       "id": "1",
@@ -77,7 +77,7 @@
       "kind": "obligatoria",
       "name": "Reiniciar reproduce exactamente la corrida",
       "tolerance": "igualdad bit a bit de profundidades, series, balance y trazadores, aunque cambie el ritmo de los cuadros",
-      "measured": "profundidades idénticas: true; series: true; balance: true; trazadores: true; pasos: 1499",
+      "measured": "profundidades idénticas: true; series: true; balance: true; trazadores: true; pasos: 2446",
       "pass": true
     },
     {
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 136 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 647 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5587 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 300 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 578 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5724 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -128,7 +128,7 @@
       "kind": "verificacion",
       "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (Ladera con quebrada, 150 mm/h, 30 min)",
       "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
-      "measured": "pasos 5938; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = 1.73e-15; profundidad máx. = 0.445 m",
+      "measured": "pasos 7802; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = 4.93e-15; profundidad máx. = 0.983 m",
       "pass": true
     },
     {
@@ -217,7 +217,7 @@
       "kind": "verificacion",
       "name": "Las redes didácticas cumplen los criterios de diseño de EPM revisados (GD-AS002)",
       "tolerance": "todos los criterios cumplen en los dos sectores: sistema separado, diámetros mínimos, conductos de sumidero, recubrimiento, velocidades, lámina, distancia entre cámaras, uniones, deflexión, cámaras de caída, costado de la vía y separación en cruces",
-      "measured": "calle-de-prueba: 15 de 15 (separado 15 tramos, todos dentro de su sistema; diam-lluvias 300 mm; diam-residuales 200 mm; diam-sumidero 250 mm; pendiente mín. 2,0 %; longitud máx. 5,8 m; recubrimiento mínima 1,22 m; vmax máxima 3,53 m/s; ylluvias máxima 74 %; vmin-lluvias mínima 0,82 m/s; yresiduales máxima 14 %; distancia lluvias 26,5 m; residuales 42,0 m; uniones 9 cámaras; máximo 4 tuberías en una; deflexion máxima 0°; caidas 0 caídas mayores de 0,7 m; 0 con cámara de caída; costado 9 de 9 colectores en su costado; cruces 5 cruces; mínima 0,57 m) | ladera-quebrada: 15 de 15 (separado 22 tramos, todos dentro de su sistema; diam-lluvias 300 mm; diam-residuales 200 mm; diam-sumidero 250 mm; pendiente mín. 2,0 %; longitud máx. 5,9 m; recubrimiento mínima 1,22 m; vmax máxima 4,00 m/s; ylluvias máxima 60 %; vmin-lluvias mínima 0,83 m/s; yresiduales máxima 11 %; distancia lluvias 35,5 m; residuales 42,3 m; uniones 14 cámaras; máximo 4 tuberías en una; deflexion máxima 67°; caidas 1 caídas mayores de 0,7 m; 1 con cámara de caída; costado 9 de 9 colectores en su costado; cruces 7 cruces; mínima 0,55 m)",
+      "measured": "calle-de-prueba: 15 de 15 (separado 15 tramos, todos dentro de su sistema; diam-lluvias 300 mm; diam-residuales 200 mm; diam-sumidero 250 mm; pendiente mín. 2,0 %; longitud máx. 5,8 m; recubrimiento mínima 1,22 m; vmax máxima 3,53 m/s; ylluvias máxima 74 %; vmin-lluvias mínima 0,82 m/s; yresiduales máxima 14 %; distancia lluvias 26,5 m; residuales 42,0 m; uniones 9 cámaras; máximo 4 tuberías en una; deflexion máxima 0°; caidas 0 caídas mayores de 0,7 m; 0 con cámara de caída; costado 9 de 9 colectores en su costado; cruces 5 cruces; mínima 0,57 m) | ladera-quebrada: 15 de 15 (separado 22 tramos, todos dentro de su sistema; diam-lluvias 300 mm; diam-residuales 200 mm; diam-sumidero 250 mm; pendiente mín. 2,0 %; longitud máx. 5,9 m; recubrimiento mínima 1,22 m; vmax máxima 4,00 m/s; ylluvias máxima 48 %; vmin-lluvias mínima 0,83 m/s; yresiduales máxima 13 %; distancia lluvias 35,5 m; residuales 42,3 m; uniones 14 cámaras; máximo 4 tuberías en una; deflexion máxima 67°; caidas 1 caídas mayores de 0,7 m; 1 con cámara de caída; costado 9 de 9 colectores en su costado; cruces 7 cruces; mínima 0,56 m)",
       "pass": true
     },
     {
@@ -233,7 +233,7 @@
       "kind": "obligatoria",
       "name": "Balance acoplado calle + red con creciente: cierra, el hidrograma entra completo y la quebrada se mete por la descarga",
       "tolerance": "residuo de superficie y de red < 10⁻⁹ del agua que entró; volumen de la creciente = área del hidrograma (error < 10⁻⁹); con 2 veces la capacidad del cauce, la descarga queda ahogada y entra agua de la quebrada a la red",
-      "measured": "entró 50045 m³ (creciente 49798.8 m³ frente a 49798.8 m³ del hidrograma, error 1.9e-14); residuo superficie 8.2e-10 m³, red 4.5e-13 m³; de la quebrada a la red 80.4 m³; rebose de aguas lluvias 115.0 m³ (sumidero de la carrera sur 45.5 m³)",
+      "measured": "entró 48899 m³ (creciente 48653.2 m³ frente a 48653.2 m³ del hidrograma, error 1.6e-15); residuo superficie -1.5e-10 m³, red -1.1e-13 m³; de la quebrada a la red 337.3 m³; rebose de aguas lluvias 393.0 m³ (sumidero de la carrera sur 92.6 m³)",
       "pass": true
     },
     {
@@ -241,7 +241,7 @@
       "kind": "verificacion",
       "name": "La capacidad a cauce lleno de la sección de control es coherente con el modelo",
       "tolerance": "con 80 % de la capacidad (subida lenta, casi permanente) no pasa agua por fuera del cauce (< 1 % del caudal) y el nivel queda bajo la orilla; con 125 % sí pasa agua por fuera y el nivel supera la orilla",
-      "measured": "capacidad 51.3 m³/s (Manning sin límite de Froude 51.3 m³/s), pendiente 1.69 %, orilla 1.96 m sobre el fondo | 80 %: por fuera 0.00 m³/s, nivel 1.69 m | 125 %: por fuera 0.14 m³/s, nivel 2.17 m",
+      "measured": "capacidad 50.1 m³/s (Manning sin límite de Froude 50.1 m³/s), pendiente 1.61 %, orilla 1.96 m sobre el fondo | 80 %: por fuera 0.05 m³/s, nivel 1.67 m | 125 %: por fuera 2.28 m³/s, nivel 2.19 m",
       "pass": true
     },
     {
@@ -281,7 +281,7 @@
       "kind": "obligatoria",
       "name": "Creciente con lodo: factor de volumen 1/(1 − Cv) y volumen completo",
       "tolerance": "con 30 % de sedimentos el pico de la mezcla es 1,43 veces el del agua (error < 10⁻¹²); el volumen que entra al cálculo es el del hidrograma (error < 10⁻⁹) y el balance cierra (residuo < 10⁻⁹)",
-      "measured": "pico agua 61.6 m³/s, mezcla 87.9 m³/s (factor 1.4286); volumen 14257.4 m³ frente a 14257.4 m³ (error 5.9e-15); residuo 4.7e-15",
+      "measured": "pico agua 60.1 m³/s, mezcla 85.9 m³/s (factor 1.4286); volumen 13930.1 m³ frente a 13930.1 m³ (error 6.5e-16); residuo 1.3e-16",
       "pass": true
     },
     {
@@ -289,7 +289,7 @@
       "kind": "verificacion",
       "name": "Creciente: el daño calculado crece con el caudal",
       "tolerance": "con 60 % de la capacidad no llega agua a las casas de la orilla; con 150 % sí; con 300 % hay casas con peligro H5 o mayor y se mueven vehículos; viviendas afectadas, expuestas, profundidad en la orilla y área con H3 o más nunca bajan al aumentar el caudal",
-      "measured": "60 %: 0 afectadas, 0 con H5+, orilla 0.06 m, H3+ 740 m², vehículos movidos 0 | 150 %: 5 afectadas, 0 con H5+, orilla 0.64 m, H3+ 1157 m², vehículos movidos 1 | 300 %: 9 afectadas, 9 con H5+, orilla 1.47 m, H3+ 3639 m², vehículos movidos 3",
+      "measured": "60 %: 0 afectadas, 0 con H5+, orilla 0.04 m, H3+ 718 m², vehículos movidos 0 | 150 %: 6 afectadas, 2 con H5+, orilla 0.87 m, H3+ 1545 m², vehículos movidos 3 | 300 %: 11 afectadas, 10 con H5+, orilla 1.48 m, H3+ 3900 m², vehículos movidos 3",
       "pass": true
     },
     {
@@ -297,7 +297,39 @@
       "kind": "obligatoria",
       "name": "El reparto del agua suma exactamente lo que entró y ninguna parte es negativa",
       "tolerance": "suma de partes = lluvia + entrada + aportes de las tuberías desde fuera (error < 10⁻⁹); todas las partes ≥ 0, también cuando la red descarga a la quebrada o rebosa",
-      "measured": "calle-de-prueba y conexiones erradas: entró 445.3 m³, partes 445.3 m³ (error 5.1e-16), alcantarillado 400.6 m³ | ladera-quebrada: entró 328.9 m³, partes 328.9 m³ (error 0.0e+0), alcantarillado 7.2 m³ | ladera-quebrada con creciente 250 % y conexiones erradas: entró 62256.0 m³, partes 62256.0 m³ (error 7.0e-16), alcantarillado 85.7 m³",
+      "measured": "calle-de-prueba y conexiones erradas: entró 445.3 m³, partes 445.3 m³ (error 5.1e-16), alcantarillado 400.6 m³ | ladera-quebrada: entró 328.9 m³, partes 328.9 m³ (error 3.5e-16), alcantarillado 9.5 m³ | ladera-quebrada con creciente 250 % y conexiones erradas: entró 60824.0 m³, partes 60824.0 m³ (error 3.6e-15), alcantarillado 88.1 m³",
+      "pass": true
+    },
+    {
+      "id": "K1",
+      "kind": "obligatoria",
+      "name": "Cobertura: ecuaciones de alcantarillas de la guía HDS-5 (FHWA)",
+      "tolerance": "profundidad crítica y carga con control de entrada (no sumergida con q = 2 m²/s y sumergida con q = 10 m²/s) iguales al cálculo a mano con la tabla A.1 (error < 1 mm); la carga crece con el caudal y no salta donde se pasa de la forma no sumergida a la sumergida (< 1 µm); la tabla invertida devuelve el caudal (error < 0,5 %); con la salida ahogada el caudal es el de la ecuación de energía del cañón lleno (error < 10⁻⁹) y manda la salida; con la salida libre y un cañón empinado (6,7 %) manda la entrada; el agua va del nivel más alto al más bajo y sin diferencia de nivel no pasa; la obstrucción siempre reduce el caudal",
+      "measured": "dc 0.7415 m; HW no sumergida 1.172 m (a mano 1.172), sumergida 4.012 m (a mano 4.012); salto en el cambio de forma 6.4e-9 m; inversión 0.002 %; salida ahogada 31.27 m³/s frente a 31.27 (salida, error 0.0e+0); salida libre y cañón empinado 41.3 m³/s (entrada); al revés -44.8 m³/s; niveles iguales 0.0 m³/s; con 0/25/50/75/90 % de obstrucción 44.9/33.7/22.5/11.2/4.5 m³/s",
+      "pass": true
+    },
+    {
+      "id": "K2",
+      "kind": "obligatoria",
+      "name": "Cobertura en la ladera: conserva el agua y no oscila",
+      "tolerance": "en las tres corridas (libre, tapada 90 % y tapándose con la creciente) el balance cierra (residuo < 10⁻⁹), no hay valores no numéricos ni profundidades negativas, el caudal por los cajones nunca va al revés (< −0,05 m³/s) ni alterna subidas y bajadas de más de 0,5 m³/s entre pasos; con la entrada libre el caudal máximo no supera en más de 10 % al pico que trae la quebrada",
+      "measured": "libre: residuo 1.3e-14, no numéricos 0, negativas 0, al revés 0, alternancias 0 | tapada 90 %: residuo 1.3e-15, no numéricos 0, negativas 0, al revés 0, alternancias 0 | se tapa: residuo 2.2e-16, no numéricos 0, negativas 0, al revés 0, alternancias 0 | libre: caudal máximo 30.2 m³/s con un pico de 30.1 m³/s",
+      "pass": true
+    },
+    {
+      "id": "K3",
+      "kind": "obligatoria",
+      "name": "Cobertura tapada: pasa menos agua, el agua se represa y cruza la vía",
+      "tolerance": "con una creciente de 60 % de la capacidad del cauce y la entrada libre, el agua no llega a la vía; con 90 % de obstrucción pasa menos de la mitad por los cajones, el nivel en la entrada sube al menos 50 cm más, pasan más de 5 m³/s por encima de la vía y llega agua a más edificaciones",
+      "measured": "libre: 30.2 m³/s por los cajones, nivel -0.22 m respecto de la vía, 0.04 m³/s encima, 0 edificaciones con agua | tapada 90 %: 6.8 m³/s por los cajones, nivel 0.80 m, 22.5 m³/s encima (12004 m³), 6 edificaciones con agua, 2 vehículos movidos",
+      "pass": true
+    },
+    {
+      "id": "K4",
+      "kind": "obligatoria",
+      "name": "Obstrucción que crece con la creciente",
+      "tolerance": "empieza libre; empieza a taparse cuando el caudal pasa de la mitad de la capacidad libre y llega al 90 % exactamente 180 s después; con la creciente igual a la capacidad del cauce el agua termina pasando por encima de la vía",
+      "measured": "empezó a taparse en 370 s con la mitad de 48.8 m³/s; llegó al 90 % en 551 s (180.1 s después); encima de la vía hasta 39.6 m³/s",
       "pass": true
     },
     {
@@ -305,7 +337,7 @@
       "kind": "revision",
       "name": "Sensibilidad al límite de Froude (ladera, 10 % de pendiente)",
       "tolerance": "informativa: se documenta, no se exige",
-      "measured": "Fr ≤ 1: salida 291.9 m³, drenado 72.8 m³, esquina 0.73 cm, caras limitadas 47.9 % | Fr ≤ 1.5: salida 292.2 m³, drenado 69.0 m³, esquina 0.61 cm, caras limitadas 27.1 % | Fr ≤ ∞: salida 292.3 m³, drenado 67.8 m³, esquina 0.45 cm, caras limitadas 0.0 %",
+      "measured": "Fr ≤ 1: salida 255.3 m³, drenado 80.3 m³, esquina 0.78 cm, caras limitadas 47.2 % | Fr ≤ 1.5: salida 255.5 m³, drenado 78.4 m³, esquina 0.63 cm, caras limitadas 26.6 % | Fr ≤ ∞: salida 255.6 m³, drenado 77.4 m³, esquina 0.49 cm, caras limitadas 0.0 %",
       "pass": true
     }
   ],
@@ -321,7 +353,7 @@
       "area": 8,
       "res": -2.5579538487363607e-13,
       "steps": 2326,
-      "ms": 135.90052100000048
+      "ms": 300.16096500000003
     },
     {
       "dx": 1,
@@ -334,7 +366,7 @@
       "area": 0,
       "res": -6.110667527536862e-13,
       "steps": 3072,
-      "ms": 646.9181990000006
+      "ms": 578.221423
     },
     {
       "dx": 0.5,
@@ -347,29 +379,29 @@
       "area": 0,
       "res": -7.247535904753022e-13,
       "steps": 6227,
-      "ms": 5587.136074000001
+      "ms": 5723.591886
     }
   ],
   "froude": [
     {
       "fr": 1,
-      "B": 291.8701520551969,
-      "D": 72.83473552406271,
-      "esq": 0.007252061763052563,
-      "lim": 0.4791179411113469
+      "B": 255.25421122705754,
+      "D": 80.31081162645594,
+      "esq": 0.007795586005362624,
+      "lim": 0.47151662637450925
     },
     {
       "fr": 1.5,
-      "B": 292.177553176066,
-      "D": 69.04622046615629,
-      "esq": 0.006082603768166927,
-      "lim": 0.2712515608981576
+      "B": 255.53896658109883,
+      "D": 78.36965000545548,
+      "esq": 0.006301895750911261,
+      "lim": 0.2663946850956698
     },
     {
       "fr": 1000000000,
-      "B": 292.3432882190878,
-      "D": 67.8184648208953,
-      "esq": 0.004454045307563143,
+      "B": 255.6058467277794,
+      "D": 77.38358444178523,
+      "esq": 0.004907545811992466,
       "lim": 0
     }
   ]

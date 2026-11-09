@@ -113,6 +113,7 @@ export class CityController {
   simMsPerFrame = 0;
   overflowT: number | null = null;
   private view: SectorScene | SectorMap2D | null = null;
+  private labelsPref = true;
   private valley: ValleyScene | null = null;
   private raf = 0;
   private last = 0;
@@ -210,6 +211,7 @@ export class CityController {
       const { SectorScene } = await import('./render/sectorScene');
       if (this.disposed || epoch !== this.epoch) return;
       this.view = new SectorScene(this.opts.container, sc, c, { reducedMotion: this.opts.reducedMotion, quality: this.opts.quality });
+      this.view.labels.setEnabled(this.labelsPref);
     } else {
       const { SectorMap2D } = await import('./render/map2d');
       if (this.disposed || epoch !== this.epoch) return;
@@ -415,6 +417,15 @@ export class CityController {
   netFilter(): NetFilter {
     return this.view?.netFilter ?? 'ambas';
   }
+  /** Etiquetas de la maqueta del sector (lugares, medidores, daños, redes, gotas). El valle conserva las suyas. */
+  setLabels(on: boolean): void {
+    this.labelsPref = on;
+    if (this.view && 'labels' in this.view) this.view.labels.setEnabled(on);
+    this.notify(true);
+  }
+  labelsOn(): boolean {
+    return this.labelsPref;
+  }
   setArrows(on: boolean): void {
     if (this.view) this.view.showArrows = on;
     this.notify(true);
@@ -452,6 +463,21 @@ export class CityController {
   }
   focus(x: number, y: number): void {
     this.view?.focusOn(x, y);
+  }
+  /** Mira la boca de entrada de una cobertura desde aguas arriba, en diagonal y algo más alto que la vía. */
+  focusCulvert(ci = 0): void {
+    const sim = this.displayed();
+    const cu = sim?.c.culverts[ci];
+    const cs = this.sc?.culverts?.[ci];
+    const v = this.view;
+    if (!sim || !cu || !cs || !v) return;
+    if (!('lookFrom' in v)) {
+      this.focus(cs.inlet[0], cs.inlet[1]);
+      return;
+    }
+    const s = cs.inlet[0] < cs.road.x0 ? -1 : 1;
+    (v as SectorScene).lookFrom([cs.inlet[0] + s * 7, cs.inlet[1] + 8, cu.crestZ + 5], [cs.inlet[0] - s * 1, cs.inlet[1], cu.zIn + 1.4]);
+    this.notify(true);
   }
   /** Mira la sección de control de la quebrada desde aguas abajo, a la altura de la orilla. */
   focusCreekSection(): void {

@@ -17,6 +17,8 @@ Que cada niña o niño **cambie una parte de la ciudad, vea un cambio coherente 
 5. **Misión «Presupuesto de puntos» (15 min, en grupos).** Cada grupo elige sus medidas con 100 puntos de juego y explica sus resultados. Ninguna combinación mejora todo; conviene discutir por qué.
 6. **Cierre (5 min).** Cada estudiante guarda una explicación en su bitácora.
 
+Para la ladera hay una secuencia sobre la quebrada: «La creciente de la quebrada», «La cobertura tapada» y «La avenida torrencial». En «La cobertura tapada», la misma creciente que cabe por los cajones con la entrada libre se represa cuando los troncos tapan el 90 % y pasa por encima de la carrera. Conviene preguntar de dónde vienen los troncos y la basura y qué se puede hacer antes de las lluvias (limpiar las bocas, no arrojar escombros a las quebradas). La cobertura y su obstrucción son hipotéticas.
+
 ## Preguntas para conversar
 
 - ¿Por qué el agua se junta en la esquina y no en la mitad de la calle?
@@ -24,6 +26,7 @@ Que cada niña o niño **cambie una parte de la ciudad, vea un cambio coherente 
 - ¿Por qué el pavimento permeable cambió mucho la infiltración y poco el agua que sale al final de la calle?
 - ¿Qué pasaría si el suelo ya estaba húmedo antes de llover?
 - ¿Qué parte de la maqueta es real y qué parte es inventada para aprender?
+- Si la cobertura bajo la vía se tapa, ¿por dónde busca pasar el agua? ¿A quién afecta?
 
 ## Palabras clave
 
@@ -35,7 +38,7 @@ Que cada niña o niño **cambie una parte de la ciudad, vea un cambio coherente 
 | Rugosidad | Qué tan áspera es una superficie para el agua: el pasto la frena y el asfalto liso casi no. |
 | Almacenamiento | Agua que se queda un tiempo en charcos, jardines, depósitos o en el suelo. |
 
-También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento permeable* y *jardín de lluvia*. Todas están en el glosario general. Desde la pestaña «Palabras» se puede abrir el paso correspondiente del recorrido del ciclo del agua.
+También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento permeable*, *jardín de lluvia*, *cobertura de quebrada* y *represamiento*. Todas están en el glosario general. Desde la pestaña «Palabras» se puede abrir el paso correspondiente del recorrido del ciclo del agua.
 
 ## Lectura de la maqueta
 
@@ -47,6 +50,7 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
   - El pavimento, las fachadas y los techos se oscurecen y brillan con la lluvia: eso es **superficie mojada**, no agua acumulada. El agua que cuenta es la que tiene color en la leyenda.
   - **Pregunta para la clase:** «En la calle, ¿dónde ven solo pavimento mojado y dónde hay agua de verdad? ¿Cómo lo saben?» (medir con un toque o mirar la leyenda).
 - **Escala real:** el agua se dibuja a escala real. «Agua ×5» la engrosa solo en el dibujo y lo avisa en pantalla.
+- **Ver más grande:** el botón «Etiquetas» (en «Vista y cámara») oculta los rótulos de lugares, medidores, daños y redes; los valores siguen en el panel. El botón con cuatro esquinas, junto a las pestañas, contrae el panel y la maqueta ocupa todo el ancho; «Mostrar panel», arriba a la derecha de la maqueta, lo vuelve a abrir. Ambas opciones se recuerdan en el equipo.
 - **Flechas:** muestran la dirección y la rapidez calculadas.
 - **Lo que se mueve sobre el agua sale del cálculo:**
   - las vetas avanzan con la velocidad del agua, en tiempo real;

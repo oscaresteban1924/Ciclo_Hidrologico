@@ -16,6 +16,36 @@ import { G, H_FLOW_MIN, H_WET, INLET, NUMERICS, mmhToMs } from './constants';
 import type { Compiled } from './compile';
 import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from './drainage';
 import { HAZARD_WET_M, UNSTABLE_FROM, bulkingFactor, hazardClass } from './hazard';
+import { culvertFlow } from './culvert';
+
+/**
+ * Reparte un volumen (expresado como lámina × área de celda, [m]) en un grupo de celdas llenando primero las
+ * más bajas, hasta un nivel común: el agua que sale del cajón llega al fondo del cauce, no a las orillas.
+ */
+function fillLowest(cells: number[], vol: number, z: Float64Array, h: Float64Array): void {
+  const lv = cells.map((k) => z[k] + h[k]).sort((a, b) => a - b);
+  let n = 0, used = 0, L = lv[0];
+  // sube el nivel por tramos entre los niveles de las celdas, hasta agotar el volumen
+  while (n < lv.length) {
+    n++;
+    const next = n < lv.length ? lv[n] : Infinity;
+    const need = (next - L) * n;
+    if (used + need >= vol) {
+      L += (vol - used) / n;
+      used = vol;
+      break;
+    }
+    used += need;
+    L = next;
+  }
+  for (const k of cells) {
+    const s = z[k] + h[k];
+    if (s < L) h[k] += L - s;
+  }
+}
+
+/** Tiempo en que una cobertura «que se tapa con la creciente» pasa de libre a su obstrucción final [s]. */
+export const CULVERT_CLOG_S = 180;
 import { SOIL_INITIAL_FRACTION, type CreekFlood, type ExposedObject, type RainConfig, type Shared } from './scenario';
 import { SewerModel, type SewerTotals } from './sewer';
 
@@ -156,6 +186,8 @@ export interface Sample {
   sewer?: { out: [number, number]; overflow: [number, number]; toCreek: number };
   /** Quebrada: caudal que entra, que pasa por la sección dentro del cauce y por fuera [m³/s]; nivel en el talweg [m]. */
   creek?: { qin: number; qChannel: number; qOutside: number; level: number };
+  /** Coberturas: caudal por el cajón y sobre la vía [m³/s], nivel aguas arriba [m] y fracción tapada. */
+  culverts?: { q: number; over: number; up: number; obs: number }[];
 }
 
 export interface Diagnostics {
@@ -206,6 +238,8 @@ export class CitySim {
   hazMax: Uint8Array;
   /** Vehículos expuestos a la creciente. */
   drift: DriftState[] = [];
+  /** Coberturas: caudal por el cajón y sobre la vía en el último paso [m³/s], obstrucción actual, control. */
+  culv: { q: number; over: number; up: number; obs: number; control: string; t0: number; vol: number; overVol: number; qMax: number; overMax: number; upMax: number; obsMax: number }[] = [];
   tankVol: Float64Array;
   /** Infiltración de la celda en el último paso [m] (para trazadores). */
   lastInf: Float64Array;
@@ -314,6 +348,7 @@ export class CitySim {
     this.vmaxField.fill(0);
     this.dvMaxField.fill(0);
     this.hazMax.fill(0);
+    this.culv = c.culverts.map((cu) => ({ q: 0, over: 0, up: cu.zIn, obs: cu.progressive ? 0 : cu.obstruction, control: 'sin flujo', t0: -1, vol: 0, overVol: 0, qMax: 0, overMax: 0, upMax: cu.zIn, obsMax: cu.progressive ? 0 : cu.obstruction }));
     this.drift = c.exposed.map((o) => ({ id: o.id, name: o.name, kind: o.kind, color: o.color, x0: o.at[0], y0: o.at[1], x: o.at[0], y: o.at[1], heading: (o.headingDeg * Math.PI) / 180, state: 'quieto', tMoved: -1, dist: 0, hazard: 0 }));
     this.tankVol.fill(0);
     this.lastInf.fill(0);
@@ -641,6 +676,9 @@ export class CitySim {
     }
     bal.infiltrated += inf * area;
 
+    // --- 6b) Coberturas: el agua pasa de la entrada a la salida por el cajón (transferencia interna)
+    if (c.culverts.length) this.stepCulverts(dt);
+
     // --- 7) Sumideros y descarga de depósitos hacia la red
     if (this.sewer) {
       this.stepSewer(dt);
@@ -797,6 +835,103 @@ export class CitySim {
   }
 
   /**
+   * Coberturas (FHWA HDS-5, ver culvert.ts): con el nivel en las celdas de entrada y de salida se calcula el
+   * caudal del cajón (el menor entre control de entrada y de salida) y se traslada ese volumen. El enlace es
+   * implícito: se busca el caudal Q que, evaluado con los niveles que quedan después de trasladar Q·dt, da el
+   * mismo Q (Euler implícito, por bisección; el caudal decrece al bajar el nivel de entrada y subir el de
+   * salida, así que la solución es única). Con celdas de poca área y un cajón de gran capacidad, el enlace
+   * explícito oscila; el implícito no, y nunca invierte el sentido dentro de un paso. Además no se saca más
+   * del 90 % del agua de la entrada. Es una transferencia interna: no cambia el balance del sector.
+   */
+  private stepCulverts(dt: number): void {
+    const c = this.c, h = this.h, z = c.z, area = c.area, dx = c.dx;
+    c.culverts.forEach((cu, ci) => {
+      const st = this.culv[ci];
+      // obstrucción: fija o creciendo desde que el caudal pasa de la mitad de su capacidad libre
+      let obs = cu.obstruction;
+      if (cu.progressive) {
+        if (st.t0 < 0 && st.q >= 0.5 * cu.capacityFree) st.t0 = this.t;
+        obs = st.t0 < 0 ? 0 : cu.obstruction * Math.min(1, (this.t - st.t0) / CULVERT_CLOG_S);
+      }
+      st.obs = obs;
+      if (obs > st.obsMax) st.obsMax = obs;
+      // nivel de cada lado: el de la celda más honda del grupo (el espejo de agua en el cauce); las celdas de
+      // las orillas con una película de lluvia no representan el nivel del cauce
+      const side = (cells: number[], z0: number) => {
+        let best = -1, hb = 0, sum = 0;
+        for (const k of cells) {
+          sum += h[k];
+          if (h[k] > hb) {
+            hb = h[k];
+            best = k;
+          }
+        }
+        const level = best < 0 ? z0 : z[best] + h[best];
+        // área efectiva al sacar agua (proporcional a la profundidad: la celda más honda baja hb/sum por m³)
+        const aOut = best < 0 ? Infinity : (area * sum) / hb;
+        // área efectiva al recibir agua (se llenan primero las celdas más bajas: las que quedan bajo el nivel)
+        let m = 0;
+        for (const k of cells) if (z[k] < level + 0.05) m++;
+        return { level, sum, aOut, aIn: area * Math.max(1, m) };
+      };
+      const sIn = side(cu.inCells, cu.zIn), sOut = side(cu.outCells, cu.zOut);
+      const up = sIn.level, dn = sOut.level;
+      st.up = up;
+      if (up > st.upMax) st.upMax = up;
+      const r0 = culvertFlow(cu.geom, cu.rating, up, dn, cu.zIn, cu.zOut, obs);
+      let Q = 0;
+      let control: string = 'sin flujo';
+      if (r0.Q !== 0) {
+        const fwd = r0.Q > 0;
+        const aF = fwd ? sIn.aOut : sOut.aOut, aT = fwd ? sOut.aIn : sIn.aIn;
+        const hFrom = fwd ? sIn.sum : sOut.sum;
+        const qCap = Math.min(Math.abs(r0.Q), (0.9 * hFrom * area) / dt);
+        // g(q) = caudal con los niveles después de trasladar q·dt, menos q: decreciente en q
+        const flowAfter = (q: number) => {
+          const d = (q * dt) / aF, u = (q * dt) / aT;
+          const r = fwd ? culvertFlow(cu.geom, cu.rating, up - d, dn + u, cu.zIn, cu.zOut, obs) : culvertFlow(cu.geom, cu.rating, up + u, dn - d, cu.zIn, cu.zOut, obs);
+          return { q: fwd ? r.Q : -r.Q, control: r.control };
+        };
+        let lo = 0, hi = qCap;
+        if (flowAfter(hi).q >= hi) lo = hi;
+        else
+          for (let it = 0; it < 28 && hi - lo > 1e-6 * qCap; it++) {
+            const mid = 0.5 * (lo + hi);
+            if (flowAfter(mid).q > mid) lo = mid;
+            else hi = mid;
+          }
+        // inercia del agua en los cajones (columna rígida): el caudal se acerca al de equilibrio con la
+        // constante de tiempo τ = 2L / ((1 + Ke + kf)·V); nunca cambia de sentido dentro de un paso ni pasa
+        // del caudal que igualaría los niveles de los dos lados
+        const qPrev = fwd ? Math.max(0, st.q) : Math.max(0, -st.q);
+        const vBarrel = qPrev / Math.max(1e-6, cu.geom.B * Math.max(0.05, 1 - obs) * cu.geom.D);
+        const tau = Math.min(10, Math.max(0.5, (2 * cu.geom.L) / (cu.lossK * Math.max(0.5, vBarrel))));
+        const qEq = (Math.abs(up - dn) / dt) / (1 / aF + 1 / aT);
+        Q = Math.min(qCap, qEq, qPrev + ((lo - qPrev) * dt) / (tau + dt));
+        Q = Math.max(0, Q);
+        control = Q > 0 ? flowAfter(lo).control : 'sin flujo';
+        const from = fwd ? cu.inCells : cu.outCells, to = fwd ? cu.outCells : cu.inCells;
+        const V = Q * dt;
+        if (V > 0 && hFrom > 0) {
+          for (const k of from) h[k] -= (V * (h[k] / hFrom)) / area;
+          fillLowest(to, V / area, z, h);
+        }
+        if (!fwd) Q = -Q;
+      }
+      st.q = Q;
+      st.control = control;
+      st.vol += Q * dt;
+      if (Q > st.qMax) st.qMax = Q;
+      // agua que pasa por encima de la vía: caudal por el borde aguas abajo del terraplén
+      let over = 0;
+      for (const f of cu.overFaces) over += this.qx[f] * dx;
+      st.over = over;
+      st.overVol += Math.max(0, over) * dt;
+      if (over > st.overMax) st.overMax = over;
+    });
+  }
+
+  /**
    * Velocidad de celda para el peligro y los vehículos [m/s]: la de `velocityAt`, limitada con el número
    * de Froude del cálculo (en el frente de mojado la celda es muy somera y el promedio de caras la exagera).
    */
@@ -918,6 +1053,7 @@ export class CitySim {
       this.lastSampleSewer = { out: [T.out[0], T.out[1]], overflow: [T.overflow[0], T.overflow[1]], toCreek: T.toCreek[0] };
     }
     if (c.creek) s.creek = this.creekSection();
+    if (this.culv.length) s.culverts = this.culv.map((u) => ({ q: u.q, over: u.over, up: u.up, obs: u.obs }));
     this.samples.push(s);
     this.lastSampleT = this.t;
     this.lastSampleB = this.bal.boundaryOut;

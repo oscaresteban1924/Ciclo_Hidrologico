@@ -223,6 +223,41 @@ export class SectorMap2D {
       G.fillStyle = dr.obstruction > 0.5 ? '#7a5a2e' : '#22272b';
       G.fillRect(px - 5, py - 4, 10, 8);
     }
+    // Coberturas: cajones bajo la vía (contorno discontinuo), cabezales y troncos atascados en la entrada (la
+    // franja marrón cubre la fracción obstruida calculada)
+    (this.sc.culverts ?? []).forEach((cs, ci) => {
+      const cu = c.culverts[ci];
+      if (!cu) return;
+      const half = cs.spanM / 2;
+      const inWest = cs.inlet[0] < cs.road.x0;
+      G.setLineDash([5, 4]);
+      G.strokeStyle = '#2f3a44';
+      G.lineWidth = 1.5;
+      for (let q = 0; q <= cs.barrels; q++) {
+        const f = -half + (q * cs.spanM) / cs.barrels;
+        G.beginPath();
+        G.moveTo(...P(cs.road.x0, cs.inlet[1] + f));
+        G.lineTo(...P(cs.road.x1, cs.outlet[1] + f));
+        G.stroke();
+      }
+      G.setLineDash([]);
+      G.strokeStyle = '#8d8b84';
+      G.lineWidth = 4;
+      for (const [x, yc] of [[cs.road.x0, inWest ? cs.inlet[1] : cs.outlet[1]], [cs.road.x1, inWest ? cs.outlet[1] : cs.inlet[1]]]) {
+        G.beginPath();
+        G.moveTo(...P(x, yc - half - 0.35));
+        G.lineTo(...P(x, yc + half + 0.35));
+        G.stroke();
+      }
+      const obs = sim ? (sim.culv[ci]?.obs ?? 0) : cu.progressive ? 0 : cu.obstruction;
+      if (obs > 0) {
+        const xf = inWest ? cs.road.x0 : cs.road.x1, s2 = inWest ? -1 : 1;
+        const [x0, y0] = P(xf, cs.inlet[1] + half * obs);
+        const [x1, y1] = P(xf + s2 * 1.4, cs.inlet[1] - half * obs);
+        G.fillStyle = '#6b4a2f';
+        G.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+      }
+    });
     // Flechas
     if (sim && this.showArrows && this.view !== 'resultados' && this.view !== 'peligro') {
       G.strokeStyle = 'rgba(255,255,255,0.95)';

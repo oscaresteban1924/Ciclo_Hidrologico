@@ -23,6 +23,7 @@ interface Placed {
 export class LabelLayer {
   readonly root: HTMLDivElement;
   private map = new Map<string, Placed>();
+  private on = true;
 
   constructor(parent: HTMLElement) {
     this.root = document.createElement('div');
@@ -66,6 +67,19 @@ export class LabelLayer {
     }
   }
 
+  /** Muestra u oculta toda la capa. Oculta, no se mide ni se coloca nada (no cuesta cálculo). */
+  setEnabled(on: boolean): void {
+    if (on === this.on) return;
+    this.on = on;
+    this.root.style.display = on ? '' : 'none';
+    // al volver a mostrarse, se miden de nuevo (oculta, el navegador no informa su tamaño)
+    if (on) for (const p of this.map.values()) p.w = 0;
+  }
+
+  get enabled(): boolean {
+    return this.on;
+  }
+
   setSub(id: string, sub: string): void {
     const p = this.map.get(id);
     if (p && p.sub.textContent !== sub) {
@@ -76,6 +90,7 @@ export class LabelLayer {
 
   /** Coloca las etiquetas en las posiciones de pantalla dadas evitando superposiciones. */
   layout(pos: Map<string, { x: number; y: number; visible: boolean }>, width: number, height: number, reserved: DOMRect[] = []): void {
+    if (!this.on) return;
     const boxes: [number, number, number, number][] = reserved.map((r) => [r.left, r.top, r.right, r.bottom]);
     const list = [...this.map.values()].sort((a, b) => b.item.priority - a.item.priority);
     for (const p of list) {

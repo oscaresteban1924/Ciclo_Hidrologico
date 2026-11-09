@@ -218,6 +218,33 @@ export interface CreekFlood {
   sedimentCv?: number;
 }
 
+/**
+ * Cobertura (alcantarilla de cajón) por la que el cauce pasa bajo una vía en terraplén. El terraplén es parte
+ * del terreno; la cobertura es un enlace 1D entre la celda del cauce aguas arriba y la de aguas abajo.
+ */
+export interface CulvertSpec {
+  id: string;
+  name: string;
+  /** Centro de la entrada y de la salida, sobre el eje del cauce (fuera del terraplén). */
+  inlet: Pt;
+  outlet: Pt;
+  /** Ancho total de los cajones y altura libre [m]; número de cajones; Manning; pérdida de entrada. */
+  spanM: number;
+  riseM: number;
+  barrels: number;
+  n: number;
+  ke: number;
+  /** Franja de la vía que cruza el cauce (para medir el agua que pasa por encima). */
+  road: { x0: number; x1: number; y0: number; y1: number };
+  kind: DataKind;
+}
+
+/** Estado de una cobertura: fracción tapada por troncos y ramas, fija o que crece con la creciente. */
+export interface CulvertState {
+  obstruction: number;
+  progressive: boolean;
+}
+
 /** Objeto expuesto a la creciente (vehículo estacionado). Se mueve si el peligro supera su estabilidad. */
 export interface ExposedObject {
   id: string;
@@ -336,6 +363,8 @@ export interface Scenario {
   creek?: CreekSpec;
   /** Vehículos estacionados expuestos a la creciente. Opcional. */
   exposed?: ExposedObject[];
+  /** Coberturas bajo vías. Opcional. */
+  culverts?: CulvertSpec[];
   /** Elementos decorativos: no participan en el cálculo. */
   decor?: Decor;
   defaults: Shared;
@@ -388,6 +417,8 @@ export interface Interventions {
   drains: Record<string, number>;
   /** Conexiones erradas al alcantarillado de aguas residuales (solo escenarios con red separada). */
   erradas?: boolean;
+  /** Estado de las coberturas (fracción tapada). */
+  culverts?: Record<string, CulvertState>;
 }
 
 export interface CityConfig {
@@ -407,6 +438,7 @@ export function baseInterventions(sc: Scenario): Interventions {
     tanks: Object.fromEntries(sc.tanks.map((t) => [t.id, { on: false, destination: 'red' as const }])),
     drains: Object.fromEntries(sc.drains.map((d) => [d.id, d.obstruction])),
     erradas: false,
+    culverts: Object.fromEntries((sc.culverts ?? []).map((c) => [c.id, { obstruction: 0, progressive: false }])),
   };
 }
 
@@ -417,6 +449,7 @@ export function cloneInterventions(iv: Interventions): Interventions {
     tanks: Object.fromEntries(Object.entries(iv.tanks).map(([k, v]) => [k, { ...v }])),
     drains: { ...iv.drains },
     erradas: iv.erradas ?? false,
+    culverts: Object.fromEntries(Object.entries(iv.culverts ?? {}).map(([k, v]) => [k, { ...v }])),
   };
 }
 
@@ -485,6 +518,10 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
       }
       if (iv.erradas !== undefined && typeof iv.erradas !== 'boolean') errors.push(`${key}: «conexiones erradas» debe ser sí o no.`);
       if (iv.erradas && !sc.sewer) errors.push(`${key}: este escenario no tiene red separada (conexiones erradas).`);
+      for (const [cid, st] of Object.entries(iv.culverts ?? {})) {
+        if (!(sc.culverts ?? []).some((c) => c.id === cid)) errors.push(`${key}: cobertura desconocida «${cid}».`);
+        if (!st || !isNum(st.obstruction, 0, 1) || typeof st.progressive !== 'boolean') errors.push(`${key}: estado de la cobertura «${cid}» mal definido (fracción tapada 0–1 y si se tapa con la creciente).`);
+      }
     }
   }
   if (errors.length) return { ok: false, errors };
@@ -496,6 +533,7 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
     tanks: { ...base.tanks, ...(iv.tanks ?? {}) },
     drains: { ...base.drains, ...(iv.drains ?? {}) },
     erradas: iv.erradas ?? false,
+    culverts: { ...base.culverts, ...(iv.culverts ?? {}) },
   });
   return { ok: true, errors: [], config: { format: 'medellin-lluvia/config', version: 1, shared: sh as Shared, A: fill(o.A as Interventions), B: fill(o.B as Interventions) } };
 }

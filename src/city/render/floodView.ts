@@ -8,6 +8,10 @@
 //  · Salpicadura contra los muros: sube hasta la carga de velocidad v²/2g del agua que golpea el muro.
 //  · Material flotante (troncos, ramas y basura): ilustrativo; entra con la creciente y se mueve con la
 //    velocidad calculada; queda depositado donde el agua se vuelve muy somera.
+//  · Coberturas: muros de cabecera con las bocas de los cajones, aletas, baranda y troncos atascados en la
+//    entrada. La cantidad de troncos sigue la obstrucción del cálculo (fija o creciendo con la creciente); el
+//    rótulo muestra el caudal calculado por el cajón y por encima de la vía. La baranda es abierta: en el
+//    cálculo no detiene el agua que pasa sobre la vía.
 
 import * as THREE from 'three';
 import type { Compiled } from '../sim/compile';
@@ -66,6 +70,8 @@ export class FloodView {
   private lastStainT = -1;
   private vehicles: { g: THREE.Group; o: DriftState; bodyH: number }[] = [];
   private bridge: { x: number; y0: number; y1: number; deck: number; soffit: number; i: number; j0: number; j1: number } | null = null;
+  /** Coberturas: troncos atascados (ordenados de abajo hacia arriba) y punto del rótulo. */
+  private culverts: { logs: THREE.InstancedMesh; items: { x: number; y: number; z: number; dz: number; len: number; rad: number; a: number; tilt: number }[]; at: THREE.Vector3; key: string }[] = [];
   // material flotante
   private fl = {
     x: new Float32Array(MAX_FLOAT),
@@ -109,6 +115,7 @@ export class FloodView {
   ) {
     this.buildFaces();
     this.buildBridge();
+    this.buildCulverts();
     this.buildVehicles();
     // troncos y ramas (un cilindro escalado) y basura (cajas de colores)
     const logG = this.geo(new THREE.CylinderGeometry(1, 1, 1, 7).rotateZ(Math.PI / 2));
@@ -266,6 +273,159 @@ export class FloodView {
       add(steel, xr, yc, deck + 1.0, 0.06, L - 0.4, 0.06);
       add(steel, xr, yc, deck + 0.55, 0.04, L - 0.4, 0.04);
     }
+  }
+
+  // ------------------------------------------------------------ coberturas
+  /**
+   * Prisma recto de muro entre los puntos A y B del modelo, con espesor t, base zb y corona que va de ztA
+   * (en A) a ztB (en B). Sirve para cabezales, tabiques y aletas con la corona inclinada.
+   */
+  private wall(m: THREE.Material, ax: number, ay: number, bx: number, by: number, t: number, zb: number, ztA: number, ztB: number): void {
+    const L = Math.hypot(bx - ax, by - ay);
+    if (L < 1e-6) return;
+    const nx = (-(by - ay) / L) * (t / 2), ny = ((bx - ax) / L) * (t / 2);
+    const P = (x: number, y: number, z: number) => this.w(x, y, z, new THREE.Vector3());
+    // 0-3 base, 4-7 corona; orden A−n, B−n, B+n, A+n
+    const v = [
+      P(ax - nx, ay - ny, zb), P(bx - nx, by - ny, zb), P(bx + nx, by + ny, zb), P(ax + nx, ay + ny, zb),
+      P(ax - nx, ay - ny, ztA), P(bx - nx, by - ny, ztB), P(bx + nx, by + ny, ztB), P(ax + nx, ay + ny, ztA),
+    ];
+    const quads = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [4, 5, 6, 7], [3, 2, 1, 0]];
+    const pos: number[] = [];
+    for (const [a, b, c2, d] of quads) for (const q of [a, b, c2, a, c2, d]) pos.push(v[q].x, v[q].y, v[q].z);
+    const g = this.geo(new THREE.BufferGeometry());
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    // el sentido de las caras depende de la orientación del muro: se dibujan por ambos lados
+    const o = new THREE.Mesh(g, m);
+    o.castShadow = true;
+    o.receiveShadow = true;
+    this.group.add(o);
+  }
+
+  private buildCulverts(): void {
+    const specs = this.sc.culverts ?? [];
+    if (!specs.length) return;
+    const { nx, ny, dx, z } = this.c;
+    const concrete = this.mat(new THREE.MeshStandardMaterial({ color: '#b3b1aa', roughness: 0.9, side: THREE.DoubleSide }));
+    const dark = this.mat(new THREE.MeshBasicMaterial({ color: '#16191c' }));
+    const steel = this.mat(new THREE.MeshStandardMaterial({ color: '#9aa4aa', roughness: 0.45, metalness: 0.6 }));
+    const box = this.geo(new THREE.BoxGeometry(1, 1, 1));
+    const zAt = (x: number, y: number) => z[Math.min(ny - 1, Math.max(0, Math.floor(y / dx))) * nx + Math.min(nx - 1, Math.max(0, Math.floor(x / dx)))];
+    const cyl = this.geo(new THREE.CylinderGeometry(1, 1, 1, 7).rotateZ(Math.PI / 2));
+    const bark = this.mat(new THREE.MeshStandardMaterial({ color: '#5e4229', roughness: 0.95 }));
+    specs.forEach((cs, ci) => {
+      const cu = this.c.culverts[ci];
+      if (!cu) return;
+      const pier = 0.3;
+      const B = cs.spanM / cs.barrels;
+      const half = cs.spanM / 2 + ((cs.barrels - 1) * pier) / 2;
+      // caras: la del lado de la entrada mira hacia la entrada (s = −1 si la entrada está al oeste)
+      const i0 = Math.ceil(cs.road.x0 / dx - 1e-9), i1 = Math.floor(cs.road.x1 / dx + 1e-9) - 1;
+      const inWest = cs.inlet[0] < cs.road.x0;
+      const faces = [
+        { yc: cs.inlet[1], bed: cu.zIn, s: inWest ? -1 : 1, xr: inWest ? (i0 + 0.5) * dx : (i1 + 0.5) * dx, xc: inWest ? (i0 - 0.5) * dx + 0.05 : (i1 + 1.5) * dx - 0.05, inlet: true },
+        { yc: cs.outlet[1], bed: cu.zOut, s: inWest ? 1 : -1, xr: inWest ? (i1 + 0.5) * dx : (i0 + 0.5) * dx, xc: inWest ? (i1 + 1.5) * dx - 0.05 : (i0 - 0.5) * dx + 0.05, inlet: false },
+      ];
+      let logs: THREE.InstancedMesh | null = null;
+      const items: { x: number; y: number; z: number; dz: number; len: number; rad: number; a: number; tilt: number }[] = [];
+      let at = new THREE.Vector3();
+      for (const f of faces) {
+        const deck = zAt(f.xr, f.yc);
+        const top = deck + 0.12;
+        const xm = (f.xr + f.xc) / 2, t = Math.abs(f.xr - f.xc);
+        const yA = f.yc - half - 0.35, yB = f.yc + half + 0.35;
+        const soffit = f.bed + cs.riseM;
+        // dintel sobre las bocas y tabiques entre ellas
+        this.wall(concrete, xm, yA, xm, yB, t, soffit, top, top);
+        let y = yA;
+        for (let q = 0; q <= cs.barrels; q++) {
+          const yEnd = q === 0 ? f.yc - half : q === cs.barrels ? yB : y + pier;
+          this.wall(concrete, xm, y, xm, yEnd, t, f.bed - 0.25, soffit, soffit);
+          if (q < cs.barrels) {
+            // boca del cajón: oscura, un poco hacia adentro
+            const o = new THREE.Mesh(box, dark);
+            this.w(f.xc + f.s * -0.45, yEnd + B / 2, f.bed + cs.riseM / 2, o.position);
+            o.scale.set(0.9, cs.riseM - 0.02, B - 0.02);
+            this.group.add(o);
+            y = yEnd + B;
+          }
+        }
+        // aletas a 45° hacia afuera, con la corona bajando hasta la orilla
+        for (const side of [-1, 1]) {
+          const ax = f.xc, ay = side < 0 ? yA : yB;
+          const L = 3.4;
+          const bx = ax + f.s * L * Math.SQRT1_2, by = ay + side * L * Math.SQRT1_2;
+          const ground = zAt(bx, by);
+          this.wall(concrete, ax, ay, bx, by, 0.3, f.bed - 0.25, top, Math.max(ground + 0.25, f.bed + 0.6));
+        }
+        // baranda abierta sobre el cabezal (postes y dos pasamanos)
+        const xg = f.xr + f.s * 0.2;
+        const add = (cx: number, cy: number, cz: number, sx: number, sy: number, sz: number) => {
+          const o = new THREE.Mesh(box, steel);
+          this.w(cx, cy, cz, o.position);
+          o.scale.set(sx, sz, sy);
+          o.castShadow = true;
+          this.group.add(o);
+        };
+        for (let yy = yA + 0.2; yy <= yB - 0.2 + 1e-6; yy += (yB - yA - 0.4) / Math.round((yB - yA - 0.4) / 1.6)) add(xg, yy, top + 0.45, 0.08, 0.08, 0.9);
+        add(xg, f.yc, top + 0.85, 0.07, yB - yA - 0.3, 0.07);
+        add(xg, f.yc, top + 0.48, 0.05, yB - yA - 0.3, 0.05);
+        if (f.inlet) {
+          // troncos y ramas que la creciente atasca contra la boca de entrada: posiciones fijas (semilla) de
+          // abajo hacia arriba; se muestran tantos como pide la obstrucción calculada
+          // Con agua, el atasco flota contra la boca (o contra la baranda si el agua pasa sobre la vía): cada
+          // pieza queda a una profundidad fija bajo el nivel calculado en la entrada; en seco reposa apilada.
+          const r = rng(7771 + ci);
+          const layers = Math.ceil(cs.riseM / 0.3);
+          for (let L2 = 0; L2 < layers; L2++) {
+            const perLayer = 7 + Math.floor(r() * 3);
+            for (let q = 0; q < perLayer; q++) {
+              const log = r() < 0.55;
+              items.push({
+                x: f.xc + f.s * (0.35 + 0.3 * r() + 0.1 * L2),
+                y: f.yc + (r() - 0.5) * 2 * (half - 0.5),
+                z: f.bed + 0.18 + L2 * 0.3 + 0.08 * r(),
+                dz: 0.04 + 0.1 * L2 + 0.05 * r(),
+                len: log ? 2.4 + 2.6 * r() : 1.0 + 1.4 * r(),
+                rad: log ? 0.14 + 0.1 * r() : 0.05 + 0.03 * r(),
+                a: Math.PI / 2 + (r() - 0.5) * 0.9,
+                tilt: (r() - 0.5) * 0.35,
+              });
+            }
+          }
+          items.sort((p2, q2) => p2.z - q2.z);
+          logs = new THREE.InstancedMesh(cyl, bark, items.length);
+          logs.count = 0;
+          logs.castShadow = true;
+          logs.frustumCulled = false;
+          this.group.add(logs);
+        }
+        if (!f.inlet) at = this.w((cs.road.x0 + cs.road.x1) / 2, (cs.inlet[1] + cs.outlet[1]) / 2, top + 2.2);
+      }
+      if (logs) this.culverts.push({ logs, items, at, key: '' });
+    });
+  }
+
+  private updateCulverts(sim: CitySim): void {
+    this.culverts.forEach((cv, ci) => {
+      const st = sim.culv[ci];
+      if (!st) return;
+      const show = Math.round(st.obs * cv.items.length);
+      const up = st.up;
+      const key = `${show}|${up.toFixed(2)}`;
+      if (key === cv.key) return;
+      cv.key = key;
+      for (let q = 0; q < show; q++) {
+        const it = cv.items[q];
+        this.w(it.x, it.y, Math.max(it.z, up - it.dz), this.v);
+        this.q.setFromEuler(this.e.set(0, it.a, it.tilt));
+        this.s.set(it.len, it.rad, it.rad);
+        cv.logs.setMatrixAt(q, this.m4.compose(this.v, this.q, this.s));
+      }
+      cv.logs.count = show;
+      cv.logs.instanceMatrix.needsUpdate = true;
+    });
   }
 
   // ------------------------------------------------------------ vehículos
@@ -526,6 +686,15 @@ export class FloodView {
       if (!(level >= b.soffit) && lmax >= b.soffit) sub += lmax >= b.deck ? ' · ya pasó sobre el tablero' : ' · ya golpeó la viga';
       out.push({ id: 'fb', text: 'Puente peatonal', sub, priority: 5, kind: level >= b.soffit ? 'dano' : 'aviso', color: level >= b.deck ? HAZARD[5].color : level >= b.soffit ? HAZARD[3].color : undefined, at: this.w(b.x, (b.y0 + b.y1) / 2, b.deck + 1.6) });
     }
+    this.c.culverts.forEach((cu, ci) => {
+      const st = sim.culv[ci], cv = this.culverts[ci];
+      if (!st || !cv) return;
+      const parts = [st.q >= 0.05 ? `${fmtNum(st.q, 1)} m³/s por los cajones` : 'sin caudal'];
+      if (st.over > 0.05) parts.push(`${fmtNum(st.over, 1)} m³/s sobre la vía`);
+      if (st.obs >= 0.01) parts.push(`tapada ${fmtNum(st.obs * 100, 0)} %`);
+      const over = st.over > 0.05;
+      out.push({ id: `cob-${cu.id}`, text: cu.name, sub: parts.join(' · '), priority: 6, kind: over ? 'dano' : 'aviso', color: over ? HAZARD[4].color : st.obs >= 0.01 ? HAZARD[2].color : undefined, at: cv.at });
+    });
     for (const vh of this.vehicles) {
       const o = vh.o;
       if (!o || o.state === 'quieto' || o.state === 'fuera') continue;
@@ -552,6 +721,7 @@ export class FloodView {
   update(sim: CitySim, time: number, dtReal: number, reduced: boolean): boolean {
     const prev = this.labelsKey;
     this.updateVehicles(sim, time, reduced);
+    this.updateCulverts(sim);
     this.updateDebris(sim);
     this.updateSpray(sim, Math.min(0.05, dtReal), reduced);
     if (this.lastStainT < 0 || Math.abs(sim.t - this.lastStainT) >= 2 || sim.t < this.lastStainT) {

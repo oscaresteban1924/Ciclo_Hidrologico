@@ -21,6 +21,10 @@ export interface CitySaved {
   renderer?: 'webgl' | '2d';
   /** La guía de primeros pasos ya se cerró. */
   coach?: boolean;
+  /** Etiquetas de la maqueta ocultas (false). Por omisión se muestran. */
+  labels?: boolean;
+  /** Panel derecho contraído para ampliar la maqueta. */
+  panelHidden?: boolean;
 }
 
 export const DEFAULT_SAVED: CitySaved = { version: 1, configs: {}, missions: {}, speed: 30, budget: {} };
@@ -42,6 +46,8 @@ export function loadCity(): CitySaved {
     for (const [id, list] of Object.entries(d.budget ?? {})) if (Array.isArray(list)) out.budget[id] = list.filter((q) => typeof q === 'string').slice(0, 30);
     if (d.renderer === 'webgl' || d.renderer === '2d') out.renderer = d.renderer;
     if (d.coach === true) out.coach = true;
+    if (d.labels === false) out.labels = false;
+    if (d.panelHidden === true) out.panelHidden = true;
     return out;
   } catch {
     return { ...DEFAULT_SAVED };

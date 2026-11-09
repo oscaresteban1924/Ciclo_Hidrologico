@@ -20,6 +20,7 @@ import { depthRampTexture } from '../../src/city/render/stormFx';
 import { SewerModel, buildNodeTable, circ, fullFlow, inletCapture, normalDepth, windowK, type CompiledSewer, type SNode, type SPipe } from '../../src/city/sim/sewer';
 import { epmChecks } from '../../src/city/sim/sewerCheck';
 import { creekHydrograph } from '../../src/city/sim/engine';
+import { barrelR, criticalDepth, culvertFlow, inletHeadwater, inletRating, qInlet, type CulvertGeom } from '../../src/city/sim/culvert';
 import { HAZARD, bulkingFactor, buildingRings, buildingExposure, damageSummary, exposureOf, hazardClass } from '../../src/city/sim/hazard';
 import { budgetTotal, budgetValues } from '../../src/city/ui/RainBudget';
 import * as THREE from 'three';
@@ -930,6 +931,105 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
     rows.push(`${id}${f ? ` con creciente ${fmt(f * 100, 0)} %` : ''}${err ? ' y conexiones erradas' : ''}: entró ${fmt(t, 1)} m³, partes ${fmt(sum, 1)} m³ (error ${(Math.abs(t - sum) / t).toExponential(1)}), alcantarillado ${fmt(v.red, 1)} m³`);
   }
   record({ id: 'B1', kind: 'obligatoria', name: 'El reparto del agua suma exactamente lo que entró y ninguna parte es negativa', tolerance: 'suma de partes = lluvia + entrada + aportes de las tuberías desde fuera (error < 10⁻⁹); todas las partes ≥ 0, también cuando la red descarga a la quebrada o rebosa', measured: rows.join(' | '), pass: ok });
+}
+
+// ---------------------------------------------------------------- Coberturas (alcantarillas de cajón, FHWA HDS-5)
+{
+  // K1) Ecuaciones de la guía HDS-5 para un cajón de concreto con aletas de 30° a 75° (tabla A.1, forma 1)
+  const D = 2.3, S = 0.002, g = 9.81;
+  // a mano: profundidad crítica, control de entrada no sumergido y sumergido, con los coeficientes de la tabla
+  const dc2 = Math.cbrt((2 * 2) / g);
+  const di2 = (1.811 * 2) / Math.pow(D, 1.5);
+  const hwUn = D * ((1.5 * dc2) / D + 0.026 * di2 - 0.5 * S);
+  const di10 = (1.811 * 10) / Math.pow(D, 1.5);
+  const hwSub = D * (0.0347 * di10 * di10 + 0.81 - 0.5 * S);
+  const eUn = Math.abs(inletHeadwater(2, D, S) - hwUn), eSub = Math.abs(inletHeadwater(10, D, S) - hwSub), eDc = Math.abs(criticalDepth(2) - dc2);
+  // continuidad y monotonía de la carga en toda la tabla, y la tabla invertida devuelve el caudal
+  const geom: CulvertGeom = { B: 9, D, L: 9, S, barrels: 3, n: 0.014, Ke: 0.4 };
+  const rt = inletRating(geom);
+  let mono = true, inv = 0;
+  for (let i = 1; i < rt.hw.length; i++) if (rt.hw[i] < rt.hw[i - 1]) mono = false;
+  // continuidad donde se pasa de la forma no sumergida a la sumergida (Ku·q/D^1,5 = 3,5 y 4,0)
+  let jump = 0;
+  for (const di of [3.5, 4.0]) {
+    const q = (di * Math.pow(D, 1.5)) / 1.811;
+    jump = Math.max(jump, Math.abs(inletHeadwater(q * (1 + 1e-9), D, S) - inletHeadwater(q * (1 - 1e-9), D, S)));
+  }
+  for (const q of [0.5, 1, 2, 4, 6, 8, 10, 14]) inv = Math.max(inv, Math.abs(qInlet(rt, inletHeadwater(q, D, S)) - q) / q);
+  // control de salida con el cañón lleno y la salida ahogada: HW − TW = (1 + Ke + 2g·n²·L/R^(4/3))·V²/2g
+  const zIn = 10, zOut = 9.98;
+  const up = zIn + 3.6, dn = zOut + 3.45;
+  const R = barrelR(geom), A = 9 * D;
+  const qHand = A * Math.sqrt((2 * g * (up - dn)) / (1 + 0.4 + (2 * g * 0.014 * 0.014 * 9) / Math.pow(R, 4 / 3)));
+  const rOut = culvertFlow(geom, rt, up, dn, zIn, zOut, 0);
+  const eOut = Math.abs(rOut.Q - qHand) / qHand;
+  // con la salida libre y un cañón empinado manda la entrada; el sentido sigue al nivel más alto; sin
+  // diferencia no hay caudal
+  const geomS: CulvertGeom = { ...geom, S: 0.6 / 9 };
+  const rIn = culvertFlow(geomS, inletRating(geomS), zIn + 2, zIn - 0.6, zIn, zIn - 0.6, 0);
+  const rRev = culvertFlow(geom, rt, zIn + 0.5, zOut + 2.2, zIn, zOut, 0);
+  const rEq = culvertFlow(geom, rt, zIn + 1, zIn + 1, zIn, zOut, 0);
+  // la obstrucción reduce el caudal con los mismos niveles
+  const obsQ = [0, 0.25, 0.5, 0.75, 0.9].map((o) => culvertFlow(geom, rt, zIn + 2.2, zOut + 0.5, zIn, zOut, o).Q);
+  const obsMono = obsQ.every((q, i) => i === 0 || q < obsQ[i - 1]);
+  record({
+    id: 'K1', kind: 'obligatoria', name: 'Cobertura: ecuaciones de alcantarillas de la guía HDS-5 (FHWA)',
+    tolerance: 'profundidad crítica y carga con control de entrada (no sumergida con q = 2 m²/s y sumergida con q = 10 m²/s) iguales al cálculo a mano con la tabla A.1 (error < 1 mm); la carga crece con el caudal y no salta donde se pasa de la forma no sumergida a la sumergida (< 1 µm); la tabla invertida devuelve el caudal (error < 0,5 %); con la salida ahogada el caudal es el de la ecuación de energía del cañón lleno (error < 10⁻⁹) y manda la salida; con la salida libre y un cañón empinado (6,7 %) manda la entrada; el agua va del nivel más alto al más bajo y sin diferencia de nivel no pasa; la obstrucción siempre reduce el caudal',
+    measured: `dc ${fmt(criticalDepth(2), 4)} m; HW no sumergida ${fmt(inletHeadwater(2, D, S), 3)} m (a mano ${fmt(hwUn, 3)}), sumergida ${fmt(inletHeadwater(10, D, S), 3)} m (a mano ${fmt(hwSub, 3)}); salto en el cambio de forma ${jump.toExponential(1)} m; inversión ${fmt(inv * 100, 3)} %; salida ahogada ${fmt(rOut.Q, 2)} m³/s frente a ${fmt(qHand, 2)} (${rOut.control}, error ${eOut.toExponential(1)}); salida libre y cañón empinado ${fmt(rIn.Q, 1)} m³/s (${rIn.control}); al revés ${fmt(rRev.Q, 1)} m³/s; niveles iguales ${fmt(rEq.Q, 1)} m³/s; con 0/25/50/75/90 % de obstrucción ${obsQ.map((q) => fmt(q, 1)).join('/')} m³/s`,
+    pass: eDc < 1e-9 && eUn < 1e-3 && eSub < 1e-3 && mono && jump < 1e-6 && inv < 0.005 && eOut < 1e-9 && rOut.control === 'salida' && rIn.control === 'entrada' && rIn.Q > 0 && rRev.Q < 0 && rEq.Q === 0 && obsMono,
+  });
+}
+{
+  // K2–K4) La cobertura en la ladera: conservación, sin oscilaciones, obstrucción y paso del agua por encima
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const cap = compile(sc, sc.defaults, baseInterventions(sc)).creek!.capacity;
+  const run = (f: number, obs: number, prog: boolean) => {
+    const iv = baseInterventions(sc);
+    iv.culverts = { 'cobertura-carrera': { obstruction: obs, progressive: prog } };
+    const sh: Shared = { ...sc.defaults, simMinutes: 30, creek: { peakM3s: f * cap, timeToPeakMin: 8, startMin: 2 } };
+    const sim = new CitySim(compile(sc, sh, iv), sh);
+    let prev = 0, lastD = 0, flips = 0, neg = 0, nan = 0, negH = 0, tFull = -1;
+    sim.onStep = () => {
+      const st = sim.culv[0];
+      if (!Number.isFinite(st.q)) nan++;
+      if (st.q < -0.05) neg++;
+      const d = st.q - prev;
+      if (Math.abs(d) > 0.5) {
+        if (Math.abs(lastD) > 0.5 && Math.sign(d) !== Math.sign(lastD)) flips++;
+        lastD = d;
+      }
+      prev = st.q;
+      if (tFull < 0 && st.obs >= 0.9 - 1e-9) tFull = sim.t;
+      for (const k of sim.c.culverts[0].inCells) if (sim.h[k] < 0) negH++;
+      for (const k of sim.c.culverts[0].outCells) if (sim.h[k] < 0) negH++;
+    };
+    sim.runToEnd();
+    const st = sim.culv[0], cu = sim.c.culverts[0];
+    const ds = damageSummary(exposureOf(sim));
+    return { sim, st, cu, flips, neg, nan, negH, tFull, aff: ds.affected, moved: sim.drift.filter((o) => o.tMoved >= 0).length, res: Math.abs(sim.bal.residual) / (sim.bal.precipitation + sim.bal.inflow) };
+  };
+  const open = run(0.6, 0, false), blocked = run(0.6, 0.9, false), prog = run(1, 0.9, true);
+  const all = [open, blocked, prog];
+  const peakIn = 0.6 * cap;
+  record({
+    id: 'K2', kind: 'obligatoria', name: 'Cobertura en la ladera: conserva el agua y no oscila',
+    tolerance: 'en las tres corridas (libre, tapada 90 % y tapándose con la creciente) el balance cierra (residuo < 10⁻⁹), no hay valores no numéricos ni profundidades negativas, el caudal por los cajones nunca va al revés (< −0,05 m³/s) ni alterna subidas y bajadas de más de 0,5 m³/s entre pasos; con la entrada libre el caudal máximo no supera en más de 10 % al pico que trae la quebrada',
+    measured: all.map((r, i) => `${['libre', 'tapada 90 %', 'se tapa'][i]}: residuo ${r.res.toExponential(1)}, no numéricos ${r.nan}, negativas ${r.negH}, al revés ${r.neg}, alternancias ${r.flips}`).join(' | ') + ` | libre: caudal máximo ${fmt(open.st.qMax, 1)} m³/s con un pico de ${fmt(peakIn, 1)} m³/s`,
+    pass: all.every((r) => r.res < 1e-9 && r.nan === 0 && r.negH === 0 && r.neg === 0 && r.flips === 0) && open.st.qMax <= 1.1 * peakIn + sc.creek!.baseM3s,
+  });
+  const headO = open.st.upMax - open.cu.crestZ, headB = blocked.st.upMax - blocked.cu.crestZ;
+  record({
+    id: 'K3', kind: 'obligatoria', name: 'Cobertura tapada: pasa menos agua, el agua se represa y cruza la vía',
+    tolerance: 'con una creciente de 60 % de la capacidad del cauce y la entrada libre, el agua no llega a la vía; con 90 % de obstrucción pasa menos de la mitad por los cajones, el nivel en la entrada sube al menos 50 cm más, pasan más de 5 m³/s por encima de la vía y llega agua a más edificaciones',
+    measured: `libre: ${fmt(open.st.qMax, 1)} m³/s por los cajones, nivel ${fmt(headO, 2)} m respecto de la vía, ${fmt(open.st.overMax, 2)} m³/s encima, ${open.aff} edificaciones con agua | tapada 90 %: ${fmt(blocked.st.qMax, 1)} m³/s por los cajones, nivel ${fmt(headB, 2)} m, ${fmt(blocked.st.overMax, 1)} m³/s encima (${fmt(blocked.st.overVol, 0)} m³), ${blocked.aff} edificaciones con agua, ${blocked.moved} vehículos movidos`,
+    pass: headO < 0 && open.st.overMax < 0.1 && blocked.st.qMax < 0.5 * open.st.qMax && headB - headO >= 0.5 && blocked.st.overMax > 5 && blocked.aff > open.aff,
+  });
+  record({
+    id: 'K4', kind: 'obligatoria', name: 'Obstrucción que crece con la creciente',
+    tolerance: 'empieza libre; empieza a taparse cuando el caudal pasa de la mitad de la capacidad libre y llega al 90 % exactamente 180 s después; con la creciente igual a la capacidad del cauce el agua termina pasando por encima de la vía',
+    measured: `empezó a taparse en ${fmt(prog.st.t0, 0)} s con la mitad de ${fmt(prog.cu.capacityFree, 1)} m³/s; llegó al 90 % en ${fmt(prog.tFull, 0)} s (${fmt(prog.tFull - prog.st.t0, 1)} s después); encima de la vía hasta ${fmt(prog.st.overMax, 1)} m³/s`,
+    pass: prog.st.t0 > 0 && Math.abs(prog.tFull - prog.st.t0 - 180) < 1 && Math.abs(prog.st.obsMax - 0.9) < 1e-9 && prog.st.overMax > 5,
+  });
 }
 
 // ---------------------------------------------------------------- Sensibilidad al límite de Froude (información para docentes)

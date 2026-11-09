@@ -4,6 +4,7 @@
 import { COVERS, COVER_LIST, G, NUMERICS, coverIndex, mmhToMs, type CoverId } from './constants';
 import type { ExposedObject, Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
 import { buildNodeTable, fullFlow, windowK, type CompiledSewer, type SInlet, type SNode, type SPipe } from './sewer';
+import { barrelR, inletRating, qInlet, type CulvertGeom, type InletRating } from './culvert';
 
 export interface CompiledBuilding {
   id: string;
@@ -85,7 +86,33 @@ export interface Compiled {
   creek: CompiledCreek | null;
   /** Vehículos expuestos (no participan en el flujo; el motor calcula si el agua los mueve). */
   exposed: ExposedObject[];
+  /** Coberturas bajo vías. */
+  culverts: CompiledCulvert[];
   hash: string;
+}
+
+/** Cobertura compilada: celdas de entrada y salida, geometría, tabla de control de entrada y estado. */
+export interface CompiledCulvert {
+  id: string;
+  name: string;
+  inCells: number[];
+  outCells: number[];
+  /** Bateas de entrada y salida [m] (la celda más baja de cada grupo). */
+  zIn: number;
+  zOut: number;
+  geom: CulvertGeom;
+  rating: InletRating;
+  /** Cota más baja de la vía sobre el cauce (desde ahí el agua pasa por encima) [m]. */
+  crestZ: number;
+  /** Caudal que pasa libre (sin obstrucción) con el agua a la cota de la vía [m³/s]. */
+  capacityFree: number;
+  /** Caras al borde aguas abajo de la vía, para medir el agua que pasa por encima. */
+  overFaces: number[];
+  obstruction: number;
+  /** Coeficiente de pérdidas del cañón lleno 1 + Ke + 2g·n²·L/R^(4/3) (para la inercia del agua en los cajones). */
+  lossK: number;
+  progressive: boolean;
+  road: { x0: number; x1: number; y0: number; y1: number };
 }
 
 /** Sección de control de la quebrada (columna de celdas a lo largo de y en la abscisa x). */
@@ -556,7 +583,14 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       return m;
     };
     const di = Math.max(1, Math.round(5 / dx));
-    const slope = Math.max(1e-4, (bedAt(i - di) - bedAt(i + di)) / (2 * di * dx));
+    // pendiente del fondo 5 m aguas arriba y aguas abajo; si aguas arriba hay una vía en terraplén sobre el
+    // cauce (cobertura), se toma el primer punto del cauce natural después de ella
+    let iu = i - di;
+    for (const cs of sc.culverts ?? []) {
+      const a = Math.floor(cs.road.x0 / dx), b = Math.ceil(cs.road.x1 / dx);
+      if (iu >= a && iu < b && b < i) iu = b;
+    }
+    const slope = Math.max(1e-4, (bedAt(iu) - bedAt(i + di)) / ((i + di - iu) * dx));
     let capacity = 0, capacityManning = 0;
     for (let j = jb0; j <= jb1; j++) {
       const k = j * nx + i;
@@ -568,6 +602,54 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       capacityManning += qm * dx;
     }
     creek = { cells, baseM3s: ck.baseM3s, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name };
+  }
+
+  // Coberturas: grupos de celdas a la entrada y a la salida, bateas, tabla de control de entrada
+  const culverts: CompiledCulvert[] = [];
+  for (const cs of sc.culverts ?? []) {
+    const group = ([px, py]: Pt) => {
+      const i = Math.min(nx - 1, Math.max(0, Math.floor(px / dx)));
+      const cells: number[] = [];
+      for (let j = 0; j < ny; j++) {
+        const y = (j + 0.5) * dx;
+        if (Math.abs(y - py) <= cs.spanM / 2 + 1e-9 && !solid[j * nx + i]) cells.push(j * nx + i);
+      }
+      if (!cells.length) cells.push(Math.min(ny - 1, Math.max(0, Math.floor(py / dx))) * nx + i);
+      return cells;
+    };
+    const inCells = group(cs.inlet), outCells = group(cs.outlet);
+    const zIn = Math.min(...inCells.map((k) => z[k])), zOut = Math.min(...outCells.map((k) => z[k]));
+    const L = Math.max(dx, Math.abs(cs.outlet[0] - cs.inlet[0]));
+    const geom: CulvertGeom = { B: cs.spanM, D: cs.riseM, L, S: Math.max(0.001, (zIn - zOut) / L), barrels: cs.barrels, n: cs.n, Ke: cs.ke };
+    const rating = inletRating(geom);
+    // cota de la vía: la celda más baja de la franja de la vía sobre el cauce
+    // celdas enteras dentro de la franja de la vía (las de borde mezclan vía y cauce al remuestrear)
+    const i0 = Math.max(0, Math.ceil(cs.road.x0 / dx - 1e-9)), i1 = Math.min(nx - 1, Math.floor(cs.road.x1 / dx + 1e-9) - 1);
+    const j0 = Math.max(0, Math.ceil(cs.road.y0 / dx - 1e-9)), j1 = Math.min(ny - 1, Math.floor(cs.road.y1 / dx + 1e-9) - 1);
+    let crestZ = Infinity;
+    const overFaces: number[] = [];
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) if (!solid[j * nx + i]) crestZ = Math.min(crestZ, z[j * nx + i]);
+      if (i1 + 1 < nx) overFaces.push(j * (nx + 1) + i1 + 1);
+    }
+    const st = iv.culverts?.[cs.id] ?? { obstruction: 0, progressive: false };
+    culverts.push({
+      id: cs.id,
+      name: cs.name,
+      inCells,
+      outCells,
+      zIn,
+      zOut,
+      geom,
+      rating,
+      crestZ,
+      capacityFree: cs.spanM * qInlet(rating, crestZ - zIn),
+      overFaces,
+      obstruction: Math.max(0, Math.min(1, st.obstruction)),
+      progressive: st.progressive,
+      road: cs.road,
+      lossK: 1 + cs.ke + (2 * G * cs.n * cs.n * L) / Math.pow(barrelR(geom), 4 / 3),
+    });
   }
 
   let h = 2166136261;
@@ -582,6 +664,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     for (const pp of sewer.pipes) h = fnv(h, Math.round(pp.D * 1e3) ^ Math.round(pp.zUp * 1e3) ^ Math.round(pp.zDn * 1e3));
     h = fnv(h, iv.erradas ? 7 : 3);
   }
+  for (const cu of culverts) h = fnv(h, Math.round(cu.obstruction * 1000) ^ (cu.progressive ? 1 << 20 : 0) ^ cu.inCells[0]);
 
   return {
     scenarioId: sc.id,
@@ -610,6 +693,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     erradaNode,
     creek,
     exposed: (sc.exposed ?? []).map((o) => ({ ...o, at: [o.at[0], o.at[1]] as Pt })),
+    culverts,
     hash: (h >>> 0).toString(16).padStart(8, '0'),
   };
 }

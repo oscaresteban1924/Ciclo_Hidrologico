@@ -372,6 +372,55 @@ export const MISSIONS: Mission[] = [
     explain: 'Una avenida torrencial sube en minutos y arrastra lodo, piedras y troncos: lleva más volumen que el agua sola y corre muy rápido en las quebradas de ladera. El peligro combina profundidad y velocidad: un metro de agua quieta no es lo mismo que un metro de agua a 3 m/s. Por eso los retiros y las zonas de alto riesgo se definen con estudios y no se construyen.',
     terms: ['avenida-torrencial', 'creciente', 'peligro-de-inundacion', 'retiro-de-quebrada', 'caudal-pico'],
   },
+  {
+    id: 'cobertura-tapada',
+    title: 'La cobertura tapada',
+    scenarioId: 'ladera-quebrada',
+    question: 'Baja una creciente que cabe sin problema por la cobertura bajo la carrera. En B, troncos y ramas tapan el 90 % de su entrada. ¿Qué pasará?',
+    context: 'A y B reciben la misma lluvia y la misma creciente: seis décimas de lo que cabe en el cauce. En A la entrada de la cobertura está libre; en B la tapan troncos desde el comienzo.',
+    options: [
+      { id: 'nada', text: 'Pasa igual: los cajones son grandes y la vía sigue seca' },
+      { id: 'via', text: 'El agua se represa y pasa por encima de la vía, pero no llega a las casas ni mueve carros' },
+      { id: 'casas', text: 'El agua se represa, pasa sobre la vía y llega a casas o mueve carros' },
+    ],
+    rain: { intensityMmH: 60, durationMin: 20, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 35,
+    creek: { fraction: 0.6, timeToPeakMin: 8, startMin: 2 },
+    change: {
+      kind: 'auto',
+      describe: 'En B, los troncos tapan el 90 % del ancho de los cajones de la cobertura desde el comienzo.',
+      apply: (iv) => {
+        iv.culverts = { ...(iv.culverts ?? {}), 'cobertura-carrera': { obstruction: 0.9, progressive: false } };
+      },
+    },
+    evaluate: (a, b) => {
+      const ca = a.culverts[0], cb = b!.culverts[0];
+      const nuevas = b!.damage.affected - a.damage.affected;
+      const movidos = b!.vehicles.moved - a.vehicles.moved;
+      const m3s = (v: number) => `${fmtNum(v, v < 10 ? 1 : 0)} m³/s`;
+      const head = (h: number) => (h >= 0 ? `${fmtNum(h * 100, 0)} cm sobre la vía` : `${fmtNum(-h * 100, 0)} cm bajo la vía`);
+      return {
+        outcome: cb.overMax < 0.1 ? 'nada' : nuevas > 0 || movidos > 0 ? 'casas' : 'via',
+        observed: [
+          `Llegó un caudal pico de ${m3s(a.creekPeakIn)} por la quebrada. Con la entrada libre caben ${m3s(ca.capacityFree)} antes de que el agua alcance la vía.`,
+          `A (libre): pasaron hasta ${m3s(ca.qMax)} por los cajones; el agua llegó a ${head(ca.headOverRoad)}${ca.overMax >= 0.1 ? ` y pasaron hasta ${m3s(ca.overMax)} por encima` : ''}.`,
+          `B (tapada 90 %): solo pasaron ${m3s(cb.qMax)} por los cajones; el agua subió a ${head(cb.headOverRoad)}${cb.overMax >= 0.1 ? ` y pasaron hasta ${m3s(cb.overMax)} por encima de la vía (${fmtNum(cb.overVol, 0)}\u00a0m³ en total)` : ''}.`,
+          nuevas > 0 ? `En B llegó agua a ${nuevas} edificaciones más que en A${b!.damage.severe > a.damage.severe ? `; ${b!.damage.severe - a.damage.severe} más quedaron con peligro H5 o mayor` : ''}.` : 'En B no llegó agua a más edificaciones que en A.',
+          movidos > 0 ? `El agua movió ${movidos} vehículos más en B que en A.` : 'En B el agua no movió más vehículos que en A.',
+        ],
+        rows: [
+          { label: 'Caudal máximo por los cajones', a: m3s(ca.qMax), b: m3s(cb.qMax), change: changeText(ca.qMax, cb.qMax, 0.05, m3s) },
+          { label: 'Caudal máximo sobre la vía', a: m3s(ca.overMax), b: m3s(cb.overMax), change: changeText(ca.overMax, cb.overMax, 0.05, m3s) },
+          { label: 'Agua que pasó sobre la vía', a: `${fmtNum(ca.overVol, 0)}\u00a0m³`, b: `${fmtNum(cb.overVol, 0)}\u00a0m³`, change: changeText(ca.overVol, cb.overVol, 1, (v) => `${fmtNum(v, 0)}\u00a0m³`) },
+          { label: 'Edificaciones con agua', a: String(a.damage.affected), b: String(b!.damage.affected), change: changeText(a.damage.affected, b!.damage.affected, 0.5, (v) => fmtNum(v, 0)) },
+          { label: 'Vehículos movidos', a: String(a.vehicles.moved), b: String(b!.vehicles.moved), change: changeText(a.vehicles.moved, b!.vehicles.moved, 0.5, (v) => fmtNum(v, 0)) },
+        ],
+        caveat: 'Cobertura y obstrucción hipotéticas; hidráulica de alcantarillas según la guía HDS-5 de la FHWA. Los troncos se representan como una reducción del ancho útil de los cajones. No es el diseño ni el estado de una obra real, ni un pronóstico.',
+      };
+    },
+    explain: 'Una cobertura deja pasar solo el agua que cabe por su boca. Si troncos, ramas o basura la tapan, cabe mucho menos: el agua se represa detrás del terraplén, sube hasta la vía y pasa por encima, con fuerza, hacia donde no debía ir. Por eso las bocas de las coberturas se limpian antes de las temporadas de lluvia y no se arrojan basuras ni escombros a las quebradas.',
+    terms: ['cobertura-de-quebrada', 'represamiento', 'creciente', 'capacidad-hidraulica', 'peligro-de-inundacion'],
+  },
 ];
 
 /** Costos del juego para la misión de presupuesto (puntos, no dinero). */

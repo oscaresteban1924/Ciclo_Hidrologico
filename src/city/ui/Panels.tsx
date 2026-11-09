@@ -1,6 +1,6 @@
 // Paneles del laboratorio de lluvia: herramientas, comparación, misiones, palabras clave y docente.
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ReactNode, type RefObject } from 'react';
 import { COVERS, DURATION_RANGE, ENGINE, NUMERICS, RAIN_RANGE, type CoverId } from '../sim/constants';
 import { baseInterventions, cloneInterventions, validateConfig, validateScenario, type Interventions, type Scenario } from '../sim/scenario';
 import { change } from '../sim/compare';
@@ -19,7 +19,7 @@ import { downloadText } from '../../lib/download';
 import report from '../content/test-report.json';
 import { RainBudget } from './RainBudget';
 import { Range } from './Range';
-import { CreekTool, SewerTeacher, SewerTool } from './SewerPanel';
+import { CreekTool, SewerTeacher, SewerTool, culvertStateText } from './SewerPanel';
 import { HAZARD_SOURCE } from '../sim/hazard';
 import { TRACER_COLORS, TRACER_TRAIL_MOVING } from '../render/tracerColors';
 
@@ -47,6 +47,10 @@ export interface LabApi {
   setMission: (m: MissionUi | null) => void;
   runMission: (m: Mission, budgetSel: string[]) => void;
   goSector: (id: string) => void;
+  /** Panel derecho contraído (la maqueta ocupa todo el ancho). */
+  panelHidden: boolean;
+  setPanelHidden: (hidden: boolean) => void;
+  peekRef: RefObject<HTMLButtonElement | null>;
 }
 
 const COLOR_A = '#5b6470';
@@ -450,8 +454,13 @@ function diffList(sc: Scenario, a: Interventions, b: Interventions): string[] {
     if (JSON.stringify(ta) !== JSON.stringify(tb)) out.push(`${t.name}: ${tb?.on ? (tb.destination === 'red' ? 'entrega a la red' : 'guarda el agua') : 'sin depósito'} en B`);
   }
   for (const d of sc.drains) if ((a.drains[d.id] ?? 0) !== (b.drains[d.id] ?? 0)) out.push(`${d.name}: obstrucción ${fmtNum((a.drains[d.id] ?? 0) * 100, 0)} % → ${fmtNum((b.drains[d.id] ?? 0) * 100, 0)} %`);
+  for (const cu of sc.culverts ?? []) {
+    const ca = a.culverts?.[cu.id], cb = b.culverts?.[cu.id];
+    if (JSON.stringify(ca) !== JSON.stringify(cb)) out.push(`${cu.name}: ${culvertStateText(ca)} → ${culvertStateText(cb)}`);
+  }
   return out;
 }
+
 
 export function ResultTable({ api }: { api: LabApi }) {
   const { ctrl } = api;
@@ -493,6 +502,13 @@ export function ResultTable({ api }: { api: LabApi }) {
         {row('Caudal pico de salida', a.peakOutlet, b.peakOutlet, lps, 1e-5)}
         {row(`Área con ≥ ${fmtNum(a.threshold * 100, 0)} cm (máx.)`, a.maxAreaAbove, b.maxAreaAbove, (v) => `${fmtNum(v, 0)} m²`, 0.5)}
         {a.probeMax.map((p, q) => (p.id.startsWith('jardin') && !hasGarden ? null : row(`Máx. en «${p.name}»`, p.depth, b.probeMax[q].depth, fmtDepth, 0.0005)))}
+        {a.culverts.map((cu, q) => (
+          <Fragment key={cu.id}>
+            {row(`${cu.name}: caudal máx. por los cajones`, cu.qMax, b.culverts[q].qMax, (v) => `${fmtNum(v, 1)} m³/s`, 0.05)}
+            {row(`${cu.name}: caudal máx. sobre la vía`, cu.overMax, b.culverts[q].overMax, (v) => `${fmtNum(v, 1)} m³/s`, 0.05)}
+            {row(`${cu.name}: agua que pasó sobre la vía`, cu.overVol, b.culverts[q].overVol, m3, 1)}
+          </Fragment>
+        ))}
       </tbody>
     </table>
   );
@@ -838,7 +854,7 @@ function MissionDone({ api, id, outcome }: { api: LabApi; id: string; outcome: s
 
 // ------------------------------------------------------------------ palabras clave
 
-const WORDS = ['escorrentia', 'infiltracion', 'caudal', 'rugosidad', 'almacenamiento-superficial', 'sumidero', 'lamina-de-agua', 'balance-hidrico', 'pavimento-permeable', 'jardin-de-lluvia', 'sistema-separado', 'alcantarillado-sanitario', 'camara-de-inspeccion', 'conexion-errada', 'sobrecarga', 'creciente', 'capacidad-hidraulica', 'retiro-de-quebrada', 'avenida-torrencial', 'peligro-de-inundacion'];
+const WORDS = ['escorrentia', 'infiltracion', 'caudal', 'rugosidad', 'almacenamiento-superficial', 'sumidero', 'lamina-de-agua', 'balance-hidrico', 'pavimento-permeable', 'jardin-de-lluvia', 'sistema-separado', 'alcantarillado-sanitario', 'camara-de-inspeccion', 'conexion-errada', 'sobrecarga', 'creciente', 'capacidad-hidraulica', 'retiro-de-quebrada', 'avenida-torrencial', 'peligro-de-inundacion', 'cobertura-de-quebrada', 'represamiento'];
 const STEP_FOR: Record<string, string> = { escorrentia: 'escorrentia', infiltracion: 'infiltracion', 'almacenamiento-superficial': 'almacenamiento', caudal: 'escorrentia' };
 
 export function WordsTab() {
@@ -986,9 +1002,10 @@ export function TeacherTab({ api }: { api: LabApi }) {
           )}
           {sc?.creek && <li>Creciente: hidrograma triangular (subida tp, bajada 1,67·tp; SCS) que entra por la quebrada sobre un caudal base; su volumen entra completo. Con lodo, el caudal de la mezcla es el del agua por 1/(1 − Cv) (Cv ≤ 30 %); la mezcla se mueve como agua: no se simula la reología del lodo, la erosión ni el golpe de piedras y troncos. La capacidad de la sección de control se calcula con la regla de caras del modelo (Manning limitado por Froude ≤ {NUMERICS.froudeMax}) hasta la orilla más baja.</li>}
           <li>Peligro: en cada paso y cada celda con 1 cm o más se clasifica la profundidad y la velocidad (la de la celda, limitada con el mismo Froude del cálculo) con las curvas H1–H6 de {HAZARD_SOURCE}; se guarda la clase máxima. Es una referencia técnica publicada para enseñar el concepto, no la zonificación oficial de amenaza de Medellín.</li>
+          {(sc?.culverts?.length ?? 0) > 0 && <li>Cobertura bajo la carrera: enlace entre la celda de entrada y la de salida con las ecuaciones de alcantarillas de la guía HDS-5 de la FHWA (control de entrada de forma 1 para cajón con aletas de 30° a 75°; control de salida con el cañón lleno y h₀ = máx(nivel aguas abajo, (dc + D)/2)); pasa el menor de los dos. El enlace es implícito (el caudal se evalúa con los niveles del final del paso) y tiene la inercia del agua en los cajones; nunca cambia de sentido dentro de un paso. Los troncos se representan como una reducción del ancho útil; «se tapa con la creciente» empieza cuando el caudal pasa de la mitad de la capacidad libre y llega al 90 % en 3 minutos. El agua que no cabe sube y pasa por encima de la vía con el cálculo 2D. Simplificación: no se calcula el remanso dentro del cañón cuando va parcialmente lleno.</li>}
           {sc?.creek && <li>Daños: una edificación está afectada si junto a sus muros (las celdas vecinas) el agua llega a 10 cm o más; su peligro es el máximo de esas celdas. Las casas son sólidas en el cálculo: el agua no entra, de modo que la profundidad contra la fachada indica hasta dónde llegaría adentro si hubiera aberturas.</li>}
           {(sim?.c.exposed.length ?? 0) > 0 && <li>Vehículos: quietos mientras el peligro donde están sea menor que H2 (inseguro para vehículos pequeños); por encima, el agua los mueve con el 80 % de su velocidad; se detienen contra los edificios y donde el peligro vuelve a bajar. No alteran el flujo y su trayectoria es ilustrativa.</li>}
-          {sc?.creek && <li>Dibujo de la creciente: troncos, ramas y basura flotantes son ilustrativos (entran con la creciente, se mueven con la velocidad calculada y quedan donde el agua se vuelve somera); la salpicadura contra los muros sube hasta la carga de velocidad v²/2g; la marca en las fachadas llega a la profundidad máxima calculada en la celda vecina; el puente peatonal no obstruye el agua en el cálculo y su rótulo compara el nivel calculado con su viga y su tablero.</li>}
+          {sc?.creek && <li>Dibujo de la creciente: troncos, ramas y basura flotantes son ilustrativos (entran con la creciente, se mueven con la velocidad calculada y quedan donde el agua se vuelve somera); la salpicadura contra los muros sube hasta la carga de velocidad v²/2g; la marca en las fachadas llega a la profundidad máxima calculada en la celda vecina; el puente peatonal no obstruye el agua en el cálculo y su rótulo compara el nivel calculado con su viga y su tablero; en la cobertura, la cantidad de troncos dibujados sigue la obstrucción calculada y flotan al nivel calculado en la entrada, y la baranda es abierta (no detiene el agua en el cálculo).</li>}
           <li>Salidas: condición de profundidad normal con la pendiente declarada, acotada por el caudal crítico. Demás bordes cerrados.</li>
           <li>Unidades: R [m/s] = mm/h ÷ 3 600 000. Volúmenes en m³, caudales en L/s.</li>
           <li>Partículas de lluvia y cabinas del cable son decorativas y no alteran el volumen. Las gotas trazadoras se mueven con la velocidad calculada.</li>

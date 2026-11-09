@@ -41,7 +41,7 @@ export function streetScenario(): Scenario {
         { layer: 'Esquina baja', kind: 'didactico', note: 'Depresión de 0,12 m en la cuneta.' },
         { layer: 'Sumideros', kind: 'hipotetico', note: 'Seis sumideros de rejilla, ventana o mixtos ubicados con los criterios de EPM (puntos bajos y antes de los cruces peatonales). No son infraestructura levantada.' },
         { layer: 'Alcantarillado', kind: 'hipotetico', note: 'Red separada de aguas lluvias y de aguas residuales trazada con criterios de la norma de diseño de EPM (GD-AS002). Es didáctica: no es la red real de EPM ni un diseño de ingeniería.' },
-        { layer: 'Coberturas', kind: 'estimado', note: 'Parámetros estimados de literatura general.' },
+        { layer: 'Coberturas del suelo', kind: 'estimado', note: 'Parámetros estimados de literatura general.' },
       ],
       sources: [],
       generatedBy: 'src/city/scenarios/street.ts',

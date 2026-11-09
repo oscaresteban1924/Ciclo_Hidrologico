@@ -37,6 +37,15 @@ const orillaRect = (o: (typeof ORILLA)[number]): Polygon => {
 /** Puente peatonal sobre la quebrada (aguas arriba de la sección). */
 const PUENTE_X = 70;
 
+/**
+ * Cruce de la carrera sobre la quebrada: terraplén entre x 84 y 91 con una cobertura de triple cajón de
+ * 3 × 2,3 m (9 m de luz hidráulica, tabiques de 0,3 m) y 0,25 m de relleno sobre los cajones. Es didáctico.
+ */
+export const CROSS = { x0: 84, x1: 91, rise: 2.3, span: 9, barrels: 3, cover: 0.25, pier: 0.3, inletX: 83.5, outletX: 92.5, transition: 2.5 } as const;
+/** Fondo del cauce en x (sin el cruce) y cota de la vía sobre la cobertura. */
+const bedAt = (x: number) => 44 - drop(x) + 0.035 * (yq(x) - 16) - CHANNEL.depth;
+export const crossDeck = (x: number) => bedAt(x) + CROSS.rise + CROSS.cover;
+
 /** Descenso acumulado hacia el este: 10 %, con un rellano de 2 % en la intersección (x 80–100). */
 const drop = (x: number) => 0.1 * Math.min(x, 80) + 0.02 * Math.min(Math.max(x - 80, 0), 20) + 0.1 * Math.max(x - 100, 0);
 
@@ -50,8 +59,17 @@ export function laderaGround(x: number, y: number): number {
   const d = Math.abs(y - yc);
   let z = 44 - drop(x) + 0.035 * (yc - 16) + 0.035 * d;
   if (y < yc && d > SOUTH_SLOPE_FROM) z += 0.3 * (d - SOUTH_SLOPE_FROM);
-  if (d < CHANNEL.bedHalf) z -= CHANNEL.depth;
-  else if (d < CHANNEL.bankHalf) z -= CHANNEL.depth * (1 - (d - CHANNEL.bedHalf) / (CHANNEL.bankHalf - CHANNEL.bedHalf));
+  // Terraplén de la carrera sobre la quebrada: la vía queda 2,3 m (cajón) + 0,25 m (relleno) sobre el fondo
+  // y se rellena solo donde el terreno natural es más bajo (al norte empalma con la carrera, al sur con el talud)
+  if (x >= CROSS.x0 && x <= CROSS.x1) return Math.max(z, crossDeck(x));
+  // transiciones de entrada y de salida: en los 2,5 m junto al terraplén el fondo se ensancha hasta el ancho
+  // de los tres cajones con sus dos tabiques de 0,3 m (como la losa de una boca de cobertura); lejos de ella
+  // la sección es la natural
+  const tr = x < CROSS.x0 ? CROSS.x0 - x : x - CROSS.x1;
+  const bedHalf = tr < CROSS.transition ? CHANNEL.bedHalf + (CROSS.span / 2 + CROSS.pier - CHANNEL.bedHalf) * (1 - tr / CROSS.transition) : CHANNEL.bedHalf;
+  const bankHalf = Math.max(CHANNEL.bankHalf, bedHalf + 0.3);
+  if (d < bedHalf) z -= CHANNEL.depth;
+  else if (d < bankHalf) z -= CHANNEL.depth * (1 - (d - bedHalf) / (bankHalf - bedHalf));
   return z;
 }
 
@@ -136,6 +154,8 @@ export function laderaScenario(): Scenario {
     { id: 'calle', polygon: rect(0, 58, 128, 65), cover: 'asfalto', crossSlope: { axis: 'y', at: 61.5, slope: -0.03 }, kind: 'didactico' },
     { id: 'carrera-n', polygon: rect(84, 65, 91, 96), cover: 'asfalto', crossSlope: { axis: 'x', at: 87.5, slope: -0.03 }, kind: 'didactico' },
     { id: 'carrera-s', polygon: rect(84, 24, 91, 58), cover: 'asfalto', crossSlope: { axis: 'x', at: 87.5, slope: -0.03 }, kind: 'didactico' },
+    // la carrera cruza la quebrada sobre el terraplén de la cobertura (sin bordillos: el agua que la supera pasa por encima)
+    { id: 'carrera-cruce', polygon: rect(84, 0, 91, 24), cover: 'asfalto', kind: 'didactico', label: 'Cruce de la carrera' },
     // Andenes
     { id: 'anden-cs-o', polygon: rect(0, 56, 84, 58), cover: 'anden', dz: 0.15, crossSlope: { axis: 'y', at: 58, slope: 0.02 }, kind: 'hipotetico' },
     { id: 'anden-cs-e', polygon: rect(91, 56, 128, 58), cover: 'anden', dz: 0.15, crossSlope: { axis: 'y', at: 58, slope: 0.02 }, kind: 'hipotetico' },
@@ -167,8 +187,9 @@ export function laderaScenario(): Scenario {
         { layer: 'Alcantarillado', kind: 'hipotetico', note: 'Red separada de aguas lluvias (descarga a la quebrada) y de aguas residuales (sigue hacia el interceptor) trazada con criterios de la norma de diseño de EPM (GD-AS002). Es didáctica: no es la red real ni un diseño de ingeniería.' },
         { layer: 'Creciente', kind: 'hipotetico', note: 'Hidrograma triangular que entra por la quebrada, con lodo opcional (factor de volumen 1/(1 − Cv)). No es un caudal medido ni un pronóstico.' },
         { layer: 'Casas en la orilla', kind: 'didactico', note: 'Cuatro casas construidas a ras de la orilla norte, dentro del retiro de la quebrada, para mostrar la exposición. No representan viviendas reales.' },
+        { layer: 'Cobertura de la carrera', kind: 'didactico', note: 'La carrera cruza la quebrada sobre un terraplén con una cobertura de triple cajón de 3 × 2,3 m. Su hidráulica sigue las ecuaciones de la guía de diseño de alcantarillas de la FHWA (HDS-5); su obstrucción por troncos es una intervención hipotética.' },
         { layer: 'Vehículos y puente peatonal', kind: 'didactico', note: 'Dos carros y una moto estacionados cerca de la quebrada y un puente peatonal. El motor calcula si el agua mueve los vehículos (clase de peligro H2 o mayor); el puente no obstruye el agua en el cálculo.' },
-        { layer: 'Coberturas', kind: 'estimado', note: 'Parámetros estimados de literatura general; no calibrados.' },
+        { layer: 'Coberturas del suelo', kind: 'estimado', note: 'Parámetros estimados de literatura general; no calibrados.' },
       ],
       sources: [],
       generatedBy: 'src/city/scenarios/ladera.ts',
@@ -231,6 +252,22 @@ export function laderaScenario(): Scenario {
       baseM3s: 0.3,
       footbridge: { id: 'puente', name: 'Puente peatonal', x: PUENTE_X, halfLengthM: 7, widthM: 1.6, deckAboveBankM: 0.9, beamM: 0.35 },
     },
+    culverts: [
+      {
+        id: 'cobertura-carrera',
+        name: 'Cobertura de la carrera',
+        inlet: [CROSS.inletX, yq(CROSS.inletX)],
+        outlet: [CROSS.outletX, yq(CROSS.outletX)],
+        spanM: CROSS.span,
+        riseM: CROSS.rise,
+        barrels: CROSS.barrels,
+        n: 0.014,
+        ke: 0.4,
+        // franja de la vía que queda a la cota del terraplén (más al norte la carrera ya está más alta)
+        road: { x0: CROSS.x0, x1: CROSS.x1, y0: yq(87.5) - 12, y1: yq(87.5) + 21 },
+        kind: 'didactico',
+      },
+    ],
     exposed: [
       { id: 'carro-orilla', name: 'Carro estacionado en la orilla', kind: 'carro', at: [117.8, 24.3], headingDeg: 0, color: '#c0392b' },
       { id: 'taxi-carrera', name: 'Taxi al final de la carrera', kind: 'carro', at: [89.4, 26.6], headingDeg: 90, color: '#f2c200' },
@@ -298,7 +335,10 @@ function laderaSewer(sc: Scenario): SewerSpec {
   const conn = (d: DrainSpec, to: string): DesignPipe => ({ id: `c-${d.id}`, from: d.node!, to, diameterM: 0.25, material: 'PVC', role: 'conexion-sumidero' });
   const D = Object.fromEntries(LADERA_DRAINS.map((d) => [d.id, d]));
   const xo = 89.25;
-  const yOutf = yq(xo) + 1.3;
+  // la descarga queda aguas arriba de la cobertura, en la orilla norte (el terraplén ocupa x 84–91), con la
+  // batea 0,25 m sobre el fondo del cauce para que el colector conserve su pendiente
+  const xOut = 82.2;
+  const yOutf = yq(xOut) + 1.3;
   const storm = designNetwork(
     [
       { id: 'LL-1', name: 'Cámara LL-1 (arranque en la calle)', at: [48.5, 63.25], kind: 'camara' },
@@ -307,7 +347,7 @@ function laderaSewer(sc: Scenario): SewerSpec {
       { id: 'LL-N0', name: 'Cámara LL-N0 (carrera norte, cruce)', at: [xo, 68.5], kind: 'camara' },
       { id: 'LL-3', name: 'Cámara LL-3 (intersección)', at: [xo, 61], kind: 'camara' },
       { id: 'LL-S1', name: 'Cámara LL-S1 (carrera sur)', at: [xo, 31.5], kind: 'camara' },
-      { id: 'LL-D', name: 'Descarga de aguas lluvias a la quebrada', at: [xo, yOutf], kind: 'descarga', outfall: 'quebrada', fixedInvertM: Math.round((laderaGround(xo, yq(xo)) + 0.5) * 1000) / 1000 },
+      { id: 'LL-D', name: 'Descarga de aguas lluvias a la quebrada', at: [xOut, yOutf], kind: 'descarga', outfall: 'quebrada', fixedInvertM: Math.round((laderaGround(xOut, yq(xOut)) + 0.25) * 1000) / 1000 },
       ...LADERA_DRAINS.map(box),
     ],
     [
@@ -352,7 +392,7 @@ function laderaSewer(sc: Scenario): SewerSpec {
       { id: 'AR-S0>AR-Q1', from: 'AR-S0', to: 'AR-Q1', diameterM: 0.2, material: 'PVC', role: 'colector' },
       { id: 'AR-Q1>AR-Q', from: 'AR-Q1', to: 'AR-Q', diameterM: 0.2, material: 'PVC', role: 'colector' },
     ],
-    { system: 'residuales', surface, cover: 2.35, minSlope: 0.01, vMax: { concreto: 4, PVC: 4 } },
+    { system: 'residuales', surface, cover: 2.42, minSlope: 0.01, vMax: { concreto: 4, PVC: 4 } },
   );
   const buildingNode: Record<string, string> = {};
   for (const b of sc.buildings) {
@@ -399,7 +439,8 @@ function laderaDecor(): Scenario['decor'] {
     const x = 1 + rnd() * 126;
     const side = rnd() < 0.5 ? -1 : 1;
     const y = yq(x) + side * (3.4 + rnd() * 6);
-    if (x > 83 && x < 92 && y > 22) continue;
+    if (x > 82.5 && x < 92.5) continue; // ni sobre la carrera ni sobre su cruce
+
     // ni sobre las casas de la orilla ni sobre el puente
     if (side > 0 && ORILLA.some((o) => x > o.x0 - 1.2 && x < o.x1 + 1.2) ) continue;
     if (side > 0 && x > 115.4 && x < 120.2) continue;
@@ -413,7 +454,7 @@ function laderaDecor(): Scenario['decor'] {
       { kind: 'dash', a: [0, 61.5], b: [83, 61.5], width: 0.15 },
       { kind: 'dash', a: [92, 61.5], b: [128, 61.5], width: 0.15 },
       { kind: 'dash', a: [87.5, 66], b: [87.5, 96], width: 0.15 },
-      { kind: 'dash', a: [87.5, 25], b: [87.5, 57], width: 0.15 },
+      { kind: 'dash', a: [87.5, 1], b: [87.5, 57], width: 0.15 },
       { kind: 'zebra', a: [82.6, 58.3], b: [82.6, 64.7], width: 2.2 },
       { kind: 'zebra', a: [92.4, 58.3], b: [92.4, 64.7], width: 2.2 },
       { kind: 'zebra', a: [84.3, 66.2], b: [90.7, 66.2], width: 2 },

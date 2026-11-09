@@ -42,6 +42,12 @@ export interface Indicators {
   vehicles: { total: number; moved: number; out: number; list: { id: string; name: string; state: string; dist: number; hazard: number }[] };
   /** Área [m²] por clase de peligro máxima (0–6). */
   hazardArea: number[];
+  /**
+   * Coberturas: caudal máximo por el cajón y por encima de la vía [m³/s], volumen que pasó por encima [m³],
+   * nivel máximo del agua respecto de la vía [m] (positivo: la vía quedó bajo el agua), obstrucción máxima (0–1)
+   * y capacidad libre con el agua a la cota de la vía [m³/s].
+   */
+  culverts: { id: string; name: string; qMax: number; overMax: number; overVol: number; headOverRoad: number; obsMax: number; capacityFree: number }[];
   /** Volumen captado por cada sumidero [m³]. */
   drainTotals: Record<string, number>;
   t: number;
@@ -91,6 +97,10 @@ export function indicators(sim: CitySim): Indicators {
     })(),
     vehicles: { total: sim.drift.length, moved: sim.drift.filter((o) => o.tMoved >= 0).length, out: sim.drift.filter((o) => o.state === 'fuera').length, list: sim.drift.map((o) => ({ id: o.id, name: o.name, state: o.state, dist: o.dist, hazard: o.hazard })) },
     hazardArea: hazardAreas(sim.hazMax, sim.c.solid, sim.c.area),
+    culverts: sim.c.culverts.map((cu, i) => {
+      const st = sim.culv[i];
+      return { id: cu.id, name: cu.name, qMax: st.qMax, overMax: Math.max(0, st.overMax), overVol: st.overVol, headOverRoad: st.upMax - cu.crestZ, obsMax: st.obsMax, capacityFree: cu.capacityFree };
+    }),
     drainTotals: Object.fromEntries(sim.c.drains.map((d, k) => [d.id, sim.drainTotal[k]])),
     t: sim.t,
   };

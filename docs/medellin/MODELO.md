@@ -212,7 +212,7 @@ Los dos sectores tienen dos redes que no se tocan (`src/city/sim/sewer.ts`):
 |---|---|---|
 | Sistema separado | 2.3.1 | Ningún tramo une los dos sistemas; la compilación del escenario lo rechaza. |
 | Ubicación en la vía | 3.4.2 | Aguas lluvias al norte y al oriente; aguas residuales al sur y al occidente, a un cuarto del ancho de la calzada desde el bordillo. |
-| Separación vertical en cruces | 3.4.3 | ≥ 0,5 m libres. La red de aguas residuales va más profunda (2,35 m sobre la corona). |
+| Separación vertical en cruces | 3.4.3 | ≥ 0,5 m libres. La red de aguas residuales va más profunda (2,42 m sobre la corona en la ladera, para cruzar bajo la descarga de aguas lluvias con 0,5 m libres). |
 | Diámetro mínimo | 6.2.7 y 5.2.8 | ≥ 215 mm en aguas lluvias (se usan 300 a 525 mm); ≥ 170 mm en aguas residuales (se usan 200 mm). |
 | Recubrimiento | 6.2.14 y 5.2.15 | ≥ 1,2 m sobre la corona en cámaras y cajas. |
 | Velocidad máxima | 6.2.9 y 5.2.10 | ≤ 5 m/s en concreto y ≤ 10 m/s en PVC. Se diseñó a ≤ 4 m/s, el umbral sobre el cual la norma pide un análisis detallado. |
@@ -279,7 +279,7 @@ El panel dibuja la sección transversal en vivo y el hidrograma, con la línea d
 
 **Exposición (sector demostrativo).** Cuatro casas de 1 y 2 pisos están construidas a ras de la orilla norte, dentro del retiro, desde la sección de control hacia aguas abajo: su frente queda a 5,2 m del eje (0,7 m de la orilla) y a la misma cota de la orilla. La sección de control pasa por la primera. La margen sur es un talud boscoso: sube 3,5 % en los primeros 8 m y luego 30 %, de modo que el agua desbordada no se pierde contra el borde del dominio. Hay un puente peatonal aguas arriba y tres vehículos estacionados (un carro y una moto frente a las casas, un taxi al final de la carrera sur). Las casas tienen acometida a una cámara nueva (AR-Q1) del colector de aguas residuales paralelo a la quebrada; las dos redes siguen cumpliendo los 15 criterios revisados (prueba S4).
 
-**Crecientes de ejemplo** (fracción de la capacidad de la sección, 51 m³/s): cabe en el cauce (60 %), cauce lleno (100 %), se desborda (150 %), inundación grave (250 %) y avenida torrencial (350 % que sube en 3 min, con 30 % de lodo). El pico se ajusta hasta 4 veces la capacidad.
+**Crecientes de ejemplo** (fracción de la capacidad de la sección, 50 m³/s): cabe en el cauce (60 %), cauce lleno (100 %), se desborda (150 %), inundación grave (250 %) y avenida torrencial (350 % que sube en 3 min, con 30 % de lodo). El pico se ajusta hasta 4 veces la capacidad.
 
 **Lodo.** Con una concentración de sedimentos en volumen `Cv`, la mezcla ocupa `1/(1 − Cv)` veces el volumen del agua (factor de volumen): el hidrograma de la mezcla es el del agua multiplicado por ese factor y su volumen entra completo (prueba H4). Por debajo de ≈ 20 % es una creciente de agua con sedimentos; entre 20 % y 35 %, una inundación de lodo (O'Brien, 1986). El modelo **mueve la mezcla como agua**: no simula su viscosidad ni su resistencia, la erosión del cauce ni el golpe de piedras y troncos, que en una avenida real aumentan el daño. Por eso el control se limita a 30 %.
 
@@ -300,14 +300,16 @@ La velocidad de celda es el promedio de los caudales de sus caras dividido por s
 
 **Vehículos.** Su posición se calcula en el motor (es reproducible). Quedan quietos mientras el peligro donde están sea menor que H2; desde H2 el agua los mueve con el 80 % de su velocidad; no entran a celdas de edificios y se detienen donde el peligro vuelve a bajar o salen del sector (prueba H3). No alteran el flujo y su trayectoria es ilustrativa: un vehículo real rueda, gira y se atasca de otras formas.
 
-**Resultados en la ladera** (corridas de verificación con lluvia de 60 mm/h; la creciente sube en 6 min salvo la avenida; máximos hasta el final):
+**Resultados en la ladera** (corridas de verificación con lluvia de 60 mm/h durante 20 min y 30 min simulados; la creciente sube en 6 min salvo la avenida; máximos hasta el final; con la cobertura de la carrera libre, sección 6.6):
 
-| Creciente | Nivel en la sección | Casas con agua | Con H5 o más | En la orilla | Vehículos movidos |
-|---|---|---|---|---|---|
-| 60 % | bajo la orilla | 0 | 0 | ≤ 6 cm | 0 |
-| 150 % | +0,4 m | 5 | 0 | 0,46 a 0,64 m (H2 y H3) | 1 |
-| 250 % | +1,0 m | 9 | 7 | 1,1 a 1,3 m (H5) | 3 |
-| 350 % con 30 % de lodo, sube en 3 min | +1,9 m | 21 | 18 | 1,9 a 2,1 m (H5 y H6) | 3 |
+| Creciente | Nivel en la sección | Edificaciones con agua | Con H5 o más | En la orilla | Vehículos movidos | Cobertura: por los cajones / sobre la vía |
+|---|---|---|---|---|---|---|
+| 60 % | bajo la orilla | 0 | 0 | sin agua | 0 | 30 / 0 m³/s |
+| 150 % | +0,3 m | 6 | 2 | 0,65 a 0,87 m (H4 y H5) | 3 | 50 / 23 m³/s |
+| 250 % | +0,8 m | 10 | 8 | 0,98 a 1,33 m (H5) | 3 | 51 / 63 m³/s |
+| 350 % con 30 % de lodo, sube en 3 min | +1,5 m | 23 | 18 | 1,76 a 1,96 m (H5) | 3 | 52 / 135 m³/s |
+
+Desde 150 % la creciente supera la capacidad de la cobertura: parte del agua cruza la carrera por encima de la vía antes de llegar a la sección y a las casas de la orilla.
 
 **Cómo se dibuja** (`src/city/render/floodView.ts`), siempre a partir del cálculo:
 - **marcas en las fachadas:** cada cara de muro se mancha desde el suelo hasta la profundidad máxima de la celda vecina, con una línea oscura en el borde (sin amplificar);
@@ -319,6 +321,34 @@ La velocidad de celda es el promedio de los caudales de sus caras dividido por s
 - **puente peatonal:** en el cálculo no obstruye el agua; su rótulo compara el nivel calculado bajo el tablero con su viga y su tablero («libre», «el agua golpea la viga», «el agua pasa sobre el tablero»);
 - **rótulos de daño:** hasta cinco edificaciones, las de mayor peligro y profundidad, con su clase y la profundidad contra la fachada;
 - **vista «Peligro»:** colorea el agua máxima con la clase máxima de cada celda (la misma paleta del panel y de la leyenda).
+
+### 6.6 Cobertura bajo la carrera (alcantarilla de cajón)
+
+**Geometría (didáctica).** En la ladera, la carrera cruza la quebrada sobre un terraplén entre x = 84 y 91 m. El agua pasa por una cobertura de **triple cajón de 3,0 × 2,3 m** (9 m de luz hidráulica, tabiques de 0,3 m), con 0,25 m de relleno; la vía queda 2,55 m sobre el fondo. En los 2,5 m a cada lado del terraplén el fondo del cauce se ensancha hasta el ancho de los cajones (transiciones de entrada y salida). Concreto `n = 0,014`; aletas a 45°, `Ke = 0,4`. No es una obra real de Medellín.
+
+**Hidráulica** (`src/city/sim/culvert.ts`), según la guía de alcantarillas de la FHWA (HDS-5, 3.ª ed., 2012, apéndice A):
+
+| Control | Ecuación | Coeficientes (cajón de concreto, aletas de 30° a 75°) |
+|---|---|---|
+| Entrada, no sumergida (`Ku·Q/(A·D^0,5) ≤ 3,5`) | `HW/D = Hc/D + K·(Ku·Q/(A·D^0,5))^M + Ks·S`, con `Hc = 1,5·dc` | `K = 0,026`, `M = 1,0`, `Ks = −0,5`, `Ku = 1,811` (SI) |
+| Entrada, sumergida (`≥ 4,0`) | `HW/D = c·(Ku·Q/(A·D^0,5))² + Y + Ks·S` | `c = 0,0347`, `Y = 0,81`; entre 3,5 y 4,0 se interpola |
+| Salida (cañón lleno) | `HW = h₀ + (1 + Ke + 2g·n²·L/R^(4/3))·V²/2g`, `h₀ = máx(nivel aguas abajo, (dc + D)/2)` | `Ke = 0,4` |
+
+Para los niveles de cada lado pasa el **menor** de los dos caudales. Con el agua a la cota de la vía caben **48,8 m³/s** (capacidad libre). Simplificación: cuando el cañón va parcialmente lleno no se calcula el remanso en su interior; se usa la aproximación `(dc + D)/2` de la misma guía.
+
+**Acople con el cálculo 2D** (`stepCulverts` en `engine.ts`). La cobertura une 9 celdas de entrada (x = 83,5 m) con 9 de salida (x = 92,5 m). El nivel de cada lado es el de su celda más honda (el espejo del cauce). El enlace es **implícito**: el caudal se evalúa con los niveles que quedan al final del paso, por bisección. Además tiene la **inercia del agua en los cajones**, con constante `τ = 2L/((1 + Ke + kf)·V)`. Nunca cambia de sentido dentro de un paso ni sobrepasa el caudal que igualaría los dos niveles. Con un enlace explícito, celdas de poca área y un cajón de gran capacidad, el caudal oscilaba entre pasos e invertía el sentido. Con el enlace implícito y la inercia, en las corridas de prueba no hay inversiones ni alternancias (prueba K2). El volumen se saca de la entrada en proporción a la profundidad y se entrega llenando primero las celdas más bajas de la salida. Es una transferencia interna: el balance cierra con residuo menor que 10⁻¹³. El agua que no cabe sube y pasa **por encima de la vía** con el cálculo 2D; se mide en el borde aguas abajo del terraplén.
+
+**Obstrucción.** Los troncos y ramas atascados en la entrada se representan como una reducción del ancho útil de los cajones. Hay cuatro opciones: libre, tapada 50 %, tapada 90 % y **se tapa con la creciente**. En la última, la entrada empieza libre. Cuando el caudal pasa de la mitad de la capacidad libre, la obstrucción crece linealmente hasta 90 % en 3 minutos (prueba K4). Es una intervención hipotética.
+
+**Resultados en la ladera** (creciente que sube en 8 min sobre la lluvia del escenario; pruebas K2 y K3):
+
+| Caso | Por los cajones (máx.) | Nivel en la entrada respecto de la vía | Sobre la vía (máx.) | Edificaciones con agua | Vehículos movidos |
+|---|---|---|---|---|---|
+| 60 % de la capacidad del cauce, entrada libre | 30,2 m³/s | −0,22 m | 0 | 0 | 0 |
+| 60 %, tapada 90 % | 6,8 m³/s | +0,80 m | 22,5 m³/s (12 004 m³) | 6 (2 con H5 o más) | 2 |
+| 100 %, se tapa con la creciente | 30,3 m³/s antes de taparse | +1,06 m | 39,6 m³/s | 7 (3 con H5 o más) | 2 |
+
+**Cómo se dibuja** (`floodView.ts`): muros de cabecera con las tres bocas, tabiques, aletas a 45° y baranda abierta (en el cálculo no detiene el agua). Los troncos atascados en la entrada son tantos como pide la obstrucción calculada en cada momento. Con agua flotan a una profundidad fija bajo el nivel calculado en la entrada y, si el agua pasa sobre la vía, quedan contra la baranda. El rótulo muestra el caudal calculado por los cajones, el que pasa sobre la vía y el porcentaje tapado. En el mapa 2D, los cajones son líneas discontinuas bajo la vía y la obstrucción es una franja marrón en la entrada.
 
 ## 7. Tiempo, pausa y reproducibilidad
 
@@ -374,6 +404,7 @@ En calles empinadas, la captación de los sumideros tiene una incertidumbre del 
 
 ## 10. Referencias
 
+- Schall, J. D., Thompson, P. L., Zerges, S. M., Kilgore, R. T. y Morris, J. L. (2012). *Hydraulic Design of Highway Culverts*, Hydraulic Design Series No. 5 (HDS-5), 3.ª ed. FHWA-HIF-12-026. Federal Highway Administration. Apéndice A (ecuaciones de control de entrada y tabla de coeficientes) y capítulo 3 (control de salida).
 - Australian Institute for Disaster Resilience (2014). *Technical flood risk management guideline: Flood hazard*, Australian Disaster Resilience Guideline 7-3 (2.ª ed.). Tablas 1 y 2: clases H1–H6 y sus límites.
 - Smith, G. P., Davey, E. K. y Cox, R. J. (2014). *Flood hazard*. UNSW Water Research Laboratory, Technical Report 2014/07.
 - O'Brien, J. S. (1986). Clasificación de flujos por concentración de sedimentos (creciente de agua, inundación de lodo, flujo de lodo); y O'Brien, J. S., Julien, P. Y. y Fullerton, W. T. (1993). Two-dimensional water flood and mudflow simulation. *Journal of Hydraulic Engineering*, 119(2), 244–261.

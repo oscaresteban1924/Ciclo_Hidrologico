@@ -5,9 +5,9 @@ import { useId, useMemo, type ReactNode } from 'react';
 import { Segmented } from '../../components/ui';
 import type { CityController } from '../controller';
 import { compile, type Compiled } from '../sim/compile';
-import type { CitySim } from '../sim/engine';
+import { CULVERT_CLOG_S, type CitySim } from '../sim/engine';
 import { AFFECTED_DEPTH_M, HAZARD, HAZARD_SOURCE, bulkingFactor, damageSummary, exposureOf, hazardClass } from '../sim/hazard';
-import { baseInterventions, type CreekFlood, type Scenario } from '../sim/scenario';
+import { baseInterventions, type CreekFlood, type CulvertState, type Scenario } from '../sim/scenario';
 import { epmChecks, designTable } from '../sim/sewerCheck';
 import { fmtDepth, fmtNum } from '../render/palette';
 import { SEWER_COLORS, acometidas, mainPath, showsSystem, type NetFilter } from '../render/sewerColors';
@@ -640,6 +640,7 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
           <p className="city-small">Peligro según profundidad y velocidad calculadas, con las clases H1–H6 de la guía australiana de riesgo de inundación ({HAZARD_SOURCE}). Es una referencia técnica para aprender: no es la zonificación oficial de amenaza de Medellín.</p>
         </>
       )}
+      {sim && <CulvertSection ctrl={ctrl} sc={sc} sim={sim} />}
       <div className="btn-row">
         <button type="button" className="btn-ghost small" onClick={() => ctrl.focusCreekSection()}>
           Ver la sección en la maqueta
@@ -649,6 +650,97 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
         </button>
       </div>
     </section>
+  );
+}
+
+/** Estado de una cobertura en palabras: libre, tapada un porcentaje fijo o tapándose con la creciente. */
+export function culvertStateText(st: { obstruction: number; progressive: boolean } | undefined): string {
+  if (!st || st.obstruction <= 0) return 'libre';
+  return st.progressive ? `se tapa con la creciente (hasta ${fmtNum(st.obstruction * 100, 0)} %)` : `tapada ${fmtNum(st.obstruction * 100, 0)} %`;
+}
+
+type CulvertChoice = 'libre' | '50' | '90' | 'crece';
+const CULVERT_CHOICES: { value: CulvertChoice; label: string; st: CulvertState }[] = [
+  { value: 'libre', label: 'Libre', st: { obstruction: 0, progressive: false } },
+  { value: '50', label: 'Tapada 50\u00a0%', st: { obstruction: 0.5, progressive: false } },
+  { value: '90', label: 'Tapada 90\u00a0%', st: { obstruction: 0.9, progressive: false } },
+  { value: 'crece', label: 'Se tapa con la creciente', st: { obstruction: 0.9, progressive: true } },
+];
+const choiceOf = (st: CulvertState | undefined): CulvertChoice =>
+  !st || st.obstruction <= 0 ? 'libre' : st.progressive ? 'crece' : st.obstruction >= 0.7 ? '90' : '50';
+
+/**
+ * Cobertura bajo la carrera: estado de la entrada (libre o tapada por troncos), caudal calculado por los cajones
+ * y por encima de la vía, nivel del agua en la entrada respecto de la vía y su evolución en el tiempo.
+ */
+export function CulvertSection({ ctrl, sc, sim }: { ctrl: CityController; sc: Scenario; sim: CitySim }) {
+  const id = useId();
+  const nSamples = sim.samples.length;
+  const specs = sc.culverts ?? [];
+  const series: Series[][] = useMemo(
+    () =>
+      specs.map((_, ci) => {
+        const pts = sim.samples.filter((q) => q.culverts?.[ci]);
+        return [
+          { id: 'Entra', label: 'Llega', name: 'Caudal que trae la quebrada', color: '#5b6470', dash: true, points: sim.samples.filter((q) => q.creek).map((q) => [q.t / 60, q.creek!.qin] as [number, number]) },
+          { id: 'Cajones', label: 'Cajones', name: 'Pasa por los cajones', color: '#2a78d6', points: pts.map((q) => [q.t / 60, Math.max(0, q.culverts![ci].q)] as [number, number]) },
+          { id: 'Via', label: 'Sobre la vía', name: 'Pasa por encima de la vía', color: '#c0462a', fill: true, points: pts.map((q) => [q.t / 60, Math.max(0, q.culverts![ci].over)] as [number, number]) },
+        ];
+      }),
+    // las muestras crecen con el cálculo: se recalcula con su número
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sim, nSamples, specs],
+  );
+  if (!specs.length) return null;
+  return (
+    <>
+      {specs.map((cs, ci) => {
+        const cu = sim.c.culverts[ci];
+        const st = sim.culv[ci];
+        if (!cu || !st) return null;
+        const iv = ctrl.ivB.culverts?.[cs.id];
+        const choice = choiceOf(iv);
+        const head = st.up - cu.crestZ;
+        const wet = st.up > cu.zIn + 0.01;
+        return (
+          <section key={cs.id} className="culvert-box" aria-labelledby={`${id}-${ci}`}>
+            <h4 id={`${id}-${ci}`}>{cs.name}</h4>
+            <p className="city-small">
+              La carrera cruza la quebrada sobre un terraplén. El agua pasa por {cs.barrels} cajones de {fmtNum(cs.spanM / cs.barrels, 1)} × {fmtNum(cs.riseM, 1)} m; con el agua a la altura de la vía caben <strong>{m3s(cu.capacityFree)}</strong>. Si llega más agua, o si troncos y ramas tapan la entrada, el agua sube y pasa por encima de la vía.
+            </p>
+            <Segmented<CulvertChoice>
+              label="Entrada de la cobertura"
+              value={choice}
+              options={CULVERT_CHOICES.map((o) => ({ value: o.value, label: o.label }))}
+              onChange={(v) => {
+                const o = CULVERT_CHOICES.find((q) => q.value === v)!;
+                ctrl.update({ B: { ...ctrl.ivB, culverts: { ...(ctrl.ivB.culverts ?? {}), [cs.id]: { ...o.st } } } });
+              }}
+              help={
+                choice === 'crece'
+                  ? `Empieza libre; cuando el caudal pasa de la mitad de la capacidad, los troncos se atascan y en ${fmtNum(CULVERT_CLOG_S / 60, 0)} minutos tapan el 90 % del ancho.`
+                  : choice === 'libre'
+                    ? 'Sin troncos: pasa todo el ancho de los cajones.'
+                    : `Los troncos tapan el ${choice} % del ancho de los cajones desde el comienzo.`
+              }
+            />
+            <div className="stat-row">
+              <Stat label="Por los cajones" value={m3s(Math.max(0, st.q))} sub={st.control === 'entrada' ? 'manda la entrada' : st.control === 'salida' ? 'manda la salida' : 'sin caudal'} tone="neutral" accent="#2a78d6" />
+              <Stat label="Sobre la vía" value={m3s(Math.max(0, st.over))} sub={st.overMax > 0.05 ? `máximo ${m3s(st.overMax)}` : 'la vía sigue seca'} tone={st.over > 0.05 ? 'danger' : st.overMax > 0.05 ? 'warn' : 'ok'} />
+              <Stat label="Agua en la entrada" value={wet ? `${head >= 0 ? '+' : '−'}${fmtNum(Math.abs(head), 2)} m` : 'seca'} sub={wet ? (head >= 0 ? 'sobre la vía' : 'bajo la vía') : 'sin agua en la boca'} tone={head > 0 ? 'danger' : head > -0.5 ? 'warn' : 'ok'} />
+              <Stat label="Tapada" value={`${fmtNum(st.obs * 100, 0)} %`} sub={st.obsMax > st.obs + 0.005 ? `máximo ${fmtNum(st.obsMax * 100, 0)} %` : 'del ancho de los cajones'} tone={st.obs >= 0.5 ? 'danger' : st.obs > 0 ? 'warn' : 'ok'} />
+            </div>
+            <LineChart title={`Caudales en la ${cs.name.toLowerCase()}`} series={series[ci]} fmtY={(v) => `${fmtNum(v, 0)} m³/s`} yUnit="metros cúbicos por segundo" refY={{ y: cu.capacityFree, label: `capacidad libre: ${fmtNum(cu.capacityFree, 0)} m³/s` }} height={160} xMax={ctrl.shared.simMinutes} nowX={sim.t / 60} />
+            <p className="city-small">
+              Hidráulica de alcantarillas de la guía HDS-5 de la FHWA: en cada momento pasa lo que permita el más restrictivo entre la entrada y el cajón completo. Los troncos reducen el ancho útil. Es un ejercicio: no es el diseño ni el estado de una obra real.
+            </p>
+            <button type="button" className="btn-ghost small" onClick={() => ctrl.focusCulvert(ci)}>
+              Ver la cobertura en la maqueta
+            </button>
+          </section>
+        );
+      })}
+    </>
   );
 }
 

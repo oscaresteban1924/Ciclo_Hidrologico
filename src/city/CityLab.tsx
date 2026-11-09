@@ -91,6 +91,25 @@ export default function CityLab() {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [tab, mission?.id, mission?.step]);
 
+  // Panel derecho contraíble: la maqueta ocupa todo el ancho. El foco pasa al botón que deshace la acción.
+  const panelHidden = saved.panelHidden === true;
+  const hideBtnRef = useRef<HTMLButtonElement>(null);
+  const peekRef = useRef<HTMLButtonElement>(null);
+  const focusAfterToggle = useRef(false);
+  const setPanelHidden = useCallback(
+    (hidden: boolean) => {
+      focusAfterToggle.current = true;
+      setSaved((s) => ({ ...s, panelHidden: hidden || undefined }));
+      setAnnounce(hidden ? 'Panel contraído: la maqueta ocupa todo el ancho.' : 'Panel visible.');
+    },
+    [setSaved],
+  );
+  useEffect(() => {
+    if (!focusAfterToggle.current) return;
+    focusAfterToggle.current = false;
+    (panelHidden ? peekRef : hideBtnRef).current?.focus();
+  }, [panelHidden]);
+
   // 1) Capacidades del equipo (se miden después del primer cuadro)
   useEffect(() => {
     const h = window.setTimeout(() => {
@@ -120,6 +139,7 @@ export default function CityLab() {
       reserved: () => [...(stageRef.current?.querySelectorAll('.city-ov') ?? [])].map((e) => e.getBoundingClientRect()),
     });
     ctrl.speed = savedRef.current.speed;
+    ctrl.setLabels(savedRef.current.labels !== false);
     ctrlRef.current = ctrl;
     const resume = resumeRef.current;
     if (resume && allScenarios()[resume]) ctrl.enterSector(resume, savedRef.current.configs[resume] ?? null);
@@ -230,6 +250,9 @@ export default function CityLab() {
         setMission: setMissionState,
         runMission,
         goSector,
+        panelHidden,
+        setPanelHidden,
+        peekRef,
       }
     : null;
 
@@ -238,7 +261,7 @@ export default function CityLab() {
   const inSector = ctrl?.scale === 'sector' && !!sc && !!sim;
 
   return (
-    <main className="layout layout-city">
+    <main className={`layout layout-city${panelHidden ? ' is-collapsed' : ''}`}>
       <section className="stage city-stage" aria-label="Laboratorio de lluvia de Medellín" ref={stageRef}>
         <div
           className="city-canvas-host"
@@ -258,6 +281,11 @@ export default function CityLab() {
               <span>Vista aproximada para orientarse · relieve y edificios ×{fmtNum(VALLEY_EXAGGERATION, 1)} · trazados y cotas aproximados</span>
             </div>
             {renderer === '2d' && <ValleyList api={api!} />}
+            {panelHidden && (
+              <div className="city-topright">
+                <PanelPeek api={api!} />
+              </div>
+            )}
             <div className="city-ov city-pick">
               <p>Elige un sector para estudiar:</p>
               {Object.values(allScenarios()).map((s) => (
@@ -271,9 +299,21 @@ export default function CityLab() {
         {inSector && ctrl && sim && sc && <SectorOverlays api={api!} sc={sc} />}
         {ctrl?.isFlying() && <div className="city-fade" aria-hidden="true" />}
       </section>
-      <aside id="panel" className="panel city-panel" aria-label="Panel del laboratorio">
+      <aside id="panel" className="panel city-panel" aria-label="Panel del laboratorio" hidden={panelHidden}>
         <div className="city-disclaimer">
-          <strong>Medellín: laboratorio de lluvia.</strong> Es un laboratorio educativo: no es un pronóstico oficial de inundaciones y sus intervenciones no son diseños de ingeniería.
+          <p>
+            <strong>Medellín: laboratorio de lluvia.</strong> Es un laboratorio educativo: no es un pronóstico oficial de inundaciones y sus intervenciones no son diseños de ingeniería.
+          </p>
+          <button
+            type="button"
+            ref={hideBtnRef}
+            className="icon-btn city-hide-panel"
+            aria-label="Contraer el panel y ampliar la maqueta"
+            title="Contraer el panel y ampliar la maqueta"
+            onClick={() => setPanelHidden(true)}
+          >
+            <Icon name="expand" />
+          </button>
         </div>
         <div className="city-tabs" role="tablist" aria-label="Secciones del laboratorio">
           {TABS.map((t) => (
@@ -322,6 +362,16 @@ export default function CityLab() {
   );
 }
 
+/** Botón sobre la maqueta para volver a abrir el panel contraído. */
+function PanelPeek({ api }: { api: LabApi }) {
+  return (
+    <button type="button" ref={api.peekRef} className="city-ov city-peek" onClick={() => api.setPanelHidden(false)} aria-label="Mostrar el panel del laboratorio" title="Mostrar el panel del laboratorio">
+      <Icon name="panel" />
+      <span>Mostrar panel</span>
+    </button>
+  );
+}
+
 function ValleyList({ api }: { api: LabApi }) {
   return (
     <div className="city-ov city-valley2d">
@@ -356,7 +406,10 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
         <strong>{sc.shortTitle}</strong>
         <span className={`kind kind-${sc.provenance.kind}`}>{sc.provenance.badge ?? KIND_LABEL[sc.provenance.kind]}</span>
       </div>
-      <ViewBar api={api} />
+      <div className="city-topright">
+        {api.panelHidden && <PanelPeek api={api} />}
+        <ViewBar api={api} />
+      </div>
       <div className="city-ov city-simbar" role="group" aria-label="Control de la simulación">
         {ctrl.status !== 'corriendo' ? (
           <button
@@ -476,6 +529,12 @@ function ViewBar({ api }: { api: LabApi }) {
         {btn('Peligro', v === 'peligro', () => ctrl.setView('peligro'), 'Peligro del agua: clase máxima según profundidad y velocidad')}
       </div>
       <div className="vb-group" role="group" aria-label="Capas">
+        {api.renderer === 'webgl' &&
+          btn('Etiquetas', ctrl.labelsOn(), () => {
+            const on = !ctrl.labelsOn();
+            ctrl.setLabels(on);
+            api.setSaved((s) => ({ ...s, labels: on ? undefined : false }));
+          }, 'Etiquetas de la maqueta: lugares, medidores, daños y redes')}
         {btn('Flechas', ctrl.arrowsOn(), () => ctrl.setArrows(!ctrl.arrowsOn()), 'Flechas de dirección del flujo')}
         {btn('Bajo la calle', ctrl.cutOn(), () => ctrl.setCut(!ctrl.cutOn()), ctrl.displayed()?.sewer ? 'Ver bajo la calle: redes de aguas lluvias y de aguas residuales' : 'Ver bajo la calle: tuberías esquemáticas')}
         {api.renderer === 'webgl' && btn('Agua ×5', ctrl.amplify() > 1, () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5), 'Dibujar el agua cinco veces más gruesa (solo el dibujo)')}
