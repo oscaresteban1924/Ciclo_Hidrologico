@@ -5,7 +5,7 @@ export interface LabelItem {
   id: string;
   text: string;
   priority: number;
-  kind?: 'lugar' | 'sonda' | 'aviso' | 'sector' | 'gotas' | 'lejano';
+  kind?: 'lugar' | 'sonda' | 'aviso' | 'sector' | 'gotas' | 'lejano' | 'dano' | 'red';
   /** Color de la marca circular (etiquetas de gotas trazadoras). */
   color?: string;
   /** Texto secundario (p. ej., profundidad en una sonda). */

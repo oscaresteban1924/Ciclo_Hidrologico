@@ -87,6 +87,8 @@ residuo de la red = D + E − (V + O + Ret)
 
 El residuo se muestra tal como sale, sin ajustarlo. En las pruebas queda entre 10⁻¹⁶ y 10⁻¹² de P (ver `PRUEBAS.md`). El panel docente muestra cada término en vivo.
 
+**Reparto «¿Adónde fue la lluvia?».** Al sumar los dos balances, `P + Qin + E = ΔS + I + Dev + B + (V + O)`. El panel reparte esa suma en cinco partes: sobre el suelo (ΔS), salió del sector (B), entró al suelo (I), depósitos (Dev) y alcantarillado (V + O: lo que sigue en la red o salió del sector por ella). El agua que la red devolvió a la calle o entregó a la quebrada se cuenta donde quedó. Así ninguna parte es negativa, aunque la red entregue a la quebrada más de lo que captó (porque recibe escorrentía de calles de arriba); antes se mostraba `D − Ret` y podía salir negativo. La prueba B1 lo comprueba.
+
 ## 4. Parámetros por cobertura (estimados)
 
 | Cobertura | n de Manning | Infiltración | Almacenamiento | Base |
@@ -246,9 +248,9 @@ Los dos sectores tienen dos redes que no se tocan (`src/city/sim/sewer.ts`):
 
 ### 6.4 Creciente de la quebrada y capacidad de la sección
 
-**El cauce.** La ladera tiene una quebrada en el fondo de su propio valle: las dos márgenes suben 3,5 % hacia afuera. El cauce mide 1,8 m de profundidad, con 3 m de fondo y orillas hasta 4,5 m del eje, y su retiro es una zona verde. Antes, el lado sur bajaba en dirección contraria a la quebrada y el agua desbordada se iba lejos del cauce; se corrigió para que la quebrada sea el punto más bajo.
+**El cauce.** La ladera tiene una quebrada en el fondo de su propio valle: la margen norte sube 3,5 % hacia el barrio y la sur, 3,5 % y luego 30 % (sección 6.5). El cauce mide 1,8 m de profundidad, con 3 m de fondo y orillas hasta 4,5 m del eje, y su retiro es una zona verde. Antes, el lado sur bajaba en dirección contraria a la quebrada y el agua desbordada se iba lejos del cauce; se corrigió para que la quebrada sea el punto más bajo.
 
-**La sección de control** (x = 94 m, en el rellano, frente a la casa del retiro) se analiza en una columna de celdas del cálculo:
+**La sección de control** (x = 94 m, en el rellano, donde empiezan las casas de la orilla) se analiza en una columna de celdas del cálculo:
 - **fondo:** la celda más baja;
 - **orillas:** las primeras celdas fuera del cauce encajado;
 - **cota de cauce lleno:** la orilla más baja;
@@ -271,8 +273,52 @@ El panel dibuja la sección transversal en vivo y el hidrograma, con la línea d
 
 **Lo que no es.**
 - No es un caudal medido ni un pronóstico.
-- La creciente no trae sedimentos ni troncos, que en las avenidas torrenciales reales cambian el cauce.
 - El límite de Froude del modelo (sección 9) subestima la capacidad en tramos muy empinados (10 %). En la sección de control, con 1,7 % de pendiente, el límite no actúa: la capacidad es la misma con o sin él.
+
+### 6.5 Creciente dañina: casas en la orilla, lodo, peligro y daños
+
+**Exposición (sector demostrativo).** Cuatro casas de 1 y 2 pisos están construidas a ras de la orilla norte, dentro del retiro, desde la sección de control hacia aguas abajo: su frente queda a 5,2 m del eje (0,7 m de la orilla) y a la misma cota de la orilla. La sección de control pasa por la primera. La margen sur es un talud boscoso: sube 3,5 % en los primeros 8 m y luego 30 %, de modo que el agua desbordada no se pierde contra el borde del dominio. Hay un puente peatonal aguas arriba y tres vehículos estacionados (un carro y una moto frente a las casas, un taxi al final de la carrera sur). Las casas tienen acometida a una cámara nueva (AR-Q1) del colector de aguas residuales paralelo a la quebrada; las dos redes siguen cumpliendo los 15 criterios revisados (prueba S4).
+
+**Crecientes de ejemplo** (fracción de la capacidad de la sección, 51 m³/s): cabe en el cauce (60 %), cauce lleno (100 %), se desborda (150 %), inundación grave (250 %) y avenida torrencial (350 % que sube en 3 min, con 30 % de lodo). El pico se ajusta hasta 4 veces la capacidad.
+
+**Lodo.** Con una concentración de sedimentos en volumen `Cv`, la mezcla ocupa `1/(1 − Cv)` veces el volumen del agua (factor de volumen): el hidrograma de la mezcla es el del agua multiplicado por ese factor y su volumen entra completo (prueba H4). Por debajo de ≈ 20 % es una creciente de agua con sedimentos; entre 20 % y 35 %, una inundación de lodo (O'Brien, 1986). El modelo **mueve la mezcla como agua**: no simula su viscosidad ni su resistencia, la erosión del cauce ni el golpe de piedras y troncos, que en una avenida real aumentan el daño. Por eso el control se limita a 30 %.
+
+**Peligro (H1–H6).** En cada paso, para cada celda con 1 cm o más, se clasifica la profundidad `D` y la velocidad `V` con las curvas combinadas de vulnerabilidad de la guía técnica australiana (*Australian Disaster Resilience Guideline 7-3, Flood Hazard*, AIDR 2014; curvas de Smith et al., 2014) y se guarda la clase máxima:
+
+| Clase | D máx. | V máx. | D·V máx. | Descripción de la guía |
+|---|---|---|---|---|
+| H1 | 0,3 m | 2 m/s | 0,3 m²/s | En general seguro para vehículos, personas y edificaciones. |
+| H2 | 0,5 m | 2 m/s | 0,6 m²/s | Inseguro para vehículos pequeños. |
+| H3 | 1,2 m | 2 m/s | 0,6 m²/s | Inseguro para vehículos, niños y personas mayores. |
+| H4 | 2 m | 2 m/s | 1,0 m²/s | Inseguro para vehículos y personas. |
+| H5 | 4 m | 4 m/s | 4,0 m²/s | Además, toda edificación expuesta a daño estructural; las menos robustas pueden fallar. |
+| H6 | — | — | > 4,0 m²/s | Además, cualquier edificación puede fallar. |
+
+La velocidad de celda es el promedio de los caudales de sus caras dividido por su profundidad, **limitado con el mismo número de Froude del cálculo** (1,5): en el frente de mojado la celda es muy somera y ese promedio daba velocidades espurias (hasta 75 m/s); con el límite, la velocidad máxima de una avenida en la ladera queda en 7 a 9 m/s. La clasificación es una **referencia técnica publicada para enseñar** cómo se combinan profundidad y velocidad; no es la zonificación oficial de amenaza de Medellín, que define el POT con estudios de detalle (prueba H1).
+
+**Daños.** Una edificación está **afectada** si junto a sus muros (las celdas libres vecinas) el agua llega a 10 cm o más; su peligro es el máximo de esas celdas (prueba H2). Con H5 o más queda **expuesta a daño estructural**. Las casas son sólidas en el cálculo: el agua no entra, de modo que la profundidad contra la fachada indica hasta dónde llegaría adentro si hubiera aberturas. No hay modelo estructural.
+
+**Vehículos.** Su posición se calcula en el motor (es reproducible). Quedan quietos mientras el peligro donde están sea menor que H2; desde H2 el agua los mueve con el 80 % de su velocidad; no entran a celdas de edificios y se detienen donde el peligro vuelve a bajar o salen del sector (prueba H3). No alteran el flujo y su trayectoria es ilustrativa: un vehículo real rueda, gira y se atasca de otras formas.
+
+**Resultados en la ladera** (corridas de verificación con lluvia de 60 mm/h; la creciente sube en 6 min salvo la avenida; máximos hasta el final):
+
+| Creciente | Nivel en la sección | Casas con agua | Con H5 o más | En la orilla | Vehículos movidos |
+|---|---|---|---|---|---|
+| 60 % | bajo la orilla | 0 | 0 | ≤ 6 cm | 0 |
+| 150 % | +0,4 m | 5 | 0 | 0,46 a 0,64 m (H2 y H3) | 1 |
+| 250 % | +1,0 m | 9 | 7 | 1,1 a 1,3 m (H5) | 3 |
+| 350 % con 30 % de lodo, sube en 3 min | +1,9 m | 21 | 18 | 1,9 a 2,1 m (H5 y H6) | 3 |
+
+**Cómo se dibuja** (`src/city/render/floodView.ts`), siempre a partir del cálculo:
+- **marcas en las fachadas:** cada cara de muro se mancha desde el suelo hasta la profundidad máxima de la celda vecina, con una línea oscura en el borde (sin amplificar);
+- **salpicadura contra los muros:** solo donde el agua corre hacia el muro a más de 1,2 m/s, y sube hasta la carga de velocidad `v²/2g`;
+- **oleaje y espuma:** en el agua honda y rápida, la normal del agua se agita y aparece espuma que avanza con la velocidad calculada; la altura de la lámina no cambia;
+- **color del lodo:** el agua honda se tiñe de café según la concentración de lodo;
+- **vehículos:** forma y flotación visual sobre la posición calculada;
+- **material flotante** (troncos, ramas y basura): **ilustrativo**; entra con la creciente, más cuanto mayor el caudal y el lodo, se mueve con la velocidad calculada y queda depositado donde el agua se vuelve somera o lenta o contra un muro;
+- **puente peatonal:** en el cálculo no obstruye el agua; su rótulo compara el nivel calculado bajo el tablero con su viga y su tablero («libre», «el agua golpea la viga», «el agua pasa sobre el tablero»);
+- **rótulos de daño:** hasta cinco edificaciones, las de mayor peligro y profundidad, con su clase y la profundidad contra la fachada;
+- **vista «Peligro»:** colorea el agua máxima con la clase máxima de cada celda (la misma paleta del panel y de la leyenda).
 
 ## 7. Tiempo, pausa y reproducibilidad
 
@@ -327,6 +373,10 @@ En calles empinadas, la captación de los sumideros tiene una incertidumbre del 
 - Los sectores son pequeños: hasta 600 m por lado.
 
 ## 10. Referencias
+
+- Australian Institute for Disaster Resilience (2014). *Technical flood risk management guideline: Flood hazard*, Australian Disaster Resilience Guideline 7-3 (2.ª ed.). Tablas 1 y 2: clases H1–H6 y sus límites.
+- Smith, G. P., Davey, E. K. y Cox, R. J. (2014). *Flood hazard*. UNSW Water Research Laboratory, Technical Report 2014/07.
+- O'Brien, J. S. (1986). Clasificación de flujos por concentración de sedimentos (creciente de agua, inundación de lodo, flujo de lodo); y O'Brien, J. S., Julien, P. Y. y Fullerton, W. T. (1993). Two-dimensional water flood and mudflow simulation. *Journal of Hydraulic Engineering*, 119(2), 244–261.
 
 - Bates, P. D., Horritt, M. S., & Fewtrell, T. J. (2010). A simple inertial formulation of the shallow water equations for efficient two-dimensional flood inundation modelling. *Journal of Hydrology*, 387, 33–45.
 - de Almeida, G. A. M., Bates, P., Freer, J. E., & Souvignet, M. (2012). Improving the stability of a simple formulation of the shallow water equations for 2-D flood modeling. *Water Resources Research*, 48, W05528.

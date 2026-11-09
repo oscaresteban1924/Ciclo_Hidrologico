@@ -20,6 +20,7 @@ import report from '../content/test-report.json';
 import { RainBudget } from './RainBudget';
 import { Range } from './Range';
 import { CreekTool, SewerTeacher, SewerTool } from './SewerPanel';
+import { HAZARD_SOURCE } from '../sim/hazard';
 import { TRACER_COLORS, TRACER_TRAIL_MOVING } from '../render/tracerColors';
 
 export type ToolId = 'lluvia' | 'superficies' | 'jardin' | 'deposito' | 'sumideros' | 'quebrada' | 'trazadores' | 'medir';
@@ -837,7 +838,7 @@ function MissionDone({ api, id, outcome }: { api: LabApi; id: string; outcome: s
 
 // ------------------------------------------------------------------ palabras clave
 
-const WORDS = ['escorrentia', 'infiltracion', 'caudal', 'rugosidad', 'almacenamiento-superficial', 'sumidero', 'lamina-de-agua', 'balance-hidrico', 'pavimento-permeable', 'jardin-de-lluvia', 'sistema-separado', 'alcantarillado-sanitario', 'camara-de-inspeccion', 'conexion-errada', 'sobrecarga', 'creciente', 'capacidad-hidraulica', 'retiro-de-quebrada'];
+const WORDS = ['escorrentia', 'infiltracion', 'caudal', 'rugosidad', 'almacenamiento-superficial', 'sumidero', 'lamina-de-agua', 'balance-hidrico', 'pavimento-permeable', 'jardin-de-lluvia', 'sistema-separado', 'alcantarillado-sanitario', 'camara-de-inspeccion', 'conexion-errada', 'sobrecarga', 'creciente', 'capacidad-hidraulica', 'retiro-de-quebrada', 'avenida-torrencial', 'peligro-de-inundacion'];
 const STEP_FOR: Record<string, string> = { escorrentia: 'escorrentia', infiltracion: 'infiltracion', 'almacenamiento-superficial': 'almacenamiento', caudal: 'escorrentia' };
 
 export function WordsTab() {
@@ -983,7 +984,11 @@ export function TeacherTab({ api }: { api: LabApi }) {
               <li>Red de drenaje esquemática: colector con capacidad total de 250 L/s; no se resuelve la hidráulica de tuberías ni se simula sobrecarga. Interfaz lista para conectar SWMM.</li>
             </>
           )}
-          {sc?.creek && <li>Creciente: hidrograma triangular (subida tp, bajada 1,67·tp; SCS) que entra por la quebrada sobre un caudal base; su volumen entra completo. La capacidad de la sección de control se calcula con la regla de caras del modelo (Manning limitado por Froude ≤ {NUMERICS.froudeMax}) hasta la orilla más baja.</li>}
+          {sc?.creek && <li>Creciente: hidrograma triangular (subida tp, bajada 1,67·tp; SCS) que entra por la quebrada sobre un caudal base; su volumen entra completo. Con lodo, el caudal de la mezcla es el del agua por 1/(1 − Cv) (Cv ≤ 30 %); la mezcla se mueve como agua: no se simula la reología del lodo, la erosión ni el golpe de piedras y troncos. La capacidad de la sección de control se calcula con la regla de caras del modelo (Manning limitado por Froude ≤ {NUMERICS.froudeMax}) hasta la orilla más baja.</li>}
+          <li>Peligro: en cada paso y cada celda con 1 cm o más se clasifica la profundidad y la velocidad (la de la celda, limitada con el mismo Froude del cálculo) con las curvas H1–H6 de {HAZARD_SOURCE}; se guarda la clase máxima. Es una referencia técnica publicada para enseñar el concepto, no la zonificación oficial de amenaza de Medellín.</li>
+          {sc?.creek && <li>Daños: una edificación está afectada si junto a sus muros (las celdas vecinas) el agua llega a 10 cm o más; su peligro es el máximo de esas celdas. Las casas son sólidas en el cálculo: el agua no entra, de modo que la profundidad contra la fachada indica hasta dónde llegaría adentro si hubiera aberturas.</li>}
+          {(sim?.c.exposed.length ?? 0) > 0 && <li>Vehículos: quietos mientras el peligro donde están sea menor que H2 (inseguro para vehículos pequeños); por encima, el agua los mueve con el 80 % de su velocidad; se detienen contra los edificios y donde el peligro vuelve a bajar. No alteran el flujo y su trayectoria es ilustrativa.</li>}
+          {sc?.creek && <li>Dibujo de la creciente: troncos, ramas y basura flotantes son ilustrativos (entran con la creciente, se mueven con la velocidad calculada y quedan donde el agua se vuelve somera); la salpicadura contra los muros sube hasta la carga de velocidad v²/2g; la marca en las fachadas llega a la profundidad máxima calculada en la celda vecina; el puente peatonal no obstruye el agua en el cálculo y su rótulo compara el nivel calculado con su viga y su tablero.</li>}
           <li>Salidas: condición de profundidad normal con la pendiente declarada, acotada por el caudal crítico. Demás bordes cerrados.</li>
           <li>Unidades: R [m/s] = mm/h ÷ 3 600 000. Volúmenes en m³, caudales en L/s.</li>
           <li>Partículas de lluvia y cabinas del cable son decorativas y no alteran el volumen. Las gotas trazadoras se mueven con la velocidad calculada.</li>

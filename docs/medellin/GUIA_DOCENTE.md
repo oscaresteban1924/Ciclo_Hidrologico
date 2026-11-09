@@ -39,7 +39,7 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
 
 ## Lectura de la maqueta
 
-- **¿Adónde fue la lluvia?** Una barra en el panel muestra, en vivo, cómo se reparte el agua que entró: lo que sigue sobre el suelo, lo que salió del sector, lo que entró al suelo, lo que tomaron los sumideros y lo que guardan los depósitos. Cada parte lleva su valor en m³ y en porcentaje. La barra confirma que la cuenta cierra; si en algún caso no cerrara, mostraría la diferencia medida. En la pestaña Comparar aparece una barra para A y otra para B. Es un buen punto de partida para hablar del ciclo del agua en la ciudad.
+- **¿Adónde fue la lluvia?** Una barra en el panel muestra, en vivo, cómo se reparte el agua que entró: lo que sigue sobre el suelo, lo que salió del sector, lo que entró al suelo, lo que va por el alcantarillado (sigue en la red o salió del sector por ella) y lo que guardan los depósitos. Con red separada, también cuenta el agua que llega por las tuberías desde fuera del sector (aguas residuales y escorrentía de calles de arriba). Cada parte lleva su valor en m³ y en porcentaje. La barra confirma que la cuenta cierra; si en algún caso no cerrara, mostraría la diferencia medida. En la pestaña Comparar aparece una barra para A y otra para B. Es un buen punto de partida para hablar del ciclo del agua en la ciudad.
 - **Primeros pasos:** la primera vez que se entra a un sector aparece una guía breve de cuatro pasos. Se puede volver a abrir desde Herramientas.
 
 - **Colores del agua:** en la vista realista el agua tiene su color natural: una lámina gris-café, turbia, más oscura cuanto más profunda, que refleja el cielo y las fachadas. La leyenda muestra los valores (1 mm a 30 cm), así que no hay que adivinar por el color.
@@ -84,19 +84,22 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
   - **Aguas lluvias** (azul): recoge los sumideros y entrega a la quebrada o al colector de aguas abajo. Va por el costado norte y oriente de la vía.
   - **Aguas residuales** (café): recoge el agua usada de las casas y va hacia el interceptor del río y la planta de tratamiento. Va por el otro costado y más profunda. Nunca va a la quebrada.
   - Las **cámaras de inspección** son las tapas redondas de la calle. Unen tramos, y la norma pide una cada 80 m como máximo si hay sumideros. Donde la tubería baja más de 0,7 m hay una **cámara de caída**.
-  - El agua dentro de tubos y cámaras es la calculada. Una tubería **en carga** (llena, a presión) se ve en rojo. Si el nivel llega a la tapa, la cámara **rebosa** y la tapa se levanta. Si llega a la rejilla, el sumidero **devuelve** agua a la calle.
-  - El **perfil del colector** muestra el terreno, la tubería y el nivel del agua de punta a punta.
+  - **Para que se lea sin enredos:** en la vista «Bajo la calle» se ocultan árboles, postes, cables, vehículos y bajantes, y los edificios quedan casi transparentes. El selector **«Ver: Las dos / Aguas lluvias / Aguas residuales»** deja una sola red a la vista (y muestra los códigos de sus cámaras). Las acometidas de las casas bajan junto a la fachada y van derecho al colector, como en la calle.
+  - El agua dentro de tubos y cámaras es la calculada. Las **flechas** dentro de los tubos muestran hacia dónde va el agua y avanzan con su velocidad. Un tramo **en carga** (lleno, a presión) conserva el color de su red y se marca con **anillos rojos**. Si el nivel llega a la tapa, la cámara **rebosa** y la tapa se levanta. Si llega a la rejilla, el sumidero **devuelve** agua a la calle.
+  - En el panel: un **corte de la calle** muestra dónde va cada red y a qué profundidad, con el agua que lleva; un **esquema en planta** muestra las dos redes con el sentido del agua, las cámaras, los sumideros y las acometidas; y el **perfil del colector** muestra el terreno, la tubería y el nivel del agua de punta a punta.
   - **Conexiones erradas:** al activarlas, algunos techos entregan la lluvia al alcantarillado de aguas residuales, que se llena y rebosa en la calle. Es la razón práctica para separar las redes. Misión «Conexiones erradas».
   - **Preguntas para la clase:** «¿Por qué la lluvia no debe ir a la tubería de aguas residuales?» «¿Qué tapa de la calle rebosó primero y por qué esa?»
-- **Creciente (ladera):** una creciente entra por la quebrada.
-  - La **sección de control**, frente a la casa del retiro, tiene una capacidad de unos 51 m³/s con el cauce lleno. Los ejemplos van del 60 % al 200 % de esa capacidad.
-  - El panel muestra la sección transversal en vivo, con el agua calculada y la cota de cauce lleno, y el hidrograma de lo que entra, lo que pasa por el cauce y lo que pasa por fuera.
-  - En la maqueta, una mira en la orilla marca la cota de cauce lleno.
+- **Creciente (ladera):** una creciente entra por la quebrada. Cuatro casas están construidas a ras de la orilla, dentro del retiro, y hay un carro, un taxi y una moto estacionados cerca.
+  - La **sección de control**, donde empiezan las casas de la orilla, tiene una capacidad de unos 51 m³/s con el cauce lleno. Los ejemplos van del 60 % al 350 %: «Se desborda» (150 %), «Inundación grave» (250 %) y «Avenida torrencial» (350 %, sube en 3 minutos y trae 30 % de lodo).
+  - El panel muestra cuatro cifras (caudal que entra, nivel sobre la orilla, casas con agua y vehículos movidos), la sección transversal en vivo con las casas, el nivel máximo y una franja con el peligro de cada punto, el hidrograma con la línea de capacidad y la **tabla de daños** de cada edificación.
+  - En la maqueta: el agua honda y rápida se agita y hace espuma; con lodo se vuelve café espeso; los troncos y la basura flotan con la corriente y quedan tirados donde el agua baja (son ilustrativos); el agua salpica contra los muros; las fachadas quedan **marcadas** hasta donde llegó el agua; los vehículos se mueven cuando el agua los vuelve inestables; el puente avisa si el agua golpea su viga o pasa por encima.
+  - **Vista «Peligro»:** colorea cada lugar con el peligro más alto que alcanzó, de H1 (en general seguro) a H6 (cualquier casa puede fallar), según la profundidad y la velocidad juntas. Es una clasificación técnica australiana usada para enseñar el concepto; **no es el mapa oficial de amenaza de Medellín**.
   - Con una creciente grande, la quebrada ahoga la descarga de aguas lluvias y sale agua por los sumideros de la carrera sur.
-  - **Pregunta para la clase:** «¿Para qué sirve el retiro de la quebrada?» Misión «La creciente de la quebrada».
-  - Es un ejercicio: **no es un pronóstico de inundación**.
+  - **Preguntas para la clase:** «¿Para qué sirve el retiro de la quebrada?» «¿Por qué un poco de agua muy rápida puede ser más peligrosa que mucha agua quieta?» «¿Por qué la avenida torrencial hace más daño que una creciente del mismo caudal sin lodo?» Misiones «La creciente de la quebrada» y «La avenida torrencial».
+  - Es un ejercicio: **no es un pronóstico de inundación**. El modelo mueve el lodo como agua y no calcula el golpe de piedras y troncos, que en una avenida real hacen más daño.
 - **Materiales:** cada superficie tiene un color y además un patrón (puntos, rayas, cuadros u ondas).
 - **Resultados:** muestra la profundidad máxima alcanzada.
+- **Peligro:** muestra la clase de peligro máxima alcanzada (H1–H6).
 
 ### La vista del valle
 

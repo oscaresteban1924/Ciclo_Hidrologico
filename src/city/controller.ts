@@ -9,6 +9,7 @@ import { baseInterventions, cloneInterventions, type CityConfig, type Interventi
 import { TracerSet } from './sim/tracers';
 import { allScenarios, builtinScenarios } from './scenarios/index';
 import type { Pick, SectorScene, ViewMode } from './render/sectorScene';
+import type { NetFilter } from './render/sewerColors';
 import type { SectorMap2D } from './render/map2d';
 import type { SectorPin, ValleyScene } from './render/valleyScene';
 import { SECTOR_SPOTS, toKm } from './render/aburra';
@@ -406,6 +407,14 @@ export class CityController {
   cutOn(): boolean {
     return this.view?.cut ?? false;
   }
+  /** Red que se ve bajo la calle y en el esquema: las dos, solo aguas lluvias o solo aguas residuales. */
+  setNetFilter(f: NetFilter): void {
+    this.view?.setNetFilter(f);
+    this.notify(true);
+  }
+  netFilter(): NetFilter {
+    return this.view?.netFilter ?? 'ambas';
+  }
   setArrows(on: boolean): void {
     if (this.view) this.view.showArrows = on;
     this.notify(true);
@@ -453,8 +462,10 @@ export class CityController {
       if (cr && sim) this.focus((cr.i + 0.5) * sim.c.dx, (cr.jt + 0.5) * sim.c.dx);
       return;
     }
+    // desde aguas abajo, sobre la quebrada y en diagonal: se ven el cauce, la mira y los frentes de las casas
+    // de la orilla
     const x = (cr.i + 0.5) * sim!.c.dx, y = (cr.jt + 0.5) * sim!.c.dx;
-    (v as SectorScene).lookFrom([x + 18, y + 3, cr.bankLevel + 24], [x - 5, y, cr.zBed + 1]);
+    (v as SectorScene).lookFrom([x + 33, y + 3, cr.bankLevel + 12], [x + 2, y + 6.5, cr.bankLevel + 0.6]);
     this.notify(true);
   }
   isFlying(): boolean {

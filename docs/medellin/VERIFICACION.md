@@ -280,32 +280,86 @@ En calidad alta (la de un equipo con GPU), la calle tiene ≈ 1,35 millones de t
 
 **Comparación:** `medellin-alcantarillado-creciente.png` (en `docs/medellin/capturas` y entregada aparte).
 
+## 4 decies. Creciente dañina, redes legibles y paneles rediseñados (ejecutada)
+
+**Pedido.**
+1. Una creciente «más escandalosa, más dañina».
+2. Las redes se veían confusas y enredadas.
+3. Mejorar el diseño de esas secciones.
+
+**Qué se encontró al revisar.**
+- Con el 200 % de la capacidad casi no pasaba agua por fuera del cauce y «junto a la casa del retiro» seguía seco: no había nada expuesto cerca de la orilla.
+- Bajo la calle se veían a la vez árboles, postes, cables, bajantes y casas semitransparentes. La red de aguas residuales en carga se teñía entera de rojo y parecía una tercera red. Las acometidas iban en diagonal desde cada casa hasta una sola cámara y formaban abanicos cruzados.
+- En los paneles, las leyendas se partían en varias líneas, los rótulos del hidrograma se montaban y la sección de la quebrada se reescalaba con cada creciente.
+- **Error de cálculo del reparto «¿Adónde fue la lluvia?»** en la ladera: «Va por el alcantarillado» daba −36 m³ (−29 %). La red entregaba a la quebrada más agua de la que captaba, porque recibe la escorrentía de calles de arriba por el colector; esa agua entraba al reparto sin contarse como entrada. Se corrigió (MODELO, sección 3) y la prueba B1 lo comprueba.
+- **Velocidades espurias** de hasta 75 m/s en el frente de mojado de la creciente (celdas de 2 cm con caudal de las caras vecinas). Para el peligro y los vehículos, la velocidad de celda se limita con el mismo Froude del cálculo.
+
+**El cálculo cambió en la ladera** (MODELO, sección 6.5): cuatro casas a ras de la orilla, la margen sur como talud de 30 %, una cámara nueva de aguas residuales (AR-Q1), un puente peatonal y tres vehículos. Las cifras de las misiones de la ladera cambian; sus resultados se siguen calculando.
+
+`npm run test:city`: **37 de 37**. Pruebas nuevas:
+
+| Prueba | Qué verifica | Resultado |
+|---|---|---|
+| H1 | Clases H1–H6 en 16 casos de borde de la tabla de la guía AIDR 7-3; la clase nunca baja al aumentar profundidad o velocidad | Cumple. |
+| H2 | El daño de una vivienda se mide en las celdas que tocan sus muros e ignora el agua lejana | Cumple. |
+| H3 | Vehículos: una ola de 15 cm no mueve ninguno; una de 1,6 m mueve los dos; nunca entran a un edificio; dos corridas iguales los dejan en el mismo lugar | Cumple. |
+| H4 | Creciente con 30 % de lodo: pico de la mezcla 1,43 veces el del agua; volumen completo; balance cerrado | Cumple. Error de volumen 6·10⁻¹⁵. |
+| H5 | El daño crece con el caudal: 60 % no llega a las casas de la orilla; 150 % sí (0,64 m); 300 % deja 9 edificaciones con H5 y mueve los 3 vehículos | Cumple. |
+| B1 | El reparto del agua suma exactamente lo que entró y ninguna parte es negativa (calle con conexiones erradas; ladera con y sin creciente) | Cumple. Error ≤ 7·10⁻¹⁶. |
+
+Las 31 anteriores siguen cumpliendo. S4 sigue en 15 de 15 criterios de EPM en cada sector (con la cámara AR-Q1). La revisión de EPM en la pestaña Docente se hace ahora siempre con la malla de diseño (1 m): con la malla de 2 m, la velocidad mínima de diseño de un tramo daba 0,42 m/s solo porque las áreas aferentes se calculaban más gruesas.
+
+**Misiones.** Se ejecutaron las nueve sin interfaz (`tests/city/missions.ts`).
+- «La creciente de la quebrada» (150 %): el agua supera la orilla en 42 cm; llega a las 4 casas de la orilla, hasta 64 cm contra sus muros, con peligro H3; el agua mueve la moto; la red devuelve 9 m³ por la carrera sur.
+- «La avenida torrencial» (350 %, 30 % de lodo, sube en 3 min): pico de 257 m³/s; 21 edificaciones con agua, 18 con H5 o más y 8 con H6; 5 577 m² con H4 o más; los 3 vehículos salen del sector.
+- Las siete anteriores siguen dando un resultado calculado.
+
+**Navegador** (`tools/verificacion/creciente_capturas.py`, calidad ligera; consola limpia):
+- Bajo la calle: sin árboles, postes, cables, vehículos ni bajantes; edificios casi transparentes. Cada red conserva su color; las flechas avanzan dentro de los tubos; el tramo en carga lleva anillos rojos. El selector «Ver» deja una sola red y sus códigos de cámara. Las acometidas bajan junto a la casa y van derecho al colector.
+- Panel de alcantarillado: tarjetas por red con su destino y el llenado del tramo más cargado; corte de la calle a la misma escala horizontal y vertical; esquema en planta con el sentido del agua; perfil con los códigos de las cámaras.
+- Panel de creciente: seis crecientes de ejemplo, cuatro indicadores, sección con las casas y la franja de peligro, hidrograma con eje de tiempo fijo y rótulos sin superponerse, tabla de daños.
+- Maqueta con la avenida torrencial: agua café con oleaje y espuma, troncos y basura con la corriente, agua 1 m sobre el tablero del puente, rótulo «Casa de la orilla 2 · 2,0 m de agua · H6»; después, marcas en las fachadas, troncos depositados y el puente «libre · ya pasó sobre el tablero».
+- Vista «Peligro» en 3D y en el mapa 2D; en el teléfono la leyenda va abajo, en tres columnas.
+
+**Regresión.**
+- 0 solapes en 1280×720, 1024×1366 y 390×844, con y sin movimiento reducido; botones de 30 px o más.
+- 40 tabulaciones con foco visible; P pausa el cálculo.
+- Al salir quedan 0 recursos activos.
+- Pestañas sin cortes en 5 tamaños.
+- La alternativa 2D dibuja las redes con su filtro y la vista de peligro.
+- Panel de creciente sin desbordes a 390 px.
+- La versión de un solo archivo (1,93 MB; antes 1,87 MB) no hace peticiones externas y su consola queda limpia.
+
+**Comparación:** `medellin-creciente-redes.png` (en `docs/medellin/capturas` y entregada aparte).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
 
 | Sector | dx | Celdas | ms por s simulado | ms por s real a ×30 |
 |---|---|---|---|---|
-| Calle de prueba | 0,5 m | 17 920 | 2,74 | 82 |
-| Calle de prueba | 1 m | 4 480 | 0,39 | 12 |
-| Calle de prueba | 2 m | 1 120 | 0,09 | 3 |
-| Ladera con quebrada | 1 m | 12 288 | 1,97 | 59 |
-| Ladera con quebrada | 2 m | 3 072 | 0,28 | 8 |
-| Ladera, creciente de 103 m³/s (200 %) | 1 m | 12 288 | 5,83 | 175 |
-| Ladera, creciente de 105 m³/s (200 %) | 2 m | 3 072 | 0,84 | 25 |
+| Calle de prueba | 0,5 m | 17 920 | 3,05 | 91 |
+| Calle de prueba | 1 m | 4 480 | 0,37 | 11 |
+| Calle de prueba | 2 m | 1 120 | 0,08 | 2 |
+| Ladera con quebrada | 1 m | 12 288 | 2,10 | 63 |
+| Ladera con quebrada | 2 m | 3 072 | 0,37 | 11 |
+| Ladera, creciente de 103 m³/s (200 %) | 1 m | 12 288 | 6,35 | 190 |
+| Ladera, creciente de 105 m³/s (200 %) | 2 m | 3 072 | 0,85 | 25 |
+| Ladera, avenida torrencial (180 m³/s de agua, 30 % de lodo) | 1 m | 12 288 | 5,01 | 150 |
+| Ladera, avenida torrencial | 2 m | 3 072 | 0,77 | 23 |
 
-Medido el 9 de noviembre con la red separada y lluvia de 100 mm/h. La superficie es más rápida que antes porque los sumideros nuevos captan más agua y el paso de tiempo crece cuando hay menos agua en la calle.
+Medido el 9 de noviembre con lluvia de 100 mm/h, con la clasificación de peligro y los vehículos en cada paso y las casas de la orilla. Frente a la medición anterior (sección 4 nonies: 1,97 y 5,83 ms en la ladera a 1 m), el peligro agrega ≈ 7 a 9 %. La avenida cuesta menos que la creciente al 200 % porque dura menos (sube en 3 min). Entre mediciones hay variaciones de ≈ 10 % en este entorno compartido (la calle a 0,5 m pasó de 2,74 a 3,05 ms sin cambios en su cálculo).
 
 **Navegador de pruebas con WebGL por software** (`docs/medellin/perf-navegador.json`), pidiendo ×30:
 
 | Sector y tamaño | Cuadros/s | Cálculo por cuadro | Velocidad lograda |
 |---|---|---|---|
-| Calle, 1280×720 | 2,7 (antes 2,2) | 3,8 ms | ×16,9 (antes ×17,0) |
-| Ladera, 1280×720 | 1,9 (antes 2,0) | 13,8 ms | ×13,9 (antes ×15,1) |
-| Calle, 390×844 | 3,6 (antes 3,9) | 4,1 ms | ×26,7 (antes ×12,5) |
-| Ladera, 390×844 | 2,8 (antes 2,9) | 18,1 ms | ×20,2 (antes ×21,0) |
+| Calle, 1280×720 | 2,1 (antes 2,7) | 4,0 ms | ×16,8 (antes ×16,9) |
+| Ladera, 1280×720 | 1,8 (antes 1,9) | 13,8 ms | ×13,6 (antes ×13,9) |
+| Calle, 390×844 | 3,9 (antes 3,6) | 4,2 ms | ×27,4 (antes ×26,7) |
+| Ladera, 390×844 | 2,8 (antes 2,8) | 18,7 ms | ×20,3 (antes ×20,2) |
 
-Las cifras actuales son las del alcantarillado separado (sección 4 nonies), medidas el 9 de noviembre con lluvia de 100 mm/h y el detalle ya adaptado. Entre paréntesis van las de la lluvia nueva (sección 4 octies). La red agrega ≈ 60 llamadas de dibujo en la ladera (tapas, ventanas y la mira); su cálculo cuesta poco frente a la superficie. Con la creciente al 200 %, la ladera necesita 5,8 ms de cálculo por segundo simulado (`perf-calculo.txt`), unos 175 ms por segundo real a ×30: en este entorno la velocidad lograda baja durante el pico. Las cifras de la lluvia nueva también se midieron el 9 de noviembre, con lluvia de 100 mm/h y el detalle ya adaptado; entre paréntesis iban las del sector con el valle alrededor (sección 4 septies). Los efectos nuevos no restaron cuadros por segundo: las diferencias están dentro de la variación entre mediciones de este entorno compartido (la velocidad lograda en la calle a 390×844 bajó en esta medición aunque los cuadros por segundo subieron). Las cifras del sector con el valle alrededor también se midieron el 9 de noviembre, con el detalle ya adaptado (a los ≈ 3 s de entrar). El cálculo por cuadro no cambió: la diferencia es solo de dibujo. Con el entorno anterior, el 9 de noviembre se repitieron, con la vista nueva del valle: calle 2,7 y ladera 2,0 cuadros/s a 1280×720; calle 4,1 y ladera 3,0 a 390×844. Los sectores no cambian, porque la vista del valle se libera por completo al entrar a un sector. Una primera repetición dio 2,0 en la calle a 1280×720: entre mediciones hay variaciones de hasta ≈ 25 % en este entorno compartido. La aplicación detecta que el navegador dibuja por software (SwiftShader) y, en calidad automática, usa la calidad **ligera**. La calidad alta es la que se usaría en un equipo con GPU; en este entorno, con calidad alta forzada, la calle a 1280×720 baja a ≈ 1,6 cuadros/s. Entre mediciones repetidas hay variaciones de ±15 %, y a veces mayores.
+Las cifras actuales son las de la creciente dañina y las redes legibles (sección 4 decies), medidas el 9 de noviembre con lluvia de 100 mm/h y el detalle ya adaptado; entre paréntesis, las del alcantarillado separado (sección 4 nonies). La capa de la creciente (puente, vehículos, material flotante, salpicadura y marcas) y las flechas de la red agregan 54 llamadas de dibujo en la ladera (227 → 281); la velocidad lograda casi no cambió. La calle a 1280×720 dio menos cuadros por segundo con las mismas 165 llamadas y los mismos triángulos: está dentro de la variación de este entorno compartido. Antes, las cifras del alcantarillado separado se midieron también el 9 de noviembre, con lluvia de 100 mm/h; entre paréntesis iban las de la lluvia nueva (sección 4 octies). La red agrega ≈ 60 llamadas de dibujo en la ladera (tapas, ventanas y la mira); su cálculo cuesta poco frente a la superficie. Con la creciente al 200 %, la ladera necesita 5,8 ms de cálculo por segundo simulado (`perf-calculo.txt`), unos 175 ms por segundo real a ×30: en este entorno la velocidad lograda baja durante el pico. Las cifras de la lluvia nueva también se midieron el 9 de noviembre, con lluvia de 100 mm/h y el detalle ya adaptado; entre paréntesis iban las del sector con el valle alrededor (sección 4 septies). Los efectos nuevos no restaron cuadros por segundo: las diferencias están dentro de la variación entre mediciones de este entorno compartido (la velocidad lograda en la calle a 390×844 bajó en esta medición aunque los cuadros por segundo subieron). Las cifras del sector con el valle alrededor también se midieron el 9 de noviembre, con el detalle ya adaptado (a los ≈ 3 s de entrar). El cálculo por cuadro no cambió: la diferencia es solo de dibujo. Con el entorno anterior, el 9 de noviembre se repitieron, con la vista nueva del valle: calle 2,7 y ladera 2,0 cuadros/s a 1280×720; calle 4,1 y ladera 3,0 a 390×844. Los sectores no cambian, porque la vista del valle se libera por completo al entrar a un sector. Una primera repetición dio 2,0 en la calle a 1280×720: entre mediciones hay variaciones de hasta ≈ 25 % en este entorno compartido. La aplicación detecta que el navegador dibuja por software (SwiftShader) y, en calidad automática, usa la calidad **ligera**. La calidad alta es la que se usaría en un equipo con GPU; en este entorno, con calidad alta forzada, la calle a 1280×720 baja a ≈ 1,6 cuadros/s. Entre mediciones repetidas hay variaciones de ±15 %, y a veces mayores.
 
 Los pocos cuadros por segundo se deben al **dibujo por software** del entorno, no al cálculo. **No se midió en un equipo con GPU**: queda pendiente.
 
@@ -322,6 +376,7 @@ Historia en el mismo entorno, en cuadros/s (calle y ladera a 1280×720, calle y 
 | Valle alrededor del sector, fachadas y vida de calle | 1,9 | 1,7 | 3,1 | 2,9 |
 | Lluvia: agua natural, reflejos, mojado y tormenta | 2,2 | 2,0 | 3,9 | 2,9 |
 | Alcantarillado separado y creciente | 2,7 | 1,9 | 3,6 | 2,8 |
+| Creciente dañina y redes legibles | 2,1 | 1,8 | 3,9 | 2,8 |
 
 Cada ronda del entorno agregó casas y árboles: primero el barrio alrededor del sector y luego el barrio de ladera, de unas 5 200 casas en calidad alta y 1 800 en ligera. Por eso, con el dibujo por software, todo es algo más lento que en la primera ronda. En una GPU esta carga es moderada, porque las casas se dibujan con una sola malla de instancias.
 
@@ -357,4 +412,8 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
   - La intensidad de diseño (100 mm/h) y la dotación (130 L/hab·día) son supuestas: no se consultaron la curva IDF ni la demanda de EPM.
   - Los escenarios importados sin red siguen con la red esquemática. La interfaz para conectar SWMM sigue disponible.
 - **Creciente.** El hidrograma es sintético. No se verificó con caudales medidos de una quebrada de Medellín ni con estudios de amenaza por avenida torrencial.
+  - El lodo se mueve como agua (factor de volumen): no se simulan la reología del lodo, la erosión del cauce ni el impacto de piedras y troncos.
+  - El peligro usa las clases de la guía australiana AIDR 7-3; no se comparó con la zonificación de amenaza del POT de Medellín ni con criterios nacionales.
+  - Las casas son sólidas en el cálculo (el agua no entra) y no hay modelo estructural: «expuesta a daño estructural» es la lectura de la clase H5 o H6, no un cálculo de la estructura.
+  - La trayectoria de los vehículos y el material flotante son ilustrativos; el criterio que mueve un vehículo (H2) sí es calculado.
 - **Calibración** de los parámetros de cobertura con datos locales.

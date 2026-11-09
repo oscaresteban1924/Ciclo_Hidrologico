@@ -21,8 +21,10 @@ import { FLOW_CYCLE, StormFx } from './stormFx';
 import { TracerFx } from './tracerFx';
 import { facadeAtlas, glassTexture, glowTexture, plasterTexture, roofTexture, type FacadeAtlas, type TileId } from './textures';
 import { SewerView } from './sewerView';
+import type { NetFilter } from './sewerColors';
+import { FloodView } from './floodView';
 
-export type ViewMode = 'realista' | 'materiales' | 'resultados';
+export type ViewMode = 'realista' | 'materiales' | 'resultados' | 'peligro';
 export type Pick =
   | { kind: 'cell'; k: number; x: number; y: number }
   | { kind: 'building'; index: number; x: number; y: number }
@@ -30,7 +32,7 @@ export type Pick =
 
 const PATTERN_ID: Record<string, number> = { liso: 0, puntos: 1, rayas: 2, cuadros: 3, ondas: 4 };
 const BLOCK_DEPTH = 4;
-const VIEW_CODE: Record<ViewMode, number> = { realista: 0, materiales: 1, resultados: 2 };
+const VIEW_CODE: Record<ViewMode, number> = { realista: 0, materiales: 1, resultados: 2, peligro: 3 };
 
 interface Tween {
   from: { p: THREE.Vector3; t: THREE.Vector3 };
@@ -72,6 +74,9 @@ export class SectorScene {
   private pipeGroup = new THREE.Group();
   /** Red de alcantarillado separada y sección de la quebrada (si el escenario las trae). */
   private sewerView: SewerView | null = null;
+  private floodView: FloodView | null = null;
+  private floodGroup = new THREE.Group();
+  netFilter: NetFilter = 'ambas';
   private sewerOver = new THREE.Group();
   private cutOnly = new Set<string>();
   private gardenGroup = new THREE.Group();
@@ -269,7 +274,7 @@ export class SectorScene {
     this.highlight.renderOrder = 10;
     this.scene.add(this.highlight);
 
-    this.scene.add(this.buildingsGroup, this.decorGroup, this.drainGroup, this.pipeGroup, this.probeGroup, this.gardenGroup, this.sewerOver);
+    this.scene.add(this.buildingsGroup, this.decorGroup, this.drainGroup, this.pipeGroup, this.probeGroup, this.gardenGroup, this.sewerOver, this.floodGroup);
     this.setCompiled(c);
     this.goto('general', false);
     this.resize();
@@ -569,7 +574,7 @@ export class SectorScene {
       // no cambia: solo cambian el color y la normal.
       m.onBeforeCompile = (sh) => {
         const u = this.fx.u;
-        Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uRampN: u.uRampN, uNat: u.uNat, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode });
+        Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uRampN: u.uRampN, uNat: u.uNat, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode, uMud: u.uMud, uHaz: u.uHaz });
         sh.vertexShader = sh.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
@@ -579,7 +584,8 @@ export class SectorScene {
             `#include <common>
             uniform sampler2D uField, uRamp, uRampN, uNoise;
             uniform vec2 uHalf;
-            uniform float uTime, uFlowT, uRainAmt, uMode, uNat;
+            uniform float uTime, uFlowT, uRainAmt, uMode, uNat, uMud;
+            uniform vec3 uHaz[7];
             uniform vec4 uRainGeo;
             varying vec3 vWPos;`,
           )
@@ -597,9 +603,18 @@ export class SectorScene {
             vec4 rc = nat > 0.5 ? texture2D(uRampN, rampUv) : texture2D(uRamp, rampUv);
             diffuseColor = vec4(rc.rgb, rc.a);
             if (uMode > 1.5) diffuseColor.a = max(diffuseColor.a, 0.9);
-            vec2 vel = F.gb;
+            // vista de peligro: color de la clase máxima calculada (G del campo)
+            if (uMode > 2.5) {
+              int hc = int(F.g + 0.5);
+              vec3 hcol = uHaz[0];
+              for (int m = 1; m < 7; m++) if (m == hc) hcol = uHaz[m];
+              diffuseColor = vec4(hcol, hc == 0 ? 0.35 : 0.93);
+            }
+            // agua de la creciente con lodo: el agua honda se vuelve café espeso (solo el color)
+            if (uMode < 0.5 && nat > 0.5 && uMud > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.31, 0.2), uMud * 0.75 * smoothstep(0.25, 1.0, hs));
+            vec2 vel = uMode > 2.5 ? vec2(0.0) : F.gb;
             float spd = length(vel);
-            float streak = 0.0, foam = 0.0, nflow = 0.5, kflow = 0.0;
+            float streak = 0.0, foam = 0.0, nflow = 0.5, kflow = 0.0, rough = 0.0, chop = 0.5;
             vec2 fdir = vec2(1.0, 0.0);
             if (uMode < 0.5 && spd > 0.015) {
               fdir = vel / spd;
@@ -615,6 +630,13 @@ export class SectorScene {
               streak = smoothstep(0.55, 0.8, nflow) * kflow;
               float fr = spd / sqrt(9.81 * max(hs, 0.001));
               foam = smoothstep(0.85, 1.35, fr) * smoothstep(0.45, 0.72, nflow) * smoothstep(0.005, 0.015, hs);
+              // agua honda y rápida (creciente): oleaje picado y espuma que avanzan con la corriente calculada
+              rough = smoothstep(1.2, 4.0, spd) * smoothstep(0.15, 0.8, hs);
+              if (rough > 0.001) {
+                chop = texture2D(uNoise, vec2((al - spd * uTime * 0.7) * 0.75, ac * 0.55 + 0.13)).r;
+                float c2 = texture2D(uNoise, vec2((al - spd * uTime * 1.1) * 1.7 + 0.5, ac * 1.4)).r;
+                foam = max(foam, rough * smoothstep(0.5, 0.82, 0.6 * chop + 0.4 * c2));
+              }
             }
             float wmix = clamp(streak * 0.38 + foam * 0.65, 0.0, 0.85);
             // vetas: en el agua turbia, crestas más claras del mismo café; espuma casi blanca
@@ -628,6 +650,7 @@ export class SectorScene {
             vec2 wp = vWPos.xz;
             vec3 pert = vec3(sin(wp.x * 2.7 + uTime * 1.9) + sin(wp.y * 1.9 - uTime * 1.3), 0.0, cos(wp.y * 3.1 + uTime * 1.6) + cos(wp.x * 2.2 - uTime * 2.1)) * 0.04;
             pert += vec3(fdir.x, 0.0, -fdir.y) * (nflow - 0.5) * 0.6 * kflow;
+            pert += vec3(fdir.x + 0.6 * fdir.y, 0.0, -fdir.y + 0.6 * fdir.x) * (chop - 0.5) * 1.6 * rough;
             float rainHere = uRainGeo.w > 0.5 ? step(distance(wp, uRainGeo.xy), uRainGeo.z) : 1.0;
             float ripAmt = uRainAmt * rainHere * (uMode < 0.5 ? 1.0 : 0.0);
             if (ripAmt > 0.001) {
@@ -1064,8 +1087,19 @@ export class SectorScene {
     }
     if (c.sewer || c.creek) {
       this.sewerView = new SewerView(sc, c, (x, y, z, out) => this.w(x, y, z, out), (x, y) => this.groundAt(x, y), !!c.sewer && c.sewer.erradas.length > 0);
+      this.sewerView.setFilter(this.netFilter);
       this.pipeGroup.add(this.sewerView.under);
       this.sewerOver.add(this.sewerView.over);
+    }
+    // Creciente: puente, vehículos, material flotante, salpicadura y marcas de nivel en las fachadas
+    if (this.floodView) {
+      this.floodView.dispose();
+      this.floodGroup.clear();
+      this.floodView = null;
+    }
+    if (c.creek || c.exposed.length) {
+      this.floodView = new FloodView(sc, c, (x, y, z, out) => this.w(x, y, z, out));
+      this.floodGroup.add(this.floodView.group);
     }
     // Tuberías esquemáticas de escenarios sin red (solo dibujo; visibles en la vista bajo la calle)
     for (const p of sc.pipes) {
@@ -1177,7 +1211,11 @@ export class SectorScene {
       }
       else strip(ax, ay, bx, by, m.width);
     }
-    for (const g of mk) this.decorGroup.add(new THREE.Mesh(g, white));
+    for (const g of mk) {
+      const m = new THREE.Mesh(g, white);
+      m.userData.keepInCut = true; // las marcas viales orientan también en la vista bajo la calle
+      this.decorGroup.add(m);
+    }
     // Árboles: copas de varios lóbulos con tronco; algunos guayacanes florecidos (amarillos y rosados)
     const rnd = prng(this.sc.seed + 1);
     const trunkG = new THREE.CylinderGeometry(0.12, 0.2, 1, 6);
@@ -1539,17 +1577,24 @@ export class SectorScene {
     }
     this.cutOnly.clear();
     for (const a of this.sewerView?.anchors ?? []) {
-      this.labelItems.push({ id: a.id, text: a.text, priority: a.priority, kind: 'aviso', at: a.at });
+      this.labelItems.push({ id: a.id, text: a.text, sub: a.sub, priority: a.priority, kind: a.kind, color: a.color, at: a.at });
       if (a.cutOnly) this.cutOnly.add(a.id);
     }
     this.syncLabels();
   }
 
   private syncLabels(): void {
-    const items: LabelItem[] = this.labelItems.filter((l) => (this.cut || l.id !== 'pipes') && (this.cut || !this.cutOnly.has(l.id))).map(({ at: _at, ...rest }) => rest);
+    // bajo la calle solo quedan los rótulos de las redes (filtrados por la red que se ve) y las calles
+    const sewerIds = new Set((this.sewerView?.visibleAnchors(this.cut) ?? []).map((a) => a.id));
+    const isSewer = (id: string) => id.startsWith('sw-') || id === 'creek-sec';
+    const items: LabelItem[] = this.labelItems
+      .filter((l) => (this.cut || l.id !== 'pipes') && (!isSewer(l.id) || sewerIds.has(l.id)))
+      .filter((l) => !this.cut || isSewer(l.id) || l.id === 'pipes' || (l.kind === 'lugar' && l.priority >= 2))
+      .map(({ at: _at, ...rest }) => rest);
     if (this.cut && !this.c.sewer && this.sc.pipes.length) items.push({ id: 'pipes', text: 'Tubería esquemática: no se calcula su hidráulica', priority: 5, kind: 'aviso' });
     if (this.pinned) items.push({ id: 'pin', text: this.pinned.text, priority: 9, kind: 'sonda' });
     for (const l of this.tracerFx.labels) items.push({ id: l.id, text: l.text, sub: l.sub, priority: 7, kind: 'gotas', color: l.color });
+    if (!this.cut) for (const l of this.floodView?.labels ?? []) items.push({ id: l.id, text: l.text, sub: l.sub, priority: l.priority, kind: l.kind, color: l.color });
     this.labels.set(items);
   }
 
@@ -1565,20 +1610,35 @@ export class SectorScene {
     this.applyView();
   }
 
+  /**
+   * Vista bajo la calle: el terreno y los edificios se vuelven transparentes y se ocultan árboles, postes,
+   * cables, vehículos y la capa de la creciente, para que las dos redes se lean sin estorbos.
+   */
   setCut(on: boolean): void {
     this.cut = on;
     this.pipeGroup.visible = on;
     this.roofExtras.visible = !on;
+    for (const o of this.decorGroup.children) o.visible = !on || o.userData.keepInCut === true;
+    this.floodGroup.visible = !on;
+    this.probeGroup.visible = !on;
+    this.fx.setCut(on);
     for (const m of this.buildingMats) {
       m.transparent = on;
-      (m as THREE.MeshStandardMaterial).opacity = on ? 0.22 : 1;
+      (m as THREE.MeshStandardMaterial).opacity = on ? 0.1 : 1;
       m.depthWrite = !on;
       m.needsUpdate = true;
     }
     this.terrainMat.transparent = on;
-    this.terrainMat.opacity = on ? 0.22 : 1;
+    this.terrainMat.opacity = on ? 0.3 : 1;
     this.terrainMat.depthWrite = !on;
     this.terrainMat.needsUpdate = true;
+    this.syncLabels();
+  }
+
+  /** Qué red se ve bajo la calle (y sus rótulos). */
+  setNetFilter(f: NetFilter): void {
+    this.netFilter = f;
+    this.sewerView?.setFilter(f);
     this.syncLabels();
   }
 
@@ -1672,8 +1732,8 @@ export class SectorScene {
       this.updateArrows(sim);
       this.lastArrowT = sim.t;
     }
-    this.arrows.visible = this.showArrows && this.view !== 'resultados';
-    if (this.view === 'resultados' && (this.lastResultsT < 0 || Math.abs(sim.t - this.lastResultsT) > 5)) {
+    this.arrows.visible = this.showArrows && this.view !== 'resultados' && this.view !== 'peligro';
+    if ((this.view === 'resultados' || this.view === 'peligro') && (this.lastResultsT < 0 || Math.abs(sim.t - this.lastResultsT) > 5)) {
       this.updateResults(sim);
       this.lastResultsT = sim.t;
     }
@@ -1688,6 +1748,13 @@ export class SectorScene {
     );
     if (this.tracerFx.labelsKey !== lk) this.syncLabels();
     this.sewerView?.update(sim, this.time, this.reducedMotion, this.cut);
+    this.fx.u.uMud.value = sim.creekHydro ? Math.min(1, (sim.shared.creek?.sedimentCv ?? 0) / 0.3) : 0;
+    if (this.floodView) {
+      const fk = this.floodView.labelsKey;
+      this.floodView.update(sim, this.time, this.reducedMotion ? 0 : dtReal, this.reducedMotion);
+      if (this.floodView.labelsKey !== fk) this.syncLabels();
+      else for (const l of this.floodView.labels) this.labels.setSub(l.id, l.sub ?? '');
+    }
     let flow = 0;
     if (sim.lastDt > 0) for (let q = 0; q < sim.lastDrain.length; q++) flow += sim.lastDrain[q] / sim.lastDt;
     // brillo proporcional al caudal captado (calculado), tenue para no confundirlo con agua en superficie
@@ -1714,10 +1781,10 @@ export class SectorScene {
     const amp = this.amplify;
     const zr = this.zRef;
     const tmp = new Float32Array(4);
-    const H = this.view === 'resultados' ? sim.hmaxField : sim.h;
+    const H = this.view === 'resultados' || this.view === 'peligro' ? sim.hmaxField : sim.h;
     const cells = this.waterCells;
     const nb = this.cornerNb, cz = this.cornerZ;
-    this.fx.updateField(sim, H === sim.hmaxField);
+    this.fx.updateField(sim, H === sim.hmaxField, this.view === 'peligro');
     for (let q = 0; q < cells.length; q++) {
       const k = cells[q];
       const h = H[k];
@@ -1940,6 +2007,7 @@ export class SectorScene {
       if (l.kind === 'lejano' && (!high || l.at.distanceTo(this.camera.position) > fogFar)) pos.set(l.id, { x: 0, y: 0, visible: false });
     }
     for (const l of this.tracerFx.labels) project(l.id, l.at);
+    if (!this.cut) for (const l of this.floodView?.labels ?? []) project(l.id, l.at);
     if (this.cut && this.sc.pipes.length) {
       // etiqueta en la mitad del tramo más largo
       let best: [number, number] = [0, 0], bl = -1;

@@ -1,8 +1,8 @@
 {
   "Calle de prueba 1280x720": {
-    "fps": 2.6864869705382,
-    "simMsPerFrame": 3.801476676713431,
-    "achieved": 16.907816665038716,
+    "fps": 2.142857142857143,
+    "simMsPerFrame": 4.036789749787744,
+    "achieved": 16.787041369918644,
     "requested": 30,
     "t": 117.50425347701952,
     "cells": 4480,
@@ -18,29 +18,29 @@
     }
   },
   "Ladera con quebrada 1280x720": {
-    "fps": 1.904943327935998,
-    "simMsPerFrame": 13.815114116505105,
-    "achieved": 13.896018772830832,
+    "fps": 1.8460402436773098,
+    "simMsPerFrame": 13.763349234967254,
+    "achieved": 13.557040606901838,
     "requested": 30,
-    "t": 92.63780914907673,
+    "t": 92.63796987508165,
     "cells": 12288,
     "dx": 1,
     "render": {
-      "geometries": 195,
+      "geometries": 202,
       "textures": 13,
-      "calls": 227,
-      "triangles": 268759
+      "calls": 281,
+      "triangles": 268482
     },
     "caps": {
       "webgl2": true
     }
   },
   "Calle de prueba 390x844": {
-    "fps": 3.58230342109976,
-    "simMsPerFrame": 4.064943538364988,
-    "achieved": 26.687207571544654,
+    "fps": 3.934684241589618,
+    "simMsPerFrame": 4.150673464625479,
+    "achieved": 27.398635775469735,
     "requested": 30,
-    "t": 132.09900875838892,
+    "t": 131.05041477764934,
     "cells": 4480,
     "dx": 1,
     "render": {
@@ -54,18 +54,18 @@
     }
   },
   "Ladera con quebrada 390x844": {
-    "fps": 2.812675792237009,
-    "simMsPerFrame": 18.13042038028392,
-    "achieved": 20.227954017333442,
+    "fps": 2.8126757922370187,
+    "simMsPerFrame": 18.722272738361404,
+    "achieved": 20.28316590489787,
     "requested": 30,
-    "t": 123.38445111952878,
+    "t": 123.38452651608429,
     "cells": 12288,
     "dx": 1,
     "render": {
-      "geometries": 192,
+      "geometries": 199,
       "textures": 13,
-      "calls": 223,
-      "triangles": 262236
+      "calls": 277,
+      "triangles": 262070
     },
     "caps": {
       "webgl2": true

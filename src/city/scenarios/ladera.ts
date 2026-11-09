@@ -16,18 +16,40 @@ export const yq = (x: number): number => 16 + 3 * Math.sin(x / 18);
 
 /** Cauce: 1,8 m de profundidad, fondo de 3 m y orillas que suben hasta 4,5 m del eje. */
 export const CHANNEL = { depth: 1.8, bedHalf: 1.5, bankHalf: 4.5 } as const;
+/** Distancia al eje desde la que la margen sur se vuelve talud (30 %). */
+const SOUTH_SLOPE_FROM = 8;
+
+/**
+ * Casas sobre la orilla norte, aguas abajo de la sección de control: el frente queda a 5,2 m del eje (0,7 m
+ * de la orilla y casi a su misma cota). Son didácticas: muestran lo que ocurre cuando se construye en el
+ * retiro de una quebrada.
+ */
+const ORILLA: { x0: number; x1: number; floors: number; color: string; brick: boolean }[] = [
+  { x0: 93.8, x1: 98.6, floors: 2, color: '#f0e2c4', brick: false },
+  { x0: 99.2, x1: 104.4, floors: 1, color: '#9cc3c9', brick: false },
+  { x0: 105, x1: 109.6, floors: 2, color: '#d98f6b', brick: true },
+  { x0: 110.4, x1: 115.2, floors: 1, color: '#e3c48f', brick: false },
+];
+const orillaRect = (o: (typeof ORILLA)[number]): Polygon => {
+  const yc = yq((o.x0 + o.x1) / 2);
+  return rect(o.x0, yc + 5.2, o.x1, Math.min(yc + 10, 25.2));
+};
+/** Puente peatonal sobre la quebrada (aguas arriba de la sección). */
+const PUENTE_X = 70;
 
 /** Descenso acumulado hacia el este: 10 %, con un rellano de 2 % en la intersección (x 80–100). */
 const drop = (x: number) => 0.1 * Math.min(x, 80) + 0.02 * Math.min(Math.max(x - 80, 0), 20) + 0.1 * Math.max(x - 100, 0);
 
 /**
  * Ladera: 10 % hacia el este (hacia el valle), con rellano en la intersección. La quebrada corre por el
- * fondo de su propio valle: las dos márgenes suben 3,5 % hacia afuera del cauce. Cotas relativas.
+ * fondo de su propio valle: la margen norte (la del barrio) sube 3,5 %; la margen sur sube 3,5 % en los
+ * primeros 8 m y luego 30 %, como el talud boscoso de un cañón de quebrada. Cotas relativas.
  */
 export function laderaGround(x: number, y: number): number {
   const yc = yq(x);
-  let z = 44 - drop(x) + 0.035 * (yc - 16) + 0.035 * Math.abs(y - yc);
   const d = Math.abs(y - yc);
+  let z = 44 - drop(x) + 0.035 * (yc - 16) + 0.035 * d;
+  if (y < yc && d > SOUTH_SLOPE_FROM) z += 0.3 * (d - SOUTH_SLOPE_FROM);
   if (d < CHANNEL.bedHalf) z -= CHANNEL.depth;
   else if (d < CHANNEL.bankHalf) z -= CHANNEL.depth * (1 - (d - CHANNEL.bedHalf) / (CHANNEL.bankHalf - CHANNEL.bedHalf));
   return z;
@@ -90,6 +112,11 @@ export function laderaScenario(): Scenario {
   buildings.push({ id: 'colegio', polygon: rect(106, 76, 126, 93), floors: 3, heightM: 10.5, downspout: [105.4, 84], style: 'comercial', color: '#e7e1d2', kind: 'didactico' });
   buildings.push({ id: 'bloque-medio', polygon: rect(42, 30, 57, 44), floors: 4, heightM: 11.2, downspout: [49.5, 44.6], style: 'ladrillo', kind: 'didactico' });
   buildings.push({ id: 'casa-retiro', polygon: rect(97, 29, 104, 36), floors: 2, heightM: 5.6, downspout: [100.5, 36.6], style: 'revoque', color: '#f0e2c4', kind: 'didactico' });
+  ORILLA.forEach((o, q) => {
+    const poly = orillaRect(o);
+    const yTop = Math.max(...poly.map((p) => p[1]));
+    buildings.push({ id: `orilla-${q + 1}`, polygon: poly, floors: o.floors, heightM: o.floors * 2.7, downspout: [(o.x0 + o.x1) / 2, yTop + 0.6], style: o.brick ? 'ladrillo' : 'revoque', color: o.brick ? undefined : o.color, kind: 'didactico' });
+  });
 
   const g = laderaGround;
   const surfaces: SurfacePatch[] = [
@@ -138,7 +165,9 @@ export function laderaScenario(): Scenario {
         { layer: 'Andenes y bordillos', kind: 'hipotetico', note: 'Bordillo de 0,15 m, andén con 2 % hacia la calzada.' },
         { layer: 'Sumideros', kind: 'hipotetico', note: 'Ocho sumideros de rejilla, ventana o mixtos ubicados con los criterios de EPM (puntos bajos y antes de los cruces peatonales).' },
         { layer: 'Alcantarillado', kind: 'hipotetico', note: 'Red separada de aguas lluvias (descarga a la quebrada) y de aguas residuales (sigue hacia el interceptor) trazada con criterios de la norma de diseño de EPM (GD-AS002). Es didáctica: no es la red real ni un diseño de ingeniería.' },
-        { layer: 'Creciente', kind: 'hipotetico', note: 'Hidrograma triangular que entra por la quebrada. No es un caudal medido ni un pronóstico.' },
+        { layer: 'Creciente', kind: 'hipotetico', note: 'Hidrograma triangular que entra por la quebrada, con lodo opcional (factor de volumen 1/(1 − Cv)). No es un caudal medido ni un pronóstico.' },
+        { layer: 'Casas en la orilla', kind: 'didactico', note: 'Cuatro casas construidas a ras de la orilla norte, dentro del retiro de la quebrada, para mostrar la exposición. No representan viviendas reales.' },
+        { layer: 'Vehículos y puente peatonal', kind: 'didactico', note: 'Dos carros y una moto estacionados cerca de la quebrada y un puente peatonal. El motor calcula si el agua mueve los vehículos (clase de peligro H2 o mayor); el puente no obstruye el agua en el cálculo.' },
         { layer: 'Coberturas', kind: 'estimado', note: 'Parámetros estimados de literatura general; no calibrados.' },
       ],
       sources: [],
@@ -177,6 +206,7 @@ export function laderaScenario(): Scenario {
       { id: 'jardin', name: 'Jardín de la calle', at: [72, 53] },
       { id: 'seccion', name: 'Quebrada (sección de control)', at: [SEC_X, yq(SEC_X)] },
       { id: 'casa-retiro', name: 'Junto a la casa del retiro', at: [100.5, 28.4] },
+      { id: 'orilla', name: 'Frente a las casas de la orilla', at: [106.5, 19.5] },
     ],
     labels: [
       { id: 'calle', text: 'Calle empinada (baja hacia el valle)', at: [26, 61.5], priority: 3 },
@@ -189,6 +219,7 @@ export function laderaScenario(): Scenario {
       { id: 'parque', text: 'Parque', at: [20, 36], priority: 1 },
       { id: 'plazoleta', text: 'Plazoleta', at: [66, 36], priority: 1 },
       { id: 'casa-retiro', text: 'Casa en el retiro', at: [100.5, 32.5], priority: 1 },
+      { id: 'orilla', text: 'Casas en la orilla', at: [104.5, 23], priority: 3 },
     ],
     streetView: { eye: [24, 60.6], look: [104, 59.6] },
     pipes: [],
@@ -198,7 +229,13 @@ export function laderaScenario(): Scenario {
       axis: Array.from({ length: 33 }, (_, k) => [k * 4, yq(k * 4)] as Pt),
       section: { at: [SEC_X, yq(SEC_X)], halfWidthM: 13, bankHalfWidthM: CHANNEL.bankHalf, name: 'Sección de control' },
       baseM3s: 0.3,
+      footbridge: { id: 'puente', name: 'Puente peatonal', x: PUENTE_X, halfLengthM: 7, widthM: 1.6, deckAboveBankM: 0.9, beamM: 0.35 },
     },
+    exposed: [
+      { id: 'carro-orilla', name: 'Carro estacionado en la orilla', kind: 'carro', at: [117.8, 24.3], headingDeg: 0, color: '#c0392b' },
+      { id: 'taxi-carrera', name: 'Taxi al final de la carrera', kind: 'carro', at: [89.4, 26.6], headingDeg: 90, color: '#f2c200' },
+      { id: 'moto-orilla', name: 'Moto frente a las casas', kind: 'moto', at: [101.8, 18.9], headingDeg: 180, color: '#2f3b48' },
+    ],
     decor: laderaDecor(),
     defaults: {
       scenarioId: 'ladera-quebrada',
@@ -302,6 +339,7 @@ function laderaSewer(sc: Scenario): SewerSpec {
       { id: 'AR-S2', name: 'Cámara AR-S2 (carrera sur)', at: [xs, 50], kind: 'camara' },
       { id: 'AR-S1', name: 'Cámara AR-S1 (final de la carrera sur)', at: [xs, 28], kind: 'camara' },
       { id: 'AR-S0', name: 'Cámara AR-S0 (giro hacia el colector de la quebrada)', at: [xs + 2, 26], kind: 'camara' },
+      { id: 'AR-Q1', name: 'Cámara AR-Q1 (detrás de las casas de la orilla)', at: [107, 26], kind: 'camara' },
       { id: 'AR-Q', name: 'Sigue por el colector paralelo a la quebrada (hacia el interceptor)', at: [128, 26], kind: 'descarga', outfall: 'colector' },
     ],
     [
@@ -311,7 +349,8 @@ function laderaSewer(sc: Scenario): SewerSpec {
       { id: 'AR-2>AR-D', from: 'AR-2', to: 'AR-D', diameterM: 0.2, material: 'PVC', role: 'colector' },
       { id: 'AR-S2>AR-S1', from: 'AR-S2', to: 'AR-S1', diameterM: 0.2, material: 'PVC', role: 'colector' },
       { id: 'AR-S1>AR-S0', from: 'AR-S1', to: 'AR-S0', diameterM: 0.2, material: 'PVC', role: 'colector' },
-      { id: 'AR-S0>AR-Q', from: 'AR-S0', to: 'AR-Q', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-S0>AR-Q1', from: 'AR-S0', to: 'AR-Q1', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-Q1>AR-Q', from: 'AR-Q1', to: 'AR-Q', diameterM: 0.2, material: 'PVC', role: 'colector' },
     ],
     { system: 'residuales', surface, cover: 2.35, minSlope: 0.01, vMax: { concreto: 4, PVC: 4 } },
   );
@@ -322,6 +361,7 @@ function laderaSewer(sc: Scenario): SewerSpec {
     if (b.id.startsWith('kn-')) buildingNode[b.id] = 'AR-N';
     else if (b.id.startsWith('ks-')) buildingNode[b.id] = 'AR-S2';
     else if (b.id === 'casa-retiro') buildingNode[b.id] = 'AR-S1';
+    else if (b.id.startsWith('orilla-')) buildingNode[b.id] = 'AR-Q1';
     else if (cx > xs) buildingNode[b.id] = 'AR-2';
     else buildingNode[b.id] = cx < 44 && cy > 45 ? 'AR-0' : 'AR-1';
   }
@@ -360,6 +400,10 @@ function laderaDecor(): Scenario['decor'] {
     const side = rnd() < 0.5 ? -1 : 1;
     const y = yq(x) + side * (3.4 + rnd() * 6);
     if (x > 83 && x < 92 && y > 22) continue;
+    // ni sobre las casas de la orilla ni sobre el puente
+    if (side > 0 && ORILLA.some((o) => x > o.x0 - 1.2 && x < o.x1 + 1.2) ) continue;
+    if (side > 0 && x > 115.4 && x < 120.2) continue;
+    if (Math.abs(x - PUENTE_X) < 2.2) continue;
     trees.push([x, y]);
   }
   for (let q = 0; q < 22; q++) trees.push([3 + rnd() * 36, 29 + rnd() * 15]);

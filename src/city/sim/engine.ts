@@ -15,7 +15,8 @@
 import { G, H_FLOW_MIN, H_WET, INLET, NUMERICS, mmhToMs } from './constants';
 import type { Compiled } from './compile';
 import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from './drainage';
-import { SOIL_INITIAL_FRACTION, type CreekFlood, type RainConfig, type Shared } from './scenario';
+import { HAZARD_WET_M, UNSTABLE_FROM, bulkingFactor, hazardClass } from './hazard';
+import { SOIL_INITIAL_FRACTION, type CreekFlood, type ExposedObject, type RainConfig, type Shared } from './scenario';
 import { SewerModel, type SewerTotals } from './sewer';
 
 export interface Hyetograph {
@@ -53,12 +54,36 @@ export function hyetograph(r: RainConfig): Hyetograph {
   return { times, mmh };
 }
 
-/** Hidrograma de la creciente: tiempos [s] y caudales [m³/s] (lineal a tramos), sobre el caudal base. */
+/**
+ * Hidrograma de la creciente: tiempos [s] y caudales [m³/s] (lineal a tramos), sobre el caudal base. Con
+ * lodo (Cv > 0), el pico de la mezcla es el del agua por el factor de volumen 1/(1 − Cv).
+ */
 export function creekHydrograph(f: CreekFlood, baseM3s: number): { t: number[]; q: number[] } {
   const t0 = f.startMin * 60, tp = f.timeToPeakMin * 60;
-  const peak = Math.max(f.peakM3s, baseM3s);
+  const peak = Math.max(f.peakM3s * bulkingFactor(f.sedimentCv ?? 0), baseM3s);
   // hidrograma unitario triangular del SCS: base = 2,67·tp (subida tp, bajada 1,67·tp)
   return { t: [0, t0, t0 + tp, t0 + 2.67 * tp], q: [baseM3s, baseM3s, peak, baseM3s] };
+}
+
+/** Estado de un vehículo expuesto a la creciente (se calcula en el motor: es determinista). */
+export interface DriftState {
+  id: string;
+  name: string;
+  kind: ExposedObject['kind'];
+  color?: string;
+  x0: number;
+  y0: number;
+  x: number;
+  y: number;
+  /** Rumbo [rad, 0 = este, antihorario]. */
+  heading: number;
+  /** quieto · arrastrado (el agua lo mueve) · varado (se detuvo donde lo dejó el agua) · fuera (salió del sector). */
+  state: 'quieto' | 'arrastrado' | 'varado' | 'fuera';
+  /** Momento en que el agua lo movió por primera vez [s] (−1 si nunca). */
+  tMoved: number;
+  /** Recorrido total [m] y peligro máximo donde estuvo. */
+  dist: number;
+  hazard: number;
 }
 
 /** Caudal de un hidrograma lineal a tramos en t [m³/s] (constante fuera de los extremos). */
@@ -175,6 +200,12 @@ export class CitySim {
   soil: Float64Array;
   private soil0: Float64Array;
   hmaxField: Float32Array;
+  /** Velocidad máxima [m/s], profundidad × velocidad máxima [m²/s] y clase de peligro máxima (0–6) por celda. */
+  vmaxField: Float32Array;
+  dvMaxField: Float32Array;
+  hazMax: Uint8Array;
+  /** Vehículos expuestos a la creciente. */
+  drift: DriftState[] = [];
   tankVol: Float64Array;
   /** Infiltración de la celda en el último paso [m] (para trazadores). */
   lastInf: Float64Array;
@@ -232,6 +263,9 @@ export class CitySim {
     this.soil = new Float64Array(N);
     this.soil0 = new Float64Array(N);
     this.hmaxField = new Float32Array(N);
+    this.vmaxField = new Float32Array(N);
+    this.dvMaxField = new Float32Array(N);
+    this.hazMax = new Uint8Array(N);
     this.tankVol = new Float64Array(c.tanks.length);
     this.lastInf = new Float64Array(N);
     this.lastDrain = new Float64Array(c.drains.length);
@@ -277,6 +311,10 @@ export class CitySim {
     for (let k = 0; k < N; k++) this.soil[k] = c.smax[k] * f0;
     this.soil0.set(this.soil);
     this.hmaxField.fill(0);
+    this.vmaxField.fill(0);
+    this.dvMaxField.fill(0);
+    this.hazMax.fill(0);
+    this.drift = c.exposed.map((o) => ({ id: o.id, name: o.name, kind: o.kind, color: o.color, x0: o.at[0], y0: o.at[1], x: o.at[0], y: o.at[1], heading: (o.headingDeg * Math.PI) / 180, state: 'quieto', tMoved: -1, dist: 0, hazard: 0 }));
     this.tankVol.fill(0);
     this.lastInf.fill(0);
     this.lastDrain.fill(0);
@@ -656,13 +694,29 @@ export class CitySim {
     bal.returned += ret;
     }
 
-    // --- 8) Estado, máximos y balance
+    // --- 8) Estado, máximos y balance (incluido el peligro profundidad × velocidad por celda)
     let surf = 0;
+    const vmF = this.vmaxField, dvF = this.dvMaxField, hzF = this.hazMax;
+    const frCap = num.froudeMax;
     for (let k = 0; k < N; k++) {
       const hk = h[k];
       surf += hk;
       if (hk > hmax) hmax = hk;
       if (hk > this.hmaxField[k]) this.hmaxField[k] = hk;
+      if (hk >= HAZARD_WET_M) {
+        const i = k % nx, fw = k + (k - i) / nx;
+        const qxc = 0.5 * (qx[fw] + qx[fw + 1]), qyc = 0.5 * (qy[k] + qy[k + nx]);
+        // velocidad de la celda, limitada con el mismo número de Froude del cálculo (evita valores
+        // espurios en el frente de mojado, donde la celda aún es muy somera)
+        let sp = Math.sqrt(qxc * qxc + qyc * qyc) / hk;
+        const cap = frCap * Math.sqrt(G * hk);
+        if (sp > cap) sp = cap;
+        if (sp > vmF[k]) vmF[k] = sp;
+        const dv = sp * hk;
+        if (dv > dvF[k]) dvF[k] = dv;
+        const cls = hazardClass(hk, sp);
+        if (cls > hzF[k]) hzF[k] = cls;
+      }
     }
     this.hmax = hmax;
     this.umax = umax;
@@ -686,6 +740,7 @@ export class CitySim {
     const cour = (dt * (Math.sqrt(G * hmax) + umax)) / dx;
     if (cour > dg.maxCourant) dg.maxCourant = cour;
 
+    if (this.drift.length) this.stepDrift(dt);
     this.t += dt;
     if (Math.abs(this.t - Math.round(this.t)) < 1e-9) this.t = Math.round(this.t);
     this.lastDt = dt;
@@ -739,6 +794,74 @@ export class CitySim {
 
   runToEnd(): void {
     while (!this.finished) this.step();
+  }
+
+  /**
+   * Velocidad de celda para el peligro y los vehículos [m/s]: la de `velocityAt`, limitada con el número
+   * de Froude del cálculo (en el frente de mojado la celda es muy somera y el promedio de caras la exagera).
+   */
+  velocityCapped(k: number): [number, number] {
+    const hk = this.h[k];
+    if (hk < HAZARD_WET_M) return [0, 0];
+    const [u, v] = this.velocityAt(k);
+    const sp = Math.hypot(u, v), cap = this.num.froudeMax * Math.sqrt(G * hk);
+    return sp > cap ? [(u * cap) / sp, (v * cap) / sp] : [u, v];
+  }
+
+  /**
+   * Vehículos: quietos mientras el peligro donde están sea menor que su clase de inestabilidad (H2: inseguro
+   * para vehículos pequeños, AIDR 7-3); por encima, el agua los mueve con una fracción de su velocidad. Se
+   * detienen contra los edificios y donde el peligro vuelve a bajar. No alteran el flujo. La trayectoria es
+   * ilustrativa: sigue la velocidad calculada, pero un vehículo real rueda, gira y se atasca de otras formas.
+   */
+  private stepDrift(dt: number): void {
+    const c = this.c, { nx, ny, dx } = c;
+    const W = nx * dx, H = ny * dx;
+    const carry = 0.8;
+    for (const o of this.drift) {
+      if (o.state === 'fuera') continue;
+      const i = Math.floor(o.x / dx), j = Math.floor(o.y / dx);
+      if (i < 0 || j < 0 || i >= nx || j >= ny) {
+        o.state = 'fuera';
+        continue;
+      }
+      const k = j * nx + i;
+      const d = this.h[k];
+      const [u, v] = this.velocityCapped(k);
+      const cls = hazardClass(d, Math.hypot(u, v));
+      if (cls > o.hazard) o.hazard = cls;
+      if (cls < UNSTABLE_FROM[o.kind]) {
+        if (o.state === 'arrastrado') o.state = 'varado';
+        continue;
+      }
+      if (o.state !== 'arrastrado') {
+        o.state = 'arrastrado';
+        if (o.tMoved < 0) o.tMoved = this.t;
+      }
+      let xn = o.x + carry * u * dt, yn = o.y + carry * v * dt;
+      // contra un edificio: se anula la componente que lo metería en la celda sólida
+      const blocked = (x: number, y: number) => {
+        const ii = Math.floor(x / dx), jj = Math.floor(y / dx);
+        return ii >= 0 && jj >= 0 && ii < nx && jj < ny && c.solid[jj * nx + ii] === 1;
+      };
+      if (blocked(xn, yn)) {
+        if (!blocked(xn, o.y)) yn = o.y;
+        else if (!blocked(o.x, yn)) xn = o.x;
+        else {
+          xn = o.x;
+          yn = o.y;
+        }
+      }
+      o.dist += Math.hypot(xn - o.x, yn - o.y);
+      o.x = xn;
+      o.y = yn;
+      // el vehículo se alinea poco a poco con la corriente
+      const want = Math.atan2(v, u);
+      let da = want - o.heading;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      o.heading += da * Math.min(1, 0.6 * dt);
+      if (o.x < 0 || o.y < 0 || o.x >= W || o.y >= H) o.state = 'fuera';
+    }
   }
 
   /** Velocidad en el centro de una celda a partir de los caudales de sus caras [m/s]. */

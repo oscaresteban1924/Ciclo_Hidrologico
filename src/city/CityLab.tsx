@@ -13,6 +13,8 @@ import { CompareTab, MissionsTab, TeacherTab, ToolsTab, WordsTab, type LabApi, t
 import { RainBudget } from './ui/RainBudget';
 import { compile } from './sim/compile';
 import { SEWER_COLORS } from './render/sewerColors';
+import { HAZARD, HAZARD_SOURCE, exposureOf, hazardClass as hazardClassOf } from './sim/hazard';
+import { buildingName } from './render/floodNames';
 import { Icon } from '../components/ui';
 import { useStore } from '../state/store';
 import './city.css';
@@ -182,7 +184,7 @@ export default function CityLab() {
       const dx = c.shared && sc.resolutions.includes(c.shared.dx) ? c.shared.dx : sc.defaultResolution;
       // creciente de la misión: fracción de la capacidad de la sección de control, calculada con el escenario
       const cap = m.creek && sc.creek ? compile(sc, { ...sc.defaults, dx }, A).creek?.capacity ?? 0 : 0;
-      const creek = m.creek && cap > 0 ? { peakM3s: Math.round(m.creek.fraction * cap), timeToPeakMin: m.creek.timeToPeakMin, startMin: m.creek.startMin } : null;
+      const creek = m.creek && cap > 0 ? { peakM3s: Math.round(m.creek.fraction * cap), timeToPeakMin: m.creek.timeToPeakMin, startMin: m.creek.startMin, sedimentCv: m.creek.sedimentCv ?? 0 } : null;
       c.update({ shared: { ...sc.defaults, dx, rain: { ...sc.defaults.rain, ...m.rain }, simMinutes: m.simMinutes, creek }, A, B });
       c.setCompare(m.change.kind !== 'ninguno');
       c.start();
@@ -443,6 +445,11 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
             Vista de resultados: profundidad máxima alcanzada hasta ahora.
           </p>
         )}
+        {view === 'peligro' && (
+          <p className="city-ov banner" role="status">
+            Vista de peligro: la clase más alta alcanzada hasta ahora según profundidad y velocidad calculadas. Referencia técnica australiana (AIDR 7-3): no es la zonificación oficial de amenaza de Medellín.
+          </p>
+        )}
       </div>
     </>
   );
@@ -466,6 +473,7 @@ function ViewBar({ api }: { api: LabApi }) {
         {btn('Realista', v === 'realista', () => ctrl.setView('realista'))}
         {btn('Materiales', v === 'materiales', () => ctrl.setView('materiales'))}
         {btn('Resultados', v === 'resultados', () => ctrl.setView('resultados'))}
+        {btn('Peligro', v === 'peligro', () => ctrl.setView('peligro'), 'Peligro del agua: clase máxima según profundidad y velocidad')}
       </div>
       <div className="vb-group" role="group" aria-label="Capas">
         {btn('Flechas', ctrl.arrowsOn(), () => ctrl.setArrows(!ctrl.arrowsOn()), 'Flechas de dirección del flujo')}
@@ -536,6 +544,22 @@ function Legend({ api }: { api: LabApi }) {
       </div>
     );
   }
+  if (v === 'peligro') {
+    return (
+      <div className="city-ov city-legend hazard-legend">
+        <strong>Peligro del agua (máximo alcanzado)</strong>
+        <ul className="haz-list">
+          {HAZARD.slice(1).map((h) => (
+            <li key={h.code}>
+              <span className="haz-chip" style={{ background: h.color, color: h.id >= 4 ? '#fff' : '#1f2933' }}>{h.code}</span>
+              {h.short}
+            </li>
+          ))}
+        </ul>
+        <small>Clase según profundidad, velocidad y su producto. Fuente: {HAZARD_SOURCE}.</small>
+      </div>
+    );
+  }
   // agua natural (turbia) en la vista realista de la escena 3D, salvo que se pida el agua en azul
   const natural = api.renderer === 'webgl' && v === 'realista' && !ctrl.waterBlue();
   return (
@@ -559,8 +583,12 @@ function Legend({ api }: { api: LabApi }) {
             Aguas residuales (agua: ocre)
           </li>
           <li>
-            <span className="swatch" style={{ background: SEWER_COLORS.carga }} aria-hidden="true" />
-            Tubería en carga (llena, a presión)
+            <span className="swatch ring" style={{ borderColor: SEWER_COLORS.carga }} aria-hidden="true" />
+            Anillos rojos: tramo en carga (lleno, a presión)
+          </li>
+          <li>
+            <span className="swatch arrow" aria-hidden="true">➤</span>
+            Flechas: sentido y velocidad del agua
           </li>
           {sim.c.sewer!.erradas.length > 0 && (
             <li>
@@ -612,6 +640,13 @@ function SelectionCard({ api }: { api: LabApi }) {
     const mm = rainDepth(sim.hyeto.times, sim.hyeto.mmh, sim.t);
     rows.push(['Lluvia en el techo hasta ahora', `${fmtNum((mm / 1000) * cb.roofArea, 2)} m³`]);
     rows.push(['Origen del dato', b.kind === 'real' ? 'cartografía' : 'didáctico']);
+    const ex = exposureOf(sim)[p.index];
+    if (ex && ex.depth >= 0.01) {
+      title = buildingName(b.id);
+      rows.push(['Agua contra sus muros (máximo)', fmtDepth(ex.depth)]);
+      rows.push(['Velocidad máxima junto a la casa', `${fmtNum(ex.speed, 1)} m/s`]);
+      rows.push(['Peligro máximo junto a la casa', `${HAZARD[ex.hazard].code}: ${HAZARD[ex.hazard].text}`]);
+    }
   } else {
     const k = p.k;
     const cov = COVERS[COVER_LIST[c.cover[k]]];
@@ -623,6 +658,11 @@ function SelectionCard({ api }: { api: LabApi }) {
     rows.push(['Máxima hasta ahora', fmtDepth(sim.hmaxField[k])]);
     rows.push(['Velocidad (modelo)', sim.h[k] >= H_WET ? `${fmtNum(sp, 2)} m/s` : '—']);
     rows.push(['El agua va hacia', sim.h[k] >= H_WET && sp > 0.005 ? dirText(ux, uy) : 'quieta o seca']);
+    if (sim.hazMax[k] > 0) {
+      const [cu, cv] = sim.velocityCapped(k);
+      const now = hazardClassOf(sim.h[k], Math.hypot(cu, cv));
+      rows.push(['Peligro (ahora · máximo)', `${HAZARD[now].code} · ${HAZARD[sim.hazMax[k]].code}: ${HAZARD[sim.hazMax[k]].short}`]);
+    }
     rows.push(['Cota relativa', `${fmtNum(c.z[k], 2)} m`]);
     rows.push(['Infiltra', cov.permeable ? `${cov.ksMmH} mm/h · guardado ${fmtNum(sim.soil[k] * 1000, 0)} de ${fmtNum(c.smax[k] * 1000, 0)} mm` : 'no (impermeable)']);
     actions.push(

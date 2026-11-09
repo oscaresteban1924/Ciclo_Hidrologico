@@ -16,8 +16,9 @@ export const WET_TRAIL_DEPTH = 0.003;
  * - R: profundidad actual (o máxima, en la vista de resultados), tal como la calcula el modelo.
  * - G, B: velocidad en el centro de la celda, la misma que usan las flechas.
  * - A: huella mojada, proporcional a la profundidad máxima alcanzada hasta 3 mm.
+ * En la vista de peligro, G es la clase de peligro máxima (0–6) y B vale 0.
  */
-export function packField(sim: CitySim, useMax: boolean, out: Float32Array): void {
+export function packField(sim: CitySim, useMax: boolean, out: Float32Array, hazard = false): void {
   const N = sim.c.nx * sim.c.ny;
   const h = sim.h, hm = sim.hmaxField, solid = sim.c.solid;
   for (let k = 0; k < N; k++) {
@@ -28,7 +29,11 @@ export function packField(sim: CitySim, useMax: boolean, out: Float32Array): voi
     }
     const d = useMax ? hm[k] : h[k];
     out[o] = d;
-    if (!useMax && h[k] >= H_WET) {
+    if (hazard) {
+      // vista de peligro: G lleva la clase máxima alcanzada (0–6), calculada por el motor
+      out[o + 1] = sim.hazMax[k];
+      out[o + 2] = 0;
+    } else if (!useMax && h[k] >= H_WET) {
       const [u, v] = sim.velocityAt(k);
       out[o + 1] = u;
       out[o + 2] = v;

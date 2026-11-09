@@ -3,6 +3,7 @@
 
 import { compile, type Compiled } from './compile';
 import { CitySim, type SimOptions } from './engine';
+import { AFFECTED_DEPTH_M, damageSummary, exposureOf, hazardAreas } from './hazard';
 import type { Interventions, Scenario, Shared } from './scenario';
 
 export interface Indicators {
@@ -35,6 +36,12 @@ export interface Indicators {
   creekOutsideMax: number;
   creekOverBankMax: number;
   creekPeakIn: number;
+  /** Daños calculados: viviendas a las que llegó el agua (≥ 10 cm junto a la fachada), con peligro H5 o más y H6. */
+  damage: { affected: number; severe: number; failure: number; buildings: { id: string; depth: number; speed: number; hazard: number }[] };
+  /** Vehículos: cuántos movió el agua y cuántos salieron del sector. */
+  vehicles: { total: number; moved: number; out: number; list: { id: string; name: string; state: string; dist: number; hazard: number }[] };
+  /** Área [m²] por clase de peligro máxima (0–6). */
+  hazardArea: number[];
   /** Volumen captado por cada sumidero [m³]. */
   drainTotals: Record<string, number>;
   t: number;
@@ -77,6 +84,13 @@ export function indicators(sim: CitySim): Indicators {
     creekOutsideMax: Math.max(0, ...sim.samples.map((q) => q.creek?.qOutside ?? 0)),
     creekOverBankMax: sim.c.creek ? Math.max(-9, ...sim.samples.map((q) => (q.creek ? q.creek.level - sim.c.creek!.bankLevel : -9))) : -9,
     creekPeakIn: Math.max(0, ...sim.samples.map((q) => q.creek?.qin ?? 0)),
+    damage: (() => {
+      const ex = exposureOf(sim);
+      const d = damageSummary(ex);
+      return { affected: d.affected, severe: d.severe, failure: d.failure, buildings: ex.filter((e) => e.depth >= AFFECTED_DEPTH_M).map((e) => ({ id: e.id, depth: e.depth, speed: e.speed, hazard: e.hazard })) };
+    })(),
+    vehicles: { total: sim.drift.length, moved: sim.drift.filter((o) => o.tMoved >= 0).length, out: sim.drift.filter((o) => o.state === 'fuera').length, list: sim.drift.map((o) => ({ id: o.id, name: o.name, state: o.state, dist: o.dist, hazard: o.hazard })) },
+    hazardArea: hazardAreas(sim.hazMax, sim.c.solid, sim.c.area),
     drainTotals: Object.fromEntries(sim.c.drains.map((d, k) => [d.id, sim.drainTotal[k]])),
     t: sim.t,
   };

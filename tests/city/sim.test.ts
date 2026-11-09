@@ -20,6 +20,8 @@ import { depthRampTexture } from '../../src/city/render/stormFx';
 import { SewerModel, buildNodeTable, circ, fullFlow, inletCapture, normalDepth, windowK, type CompiledSewer, type SNode, type SPipe } from '../../src/city/sim/sewer';
 import { epmChecks } from '../../src/city/sim/sewerCheck';
 import { creekHydrograph } from '../../src/city/sim/engine';
+import { HAZARD, bulkingFactor, buildingRings, buildingExposure, damageSummary, exposureOf, hazardClass } from '../../src/city/sim/hazard';
+import { budgetTotal, budgetValues } from '../../src/city/ui/RainBudget';
 import * as THREE from 'three';
 
 interface Result {
@@ -812,6 +814,122 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
   const half = circ(D, D / 2), full = circ(D, D);
   const eA = Math.abs(half.A - (Math.PI * D * D) / 8), eR = Math.abs(half.R - D / 4), eF = Math.abs(full.A - (Math.PI * D * D) / 4);
   record({ id: 'S7', kind: 'obligatoria', name: 'Geometría de la sección circular (área y radio hidráulico a medio tubo y lleno)', tolerance: 'a medio tubo A = π·D²/8 y R = D/4; lleno A = π·D²/4 (error < 10⁻¹²)', measured: `D = 0,6 m: A½ = ${half.A.toFixed(6)} m², R½ = ${half.R.toFixed(6)} m, A lleno = ${full.A.toFixed(6)} m²`, pass: eA < 1e-12 && eR < 1e-12 && eF < 1e-12 });
+}
+
+// ---------------------------------------------------------------- Peligro, daños, vehículos y lodo
+{
+  // H1) Clasificación de peligro: los límites de la tabla de la guía AIDR 7-3 (Smith et al., 2014)
+  const cases: [number, number, number][] = [
+    [0.005, 1, 0], // seco (< 1 cm)
+    [0.3, 1, 1], [0.31, 0.5, 2], [0.3, 1.01, 2], [0.5, 1.2, 2], [0.5, 1.21, 4], [1.2, 0.5, 3], [1.21, 0.4, 4], [2, 0.5, 4], [2.01, 0.1, 5],
+    [0.2, 2.01, 5], [4, 1, 5], [4.01, 0.1, 6], [1, 4.01, 6], [1.5, 2.7, 6], [0.1, 3.9, 5],
+  ];
+  const bad = cases.filter(([d, v, k]) => hazardClass(d, v) !== k);
+  // monotonía: más profundidad o más velocidad nunca baja la clase
+  let mono = true;
+  for (let d = 0.01; d < 5; d += 0.07) for (let v = 0; v < 5; v += 0.09) if (hazardClass(d + 0.07, v) < hazardClass(d, v) || hazardClass(d, v + 0.09) < hazardClass(d, v)) mono = false;
+  record({ id: 'H1', kind: 'obligatoria', name: 'Clases de peligro H1–H6 según profundidad, velocidad y su producto', tolerance: `los ${cases.length} casos de borde de la tabla de la guía (D ≤ 0,3/0,5/1,2/2/4 m; V ≤ 2/2/2/2/4 m/s; D·V ≤ 0,3/0,6/0,6/1/4 m²/s) dan la clase esperada, y la clase nunca baja al aumentar D o V`, measured: `${cases.length - bad.length} de ${cases.length} casos correctos${bad.length ? ` (fallan: ${bad.map(([d, v, k]) => `${d} m · ${v} m/s → ${hazardClass(d, v)} y no ${k}`).join('; ')})` : ''}; monotonía ${mono ? 'sí' : 'no'}; clases ${HAZARD.slice(1).map((h) => h.code).join(', ')}`, pass: bad.length === 0 && mono });
+}
+{
+  // H2) Exposición de viviendas: anillo de celdas libres y máximos junto a cada una
+  const nx = 6, ny = 5;
+  const building = new Int16Array(nx * ny).fill(-1), solid = new Uint8Array(nx * ny);
+  for (const k of [2 * nx + 2, 2 * nx + 3]) {
+    building[k] = 0;
+    solid[k] = 1;
+  }
+  const rings = buildingRings(nx, ny, building, solid, 1);
+  const hmax = new Float32Array(nx * ny), vmax = new Float32Array(nx * ny), hz = new Uint8Array(nx * ny);
+  hmax[2 * nx + 1] = 0.8; vmax[2 * nx + 1] = 1.5; hz[2 * nx + 1] = hazardClass(0.8, 1.5);
+  hmax[0] = 3; hz[0] = 6; // lejos de la casa: no cuenta
+  const ex = buildingExposure(rings, ['casa'], hmax, vmax, hz);
+  const ds = damageSummary(ex);
+  record({ id: 'H2', kind: 'obligatoria', name: 'Daño por vivienda: se mide en las celdas que tocan sus muros', tolerance: 'una casa de 2 celdas tiene 6 celdas vecinas; toma la profundidad, velocidad y clase máximas de ese anillo e ignora el agua lejana; 10 cm o más la cuentan como afectada y H5 o más como expuesta a daño estructural', measured: `anillo de ${rings[0].length} celdas; profundidad ${ex[0].depth} m, velocidad ${ex[0].speed} m/s, clase ${HAZARD[ex[0].hazard].code}; afectadas ${ds.affected}, con H5+ ${ds.severe}`, pass: rings[0].length === 6 && Math.abs(ex[0].depth - 0.8) < 1e-6 && ex[0].hazard === 5 && ds.affected === 1 && ds.severe === 1 });
+}
+{
+  // H3) Vehículos: quietos con peligro bajo; el agua los mueve desde H2, nunca entran a un edificio y es reproducible
+  const W = 40, Hh = 10;
+  const sc = mk({ W, H: Hh, ground: (x) => 2 - 0.01 * x, cover: 'asfalto', buildings: [{ id: 'muro', polygon: rect(30, 0, 32, 10), floors: 1, heightM: 3, downspout: [29.5, 5], style: 'revoque', kind: 'didactico' }], outlets: [] });
+  sc.exposed = [{ id: 'a', name: 'carro a', kind: 'carro', at: [10.5, 5.2], headingDeg: 0 }, { id: 'b', name: 'carro b', kind: 'carro', at: [12.5, 2.2], headingDeg: 0 }];
+  const run = (depth: number) => {
+    const sh = shared(1, 0, 1, 2);
+    const c = compile(sc, sh, baseInterventions(sc));
+    const h0 = new Float64Array(c.nx * c.ny);
+    for (let k = 0; k < h0.length; k++) if (!c.solid[k] && k % c.nx < 6) h0[k] = depth;
+    const sim = new CitySim(c, sh, { initialDepth: h0 });
+    noRain(sim);
+    let inside = 0;
+    sim.onStep = () => {
+      for (const o of sim.drift) {
+        const k = Math.floor(o.y) * c.nx + Math.floor(o.x);
+        if (o.x >= 0 && o.y >= 0 && o.x < W && o.y < Hh && c.solid[k]) inside++;
+      }
+    };
+    sim.runToEnd();
+    return { sim, inside };
+  };
+  const low = run(0.15), high = run(1.6), high2 = run(1.6);
+  const movedLow = low.sim.drift.filter((o) => o.tMoved >= 0).length;
+  const movedHigh = high.sim.drift.filter((o) => o.tMoved >= 0).length;
+  const same = high.sim.drift.every((o, q) => o.x === high2.sim.drift[q].x && o.y === high2.sim.drift[q].y && o.state === high2.sim.drift[q].state);
+  record({ id: 'H3', kind: 'obligatoria', name: 'Vehículos: el agua los mueve solo con peligro H2 o mayor, no atraviesan edificios y el resultado es reproducible', tolerance: 'una ola de 15 cm no mueve ninguno; una de 1,6 m mueve los dos; ninguno entra a una celda de edificio; dos corridas iguales dejan los vehículos exactamente en el mismo lugar', measured: `15 cm: movidos ${movedLow} (peligro máximo ${low.sim.drift.map((o) => HAZARD[o.hazard].code).join(', ')}); 1,6 m: movidos ${movedHigh}, recorridos ${high.sim.drift.map((o) => fmt(o.dist, 1)).join(' y ')} m, estados ${high.sim.drift.map((o) => o.state).join(', ')}; pasos dentro de edificios ${low.inside + high.inside}; reproducible ${same ? 'sí' : 'no'}`, pass: movedLow === 0 && movedHigh === 2 && low.inside + high.inside === 0 && same });
+}
+{
+  // H4) Lodo: el hidrograma de la mezcla es el del agua por 1/(1 − Cv) y entra completo al cálculo
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const cap = compile(sc, sc.defaults, baseInterventions(sc)).creek!.capacity;
+  const vol = (cv: number) => {
+    const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 5, durationMin: 10 }, simMinutes: 12, creek: { peakM3s: 1.2 * cap, timeToPeakMin: 2, startMin: 1, sedimentCv: cv } };
+    const hg = creekHydrograph(sh.creek!, sc.creek!.baseM3s);
+    let v = 0;
+    for (let k = 1; k < hg.t.length; k++) v += 0.5 * (hg.q[k] + hg.q[k - 1]) * (hg.t[k] - hg.t[k - 1]);
+    v += hg.q[hg.q.length - 1] * (sh.simMinutes * 60 - hg.t[hg.t.length - 1]);
+    const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+    sim.runToEnd();
+    return { peak: Math.max(...hg.q), v, inn: sim.bal.creekIn, res: Math.abs(sim.bal.residual) / (sim.bal.precipitation + sim.bal.inflow) };
+  };
+  const w = vol(0), m = vol(0.3);
+  const bf = bulkingFactor(0.3);
+  const eP = Math.abs(m.peak - bf * w.peak) / (bf * w.peak), eV = Math.abs(m.inn - m.v) / m.v;
+  record({ id: 'H4', kind: 'obligatoria', name: 'Creciente con lodo: factor de volumen 1/(1 − Cv) y volumen completo', tolerance: 'con 30 % de sedimentos el pico de la mezcla es 1,43 veces el del agua (error < 10⁻¹²); el volumen que entra al cálculo es el del hidrograma (error < 10⁻⁹) y el balance cierra (residuo < 10⁻⁹)', measured: `pico agua ${fmt(w.peak, 1)} m³/s, mezcla ${fmt(m.peak, 1)} m³/s (factor ${fmt(bf, 4)}); volumen ${fmt(m.inn, 1)} m³ frente a ${fmt(m.v, 1)} m³ (error ${eV.toExponential(1)}); residuo ${m.res.toExponential(1)}`, pass: eP < 1e-12 && eV < 1e-9 && m.res < 1e-9 });
+}
+{
+  // H5) Daños de la creciente: más caudal, más daño (monotonía) y la vista de peligro lee el mismo cálculo
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const cap = compile(sc, sc.defaults, baseInterventions(sc)).creek!.capacity;
+  const out = [0.6, 1.5, 3].map((f) => {
+    const sh: Shared = { ...sc.defaults, simMinutes: 22, creek: { peakM3s: f * cap, timeToPeakMin: 6, startMin: 2 } };
+    const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+    sim.runToEnd();
+    const ex = exposureOf(sim);
+    const ds = damageSummary(ex);
+    const orilla = ex.filter((e) => e.id.startsWith('orilla-'));
+    let a3 = 0;
+    for (let k = 0; k < sim.hazMax.length; k++) if (sim.hazMax[k] >= 3 && !sim.c.solid[k]) a3 += sim.c.area;
+    return { f, aff: ds.affected, sev: ds.severe, orillaMax: Math.max(...orilla.map((e) => e.depth)), a3, moved: sim.drift.filter((o) => o.tMoved >= 0).length };
+  });
+  const mono = out.every((o, i) => i === 0 || (o.aff >= out[i - 1].aff && o.sev >= out[i - 1].sev && o.orillaMax >= out[i - 1].orillaMax && o.a3 >= out[i - 1].a3));
+  record({ id: 'H5', kind: 'verificacion', name: 'Creciente: el daño calculado crece con el caudal', tolerance: 'con 60 % de la capacidad no llega agua a las casas de la orilla; con 150 % sí; con 300 % hay casas con peligro H5 o mayor y se mueven vehículos; viviendas afectadas, expuestas, profundidad en la orilla y área con H3 o más nunca bajan al aumentar el caudal', measured: out.map((o) => `${fmt(o.f * 100, 0)} %: ${o.aff} afectadas, ${o.sev} con H5+, orilla ${fmt(o.orillaMax, 2)} m, H3+ ${fmt(o.a3, 0)} m², vehículos movidos ${o.moved}`).join(' | '), pass: mono && out[0].orillaMax < 0.1 && out[1].orillaMax >= 0.1 && out[2].sev > 0 && out[2].moved > 0 });
+}
+{
+  // B1) Reparto «¿Adónde fue la lluvia?»: suma exacta y ninguna parte negativa, con y sin red separada
+  const rows: string[] = [];
+  let ok = true;
+  for (const [id, f, err] of [['calle-de-prueba', 0, true], ['ladera-quebrada', 0, false], ['ladera-quebrada', 2.5, true]] as const) {
+    const sc = builtinScenarios()[id];
+    const iv = baseInterventions(sc);
+    iv.erradas = err;
+    const cap = sc.creek ? compile(sc, sc.defaults, iv).creek!.capacity : 0;
+    const sh: Shared = { ...sc.defaults, simMinutes: 20, creek: f ? { peakM3s: f * cap, timeToPeakMin: 6, startMin: 2 } : null };
+    const sim = new CitySim(compile(sc, sh, iv), sh);
+    sim.runToEnd();
+    const v = budgetValues(sim.bal), t = budgetTotal(sim.bal);
+    const sum = Object.values(v).reduce((a, b) => a + b, 0);
+    const neg = Object.values(v).some((x) => x < -1e-9);
+    if (neg || Math.abs(t - sum) / t > 1e-9) ok = false;
+    rows.push(`${id}${f ? ` con creciente ${fmt(f * 100, 0)} %` : ''}${err ? ' y conexiones erradas' : ''}: entró ${fmt(t, 1)} m³, partes ${fmt(sum, 1)} m³ (error ${(Math.abs(t - sum) / t).toExponential(1)}), alcantarillado ${fmt(v.red, 1)} m³`);
+  }
+  record({ id: 'B1', kind: 'obligatoria', name: 'El reparto del agua suma exactamente lo que entró y ninguna parte es negativa', tolerance: 'suma de partes = lluvia + entrada + aportes de las tuberías desde fuera (error < 10⁻⁹); todas las partes ≥ 0, también cuando la red descarga a la quebrada o rebosa', measured: rows.join(' | '), pass: ok });
 }
 
 // ---------------------------------------------------------------- Sensibilidad al límite de Froude (información para docentes)

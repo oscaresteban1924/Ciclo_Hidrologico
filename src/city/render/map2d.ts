@@ -8,6 +8,10 @@ import type { Scenario } from '../sim/scenario';
 import type { TracerSet } from '../sim/tracers';
 import { TRACER_COLORS, TRACER_TRAIL_MOVING } from './tracerColors';
 import { depthColor, hexToRgb } from './palette';
+import { HAZARD } from '../sim/hazard';
+import { showsSystem, type NetFilter } from './sewerColors';
+
+const HAZ_RGB = HAZARD.map((h) => hexToRgb(h.color));
 import type { Pick, ViewMode } from './sectorScene';
 
 export class SectorMap2D {
@@ -27,6 +31,7 @@ export class SectorMap2D {
   private hl: [number, number] | null = null;
   view: ViewMode = 'realista';
   cut = false;
+  netFilter: NetFilter = 'ambas';
   showArrows = true;
   amplify = 1;
 
@@ -62,6 +67,9 @@ export class SectorMap2D {
   }
   setCut(on: boolean): void {
     this.cut = on;
+  }
+  setNetFilter(f: NetFilter): void {
+    this.netFilter = f;
   }
   setRain(): void {}
   setPinned(): void {}
@@ -105,11 +113,20 @@ export class SectorMap2D {
       const base = (this.view === 'materiales' ? mat : real)[c.cover[k]];
       const shade = 0.75 + 0.3 * ((c.z[k] - zmin) / Math.max(1e-6, zmax - zmin));
       let r = base[0] * shade, g = base[1] * shade, b = base[2] * shade;
-      if (this.view === 'resultados') r = g = b = (r + g + b) / 3;
+      if (this.view === 'resultados' || this.view === 'peligro') r = g = b = (r + g + b) / 3;
       if (c.solid[k]) {
         r *= 0.75;
         g *= 0.75;
         b *= 0.75;
+      } else if (sim && this.view === 'peligro') {
+        // clase de peligro máxima calculada (misma paleta de la leyenda)
+        const hc = sim.hazMax[k];
+        if (hc > 0) {
+          const [hr, hg, hb] = HAZ_RGB[hc];
+          r = r * 0.08 + hr * 0.92;
+          g = g * 0.08 + hg * 0.92;
+          b = b * 0.08 + hb * 0.92;
+        }
       } else if (sim) {
         const h = this.view === 'resultados' ? sim.hmaxField[k] : sim.h[k];
         depthColor(h, tmp, 0);
@@ -149,18 +166,41 @@ export class SectorMap2D {
         const env = sim ? { h: sim.h, z: c.z, area: c.area, dx: c.dx } : undefined;
         const col = ['#2f6fb3', '#8a5a2b'];
         c.sewer.pipes.forEach((p, k) => {
+          if (!showsSystem(this.netFilter, p.system)) return;
           const a = c.sewer!.nodes[p.a], b = c.sewer!.nodes[p.b];
           const load = sw ? sw.fillOf(k, env) > 1.001 : false;
-          G.strokeStyle = load ? '#e03131' : col[p.system];
-          G.lineWidth = p.role === 'colector' ? (load ? 5 : 3) : 1.5;
+          // la tubería conserva el color de su red; en carga se le añade un borde rojo
+          if (load) {
+            G.strokeStyle = '#e03131';
+            G.lineWidth = 7;
+            G.beginPath();
+            G.moveTo(...P(a.x, a.y));
+            G.lineTo(...P(b.x, b.y));
+            G.stroke();
+          }
+          G.strokeStyle = col[p.system];
+          G.lineWidth = p.role === 'colector' ? 3 : 1.5;
           G.beginPath();
           G.moveTo(...P(a.x, a.y));
           G.lineTo(...P(b.x, b.y));
           G.stroke();
+          // sentido del flujo de diseño (de a hacia b) en la mitad del colector
+          if (p.role === 'colector') {
+            const [ax, ay] = P(a.x, a.y), [bx, by] = P(b.x, b.y);
+            const mx = (ax + bx) / 2, my = (ay + by) / 2, L = Math.hypot(bx - ax, by - ay) || 1;
+            const ux = (bx - ax) / L, uy = (by - ay) / L;
+            G.fillStyle = col[p.system];
+            G.beginPath();
+            G.moveTo(mx + ux * 6, my + uy * 6);
+            G.lineTo(mx - ux * 4 - uy * 5, my - uy * 4 + ux * 5);
+            G.lineTo(mx - ux * 4 + uy * 5, my - uy * 4 - ux * 5);
+            G.closePath();
+            G.fill();
+          }
         });
         const dt = sim && sim.lastDt > 0 ? sim.lastDt : 1;
         c.sewer.nodes.forEach((n, k) => {
-          if (n.kind === 'caja-sumidero' || n.outfall) return;
+          if (n.kind === 'caja-sumidero' || n.outfall || !showsSystem(this.netFilter, n.system)) return;
           const [px, py] = P(n.x, n.y);
           G.fillStyle = col[n.system];
           G.beginPath();
@@ -184,7 +224,7 @@ export class SectorMap2D {
       G.fillRect(px - 5, py - 4, 10, 8);
     }
     // Flechas
-    if (sim && this.showArrows && this.view !== 'resultados') {
+    if (sim && this.showArrows && this.view !== 'resultados' && this.view !== 'peligro') {
       G.strokeStyle = 'rgba(255,255,255,0.95)';
       G.lineWidth = 1.6;
       for (const a of flowArrows(sim, Math.max(2, Math.round(3 / c.dx)), 0.003, 0.03)) {

@@ -15,6 +15,7 @@ import type { CitySim } from '../sim/engine';
 import type { Scenario } from '../sim/scenario';
 import { prng } from '../scenarios/primitives';
 import { depthColor } from './palette';
+import { HAZARD } from '../sim/hazard';
 import { FIELD_CHANNELS, drainFlows, flowLevel, outletFlows, packField, spoutFlows, tankFx } from './fxData';
 
 export interface FxHost {
@@ -50,6 +51,9 @@ export interface FxUniforms {
   uWet: { value: number };
   uWetTrail: { value: number };
   uAmp: { value: number };
+  /** Lodo de la creciente [0–1] (tiñe el agua honda de la quebrada) y colores de las clases de peligro. */
+  uMud: { value: number };
+  uHaz: { value: THREE.Color[] };
 }
 
 export const FLOW_CYCLE = 1.6; // s: periodo de reinicio de las vetas (técnica de dos fases)
@@ -430,6 +434,7 @@ export class StormFx {
   private tmpDir = new THREE.Vector3();
   private lastFieldT = -1;
   private lastFieldMax = false;
+  private lastFieldHaz = false;
   readonly fxTimeMat: THREE.ShaderMaterial[] = [];
   /** Últimos niveles mostrados (para el panel docente y las pruebas en el navegador). */
   readonly levels = { spouts: 0, drains: 0, outlets: 0, tanks: 0, rainDrops: 0, splashes: 0, density: 1 };
@@ -463,6 +468,8 @@ export class StormFx {
       uWet: { value: 0 },
       uWetTrail: { value: 1 },
       uAmp: { value: 1 },
+      uMud: { value: 0 },
+      uHaz: { value: HAZARD.map((c) => new THREE.Color(c.color)) },
     };
     const alta = host.quality === 'alta';
     this.rainFar = this.makeRain(alta ? 7000 : 2600, { len: 1.3, width: 0.032 });
@@ -823,6 +830,7 @@ export class StormFx {
       g.computeVertexNormals();
       const pipes = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#4a5058', roughness: 0.6, metalness: 0.3 }));
       pipes.castShadow = true;
+      pipes.userData.cutHide = true; // bajantes de las fachadas: estorban en la vista bajo la calle
       this.group.add(pipes);
     }
     if (jetPos.length) {
@@ -840,6 +848,7 @@ export class StormFx {
       this.jets = new THREE.Mesh(g, mat);
       this.jets.renderOrder = 5;
       this.jets.frustumCulled = false;
+      this.jets.userData.cutHide = true;
       this.group.add(this.jets);
       // espuma donde cae el chorro
       const lg = new THREE.CircleGeometry(0.55, 28);
@@ -854,9 +863,21 @@ export class StormFx {
       im.userData.owner = Int32Array.from(landing.map((l) => l.owner));
       im.renderOrder = 5;
       im.frustumCulled = false;
+      im.userData.cutHide = true;
       this.landings = im;
       this.group.add(im);
     }
+    this.applyCut();
+  }
+
+  private cutMode = false;
+  /** En la vista bajo la calle se ocultan las bajantes y sus chorros (no son parte de las redes). */
+  setCut(on: boolean): void {
+    this.cutMode = on;
+    this.applyCut();
+  }
+  private applyCut(): void {
+    for (const o of this.group.children) if (o.userData.cutHide) o.visible = !this.cutMode;
   }
 
   /**
@@ -963,9 +984,10 @@ export class StormFx {
     return this.storm;
   }
 
-  updateField(sim: CitySim, useMax: boolean): void {
-    if (!this.field || (sim.t === this.lastFieldT && useMax === this.lastFieldMax)) return;
-    packField(sim, useMax, this.fieldData);
+  updateField(sim: CitySim, useMax: boolean, hazard = false): void {
+    if (!this.field || (sim.t === this.lastFieldT && useMax === this.lastFieldMax && hazard === this.lastFieldHaz)) return;
+    packField(sim, useMax, this.fieldData, hazard);
+    this.lastFieldHaz = hazard;
     const f = this.fieldData, hf = this.fieldHalf;
     const toHalf = THREE.DataUtils.toHalfFloat;
     for (let i = 0; i < f.length; i++) hf[i] = toHalf(f[i]);
@@ -1008,11 +1030,11 @@ export class StormFx {
     const groundY = 0;
     const camAbove = camera.position.y - groundY;
     const far = this.rainFar, near = this.rainNear;
-    far.mesh.visible = raining && opts.view !== 2;
+    far.mesh.visible = raining && opts.view < 2;
     far.geo.instanceCount = Math.round(far.n * dens * this.density);
     far.mat.uniforms.uPix.value = pix;
     far.mat.uniforms.uOpacity.value = op * (h.reducedMotion ? 0.6 : 1);
-    near.mesh.visible = raining && opts.view !== 2 && camAbove < 45;
+    near.mesh.visible = raining && opts.view < 2 && camAbove < 45;
     near.geo.instanceCount = Math.round(near.n * dens * this.density);
     near.mat.uniforms.uPix.value = pix;
     near.mat.uniforms.uOpacity.value = op * 0.9 * (1 - THREE.MathUtils.smoothstep(camAbove, 14, 45)) * (h.reducedMotion ? 0.6 : 1);

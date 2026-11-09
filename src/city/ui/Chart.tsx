@@ -1,5 +1,5 @@
-// Gráfica de líneas en SVG: una o dos series (A punteada, B continua), leyenda siempre visible para
-// dos series, etiqueta directa al final de cada línea y lectura con el puntero o el teclado.
+// Gráfica de líneas en SVG: una o varias series, leyenda siempre visible para dos o más, rótulo directo al
+// final de cada línea (en un margen propio, sin superponerse) y lectura con el puntero o el teclado.
 
 import { useId, useMemo, useState } from 'react';
 
@@ -9,6 +9,10 @@ export interface Series {
   points: [number, number][];
   color: string;
   dash?: boolean;
+  /** Rótulo corto al final de la línea (por defecto, `id`). */
+  label?: string;
+  /** Rellena el área bajo la línea (tenue). */
+  fill?: boolean;
 }
 
 export function LineChart({
@@ -19,6 +23,8 @@ export function LineChart({
   height = 150,
   marker,
   refY,
+  xMax: xMaxFixed,
+  nowX,
 }: {
   title: string;
   series: Series[];
@@ -29,9 +35,14 @@ export function LineChart({
   marker?: { x: number; label: string };
   /** Línea horizontal de referencia opcional (p. ej., capacidad del cauce), en unidades de y. */
   refY?: { y: number; label: string };
+  /** Dominio fijo del eje x [min] (si no, se ajusta a los datos). */
+  xMax?: number;
+  /** Instante actual [min]: línea vertical tenue. */
+  nowX?: number;
 }) {
   const id = useId();
-  const W = 340, H = height, L = 46, R = 14, T = 12, B = 26;
+  const multi = series.length > 1;
+  const W = 340, H = height, L = 46, R = multi ? 66 : 14, T = 12, B = 26;
   const [hover, setHover] = useState<number | null>(null);
   const { xMax, yMax } = useMemo(() => {
     let xm = 1, ym = 0;
@@ -39,9 +50,10 @@ export function LineChart({
       if (x > xm) xm = x;
       if (y > ym) ym = y;
     }
+    if (xMaxFixed && xMaxFixed > xm) xm = xMaxFixed;
     if (refY && refY.y > ym) ym = refY.y;
     return { xMax: xm, yMax: ym > 0 ? ym * 1.12 : 1 };
-  }, [series, refY]);
+  }, [series, refY, xMaxFixed]);
   const sx = (x: number) => L + (x / xMax) * (W - L - R);
   const sy = (y: number) => T + (1 - y / yMax) * (H - T - B);
   const ticksY = [0, yMax / 2, yMax];
@@ -64,15 +76,30 @@ export function LineChart({
     setHover(best);
   };
   const empty = series.every((s) => s.points.length < 2);
+  // rótulos al final de cada línea, en el margen derecho, separados al menos 12 px
+  const ends = multi
+    ? series
+        .filter((s) => s.points.length > 1)
+        .map((s) => {
+          const p = s.points[s.points.length - 1];
+          // el rótulo va junto al final de la línea (o en el margen derecho si la línea llega hasta él)
+          const x = sx(p[0]);
+          return { s, x, lx: Math.min(x + 6, W - R + 4), y0: sy(p[1]), y: sy(p[1]) };
+        })
+        .sort((a, b) => a.y0 - b.y0)
+    : [];
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 12) ends[i].y = ends[i - 1].y + 12;
+  const over = ends.length ? ends[ends.length - 1].y - (H - B - 2) : 0;
+  if (over > 0) for (const e of ends) e.y -= over;
   return (
     <figure className="city-chart">
       <figcaption id={`${id}-t`}>{title}</figcaption>
-      {series.length > 1 && (
+      {multi && (
         <ul className="chart-legend">
           {series.map((s) => (
-            <li key={s.id}>
-              <svg width="26" height="10" aria-hidden="true">
-                <line x1="1" y1="5" x2="25" y2="5" stroke={s.color} strokeWidth="2.5" strokeDasharray={s.dash ? '5 3' : undefined} />
+            <li key={s.id} title={s.name}>
+              <svg width="22" height="10" aria-hidden="true">
+                <line x1="1" y1="5" x2="21" y2="5" stroke={s.color} strokeWidth="2.5" strokeDasharray={s.dash ? '5 3' : undefined} />
               </svg>
               {s.name}
             </li>
@@ -107,8 +134,8 @@ export function LineChart({
         ))}
         {refY && (
           <g>
-            <line x1={L} x2={W - R} y1={sy(refY.y)} y2={sy(refY.y)} className="marker" strokeDasharray="5 4" />
-            <text x={L + 4} y={sy(refY.y) - 4} className="tick">
+            <line x1={L} x2={W - R} y1={sy(refY.y)} y2={sy(refY.y)} className="ref" />
+            <text x={W - R - 4} y={sy(refY.y) - 4} textAnchor="end" className="tick ref-label">
               {refY.label}
             </text>
           </g>
@@ -121,23 +148,31 @@ export function LineChart({
             </text>
           </g>
         )}
+        {nowX !== undefined && nowX > 0 && nowX <= xMax && <line x1={sx(nowX)} x2={sx(nowX)} y1={T} y2={H - B} className="now" />}
+        {series.map((s) =>
+          s.fill && s.points.length > 1 ? (
+            <polygon
+              key={`f${s.id}`}
+              points={`${sx(s.points[0][0]).toFixed(1)},${sy(0).toFixed(1)} ${s.points.map(([x, y]) => `${sx(x).toFixed(1)},${sy(y).toFixed(1)}`).join(' ')} ${sx(s.points[s.points.length - 1][0]).toFixed(1)},${sy(0).toFixed(1)}`}
+              fill={s.color}
+              opacity="0.16"
+            />
+          ) : null,
+        )}
         {series.map((s) =>
           s.points.length > 1 ? (
             <polyline key={s.id} points={s.points.map(([x, y]) => `${sx(x).toFixed(1)},${sy(y).toFixed(1)}`).join(' ')} fill="none" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash ? '6 4' : undefined} strokeLinejoin="round" />
           ) : null,
         )}
-        {series.length > 1 &&
-          (() => {
-            // etiquetas directas al final de cada línea, separadas si quedan muy cerca
-            const ends = series.map((s) => ({ s, p: s.points[s.points.length - 1] })).filter((e) => e.p).map((e) => ({ id: e.s.id, x: Math.min(sx(e.p[0]) - 2, W - R - 2), y: sy(e.p[1]) - 6 }));
-            ends.sort((a, b) => a.y - b.y);
-            for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 12) ends[i].y = ends[i - 1].y + 12;
-            return ends.map((e) => (
-              <text key={`l${e.id}`} x={e.x} y={Math.min(e.y, H - B - 2)} textAnchor="end" className="direct">
-                {e.id}
-              </text>
-            ));
-          })()}
+        {ends.map((e) => (
+          <g key={`l${e.s.id}`}>
+            <circle cx={e.x} cy={e.y0} r="2.5" fill={e.s.color} />
+            <rect x={e.lx} y={e.y - 6} width="3" height="8" fill={e.s.color} />
+            <text x={e.lx + 6} y={e.y + 1} className="direct">
+              {e.s.label ?? e.s.id}
+            </text>
+          </g>
+        ))}
         {hover !== null && hx !== undefined && (
           <g>
             <line x1={sx(hx)} x2={sx(hx)} y1={T} y2={H - B} className="cross" />
@@ -148,7 +183,7 @@ export function LineChart({
           </g>
         )}
         {empty && (
-          <text x={W / 2} y={H / 2} textAnchor="middle" className="tick">
+          <text x={(L + W - R) / 2} y={H / 2} textAnchor="middle" className="tick">
             Aún no hay datos: inicia la lluvia.
           </text>
         )}

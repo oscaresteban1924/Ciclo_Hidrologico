@@ -113,6 +113,33 @@
 .city-label.kind-gotas .city-label-sub:not(:empty) {
   border-left-color: rgba(23, 50, 77, 0.35);
 }
+/* daño calculado (creciente): barra de color de la clase de peligro */
+.city-label.kind-dano {
+  background: rgba(255, 255, 255, 0.96);
+  color: #1f2933;
+  font-weight: 700;
+  border-left: 6px solid var(--dot, #a3241f);
+  border-radius: 6px;
+  padding-left: 7px;
+}
+.city-label.kind-dano .city-label-sub:not(:empty) {
+  border-left-color: rgba(31, 41, 51, 0.3);
+  font-weight: 600;
+}
+/* redes bajo la calle: rótulo del sistema con su color */
+.city-label.kind-red {
+  background: rgba(255, 255, 255, 0.95);
+  color: #1f2933;
+  font-weight: 700;
+  font-size: 0.76rem;
+  border-radius: 6px;
+  border-left: 6px solid var(--dot, #2f6fb3);
+  padding: 2px 7px;
+}
+.city-label.kind-red .city-label-sub:not(:empty) {
+  border-left-color: rgba(31, 41, 51, 0.3);
+  font-weight: 500;
+}
 .city-label.kind-sector {
   background: #ffb000;
   color: #1b1b1b;
@@ -1299,4 +1326,304 @@
 }
 .sewer-dl {
   margin: 8px 0;
+}
+
+/* ---------------------------------------------------------------- alcantarillado y creciente (rediseño) */
+.net-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin: 8px 0 4px;
+}
+.net-bar .segmented {
+  flex: 1 1 220px;
+  margin: 0;
+}
+.net-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+.net-card {
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--water);
+  border-radius: var(--r-m);
+  background: #fff;
+  padding: 8px 10px 6px;
+}
+.net-card-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.92rem;
+}
+.net-dest {
+  font-size: 0.76rem;
+  color: var(--ink-2);
+}
+.meter {
+  position: relative;
+  height: 8px;
+  margin: 8px 0 4px;
+  border-radius: 4px;
+  background: #eef2f3;
+  overflow: visible;
+}
+.meter span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.meter i {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--ink-2);
+}
+.net-line {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.net-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.net-dl dt {
+  color: var(--ink-2);
+}
+.net-dl dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.txt-danger {
+  color: #b42318;
+}
+.city-chart .txt-danger-fill {
+  fill: #b42318;
+}
+.sw-swatch.ring {
+  background: transparent;
+  border: 2.5px solid;
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px 8px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--line-2);
+  border-radius: var(--r-s);
+  background: #fff;
+  min-width: 0;
+}
+.stat.tone-ok {
+  border-top-color: #3d7a3a;
+}
+.stat.tone-warn {
+  border-top-color: #d08a1d;
+}
+.stat.tone-danger {
+  border-top-color: #b42318;
+}
+.stat-l {
+  font-size: 0.74rem;
+  color: var(--ink-2);
+}
+.stat-v {
+  font-size: 1.22rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.stat-s {
+  font-size: 0.72rem;
+  color: var(--ink-2);
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+.preset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-height: 48px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid var(--line-2);
+  border-left: 4px solid var(--line-2);
+  border-radius: var(--r-s);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+.preset span {
+  font-size: 0.74rem;
+  color: var(--ink-2);
+}
+.preset.tone-ok {
+  border-left-color: #3d7a3a;
+}
+.preset.tone-warn {
+  border-left-color: #d08a1d;
+}
+.preset.tone-danger {
+  border-left-color: #b42318;
+}
+.preset.is-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.preset.is-on span {
+  color: #d6e2ea;
+}
+.preset:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.creek-adjust {
+  margin: 6px 0 10px;
+}
+.haz-chip {
+  display: inline-block;
+  min-width: 2.4em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-align: center;
+}
+.haz-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.haz-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hazard-legend {
+  width: min(330px, 44%);
+}
+.dmg-table td,
+.dmg-table th {
+  vertical-align: middle;
+}
+.city-chart .ref {
+  stroke: #9b2121;
+  stroke-width: 1.2;
+  stroke-dasharray: 5 4;
+}
+.city-chart .ref-label {
+  fill: #9b2121;
+  font-weight: 700;
+}
+.city-chart .now {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.city-chart .direct.small {
+  font-size: 9.5px;
+}
+.city-chart .on-water {
+  fill: #fff;
+  paint-order: stroke;
+  stroke: #1f5f99;
+  stroke-width: 2.5px;
+}
+.city-chart .plan-out {
+  font-weight: 700;
+  fill: var(--ink);
+}
+.city-chart .plan-id {
+  font-size: 8.5px;
+}
+.street-sec svg,
+.net-plan svg,
+.sec-chart svg {
+  border-radius: 6px;
+}
+.chart-legend {
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.chart-legend li {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.swatch.ring {
+  background: transparent;
+  border: 2.5px solid;
+  border-radius: 50%;
+}
+.swatch.arrow {
+  background: none;
+  border: 0;
+  color: #2f6fb3;
+  font-size: 0.8rem;
+  line-height: 14px;
+  text-align: center;
+}
+/* leyenda de peligro compacta en pantallas angostas: fichas en dos columnas y texto corto */
+@media (max-width: 600px) {
+  .hazard-legend {
+    width: min(210px, 54%);
+    padding: 6px 8px;
+  }
+  .hazard-legend strong {
+    font-size: 0.74rem;
+  }
+  .hazard-legend .haz-list {
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 6px;
+    font-size: 0.66rem;
+    line-height: 1.15;
+  }
+  .hazard-legend .haz-list li {
+    gap: 4px;
+  }
+  .hazard-legend .haz-chip {
+    min-width: 1.9em;
+    padding: 0 3px;
+    font-size: 0.66rem;
+  }
+}
+@media (max-width: 600px) {
+  .city-legend.hazard-legend {
+    top: auto;
+    bottom: 84px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+  }
+  .hazard-legend .haz-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }

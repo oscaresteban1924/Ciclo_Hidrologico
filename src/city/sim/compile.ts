@@ -2,7 +2,7 @@
 // Es determinista: la misma entrada produce exactamente la misma malla (se verifica con un hash).
 
 import { COVERS, COVER_LIST, G, NUMERICS, coverIndex, mmhToMs, type CoverId } from './constants';
-import type { Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
+import type { ExposedObject, Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
 import { buildNodeTable, fullFlow, windowK, type CompiledSewer, type SInlet, type SNode, type SPipe } from './sewer';
 
 export interface CompiledBuilding {
@@ -83,6 +83,8 @@ export interface Compiled {
   erradaNode: Int32Array;
   /** Quebrada con creciente (si el escenario la trae). */
   creek: CompiledCreek | null;
+  /** Vehículos expuestos (no participan en el flujo; el motor calcula si el agua los mueve). */
+  exposed: ExposedObject[];
   hash: string;
 }
 
@@ -607,6 +609,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     sewer,
     erradaNode,
     creek,
+    exposed: (sc.exposed ?? []).map((o) => ({ ...o, at: [o.at[0], o.at[1]] as Pt })),
     hash: (h >>> 0).toString(16).padStart(8, '0'),
   };
 }

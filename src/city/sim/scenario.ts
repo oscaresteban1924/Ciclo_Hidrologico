@@ -199,6 +199,11 @@ export interface CreekSpec {
   section: { at: Pt; halfWidthM: number; bankHalfWidthM: number; name: string };
   /** Caudal base mientras dura la creciente [m³/s]. */
   baseM3s: number;
+  /**
+   * Puente peatonal sobre el cauce (dibujo y comprobación de nivel; en el cálculo no obstruye el paso del
+   * agua). El tablero queda `deckAboveBankM` sobre la orilla; la viga, `beamM` por debajo del tablero.
+   */
+  footbridge?: { id: string; name: string; x: number; halfLengthM: number; widthM: number; deckAboveBankM: number; beamM: number };
 }
 
 /** Creciente: hidrograma triangular (tiempo al pico tp, base 2,67·tp) sobre el caudal base. */
@@ -206,6 +211,22 @@ export interface CreekFlood {
   peakM3s: number;
   timeToPeakMin: number;
   startMin: number;
+  /**
+   * Lodo y piedras que arrastra: concentración de sedimentos en volumen (0–0,3). La mezcla ocupa 1/(1 − Cv)
+   * veces el volumen del agua; el modelo la mueve como agua (no simula el comportamiento del lodo).
+   */
+  sedimentCv?: number;
+}
+
+/** Objeto expuesto a la creciente (vehículo estacionado). Se mueve si el peligro supera su estabilidad. */
+export interface ExposedObject {
+  id: string;
+  name: string;
+  kind: 'carro' | 'moto';
+  at: Pt;
+  /** Rumbo inicial [grados, 0 = este, antihorario]. */
+  headingDeg: number;
+  color?: string;
 }
 
 export interface OutletSpec {
@@ -313,6 +334,8 @@ export interface Scenario {
   sewer?: SewerSpec;
   /** Quebrada con creciente simulable. Opcional. */
   creek?: CreekSpec;
+  /** Vehículos estacionados expuestos a la creciente. Opcional. */
+  exposed?: ExposedObject[];
   /** Elementos decorativos: no participan en el cálculo. */
   decor?: Decor;
   defaults: Shared;
@@ -437,6 +460,7 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
     const cf = sh.creek as Partial<CreekFlood>;
     if (sc && !sc.creek) errors.push('Este escenario no tiene quebrada: no admite creciente.');
     if (!isNum(cf.peakM3s, 0, 500) || !isNum(cf.timeToPeakMin, 1, 60) || !isNum(cf.startMin, 0, 60)) errors.push('Creciente mal definida (pico 0–500 m³/s, tiempo al pico 1–60 min, inicio 0–60 min).');
+    if (cf.sedimentCv != null && !isNum(cf.sedimentCv, 0, 0.3)) errors.push('Lodo de la creciente fuera de rango (0–30 % en volumen).');
   }
   if (sc) {
     for (const key of ['A', 'B'] as const) {

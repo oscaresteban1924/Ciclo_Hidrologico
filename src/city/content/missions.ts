@@ -5,6 +5,7 @@
 import type { Indicators } from '../sim/compare';
 import type { Interventions, RainConfig, Scenario } from '../sim/scenario';
 import { fmtDepth, fmtNum } from '../render/palette';
+import { HAZARD } from '../sim/hazard';
 
 export interface MissionRow {
   label: string;
@@ -32,7 +33,7 @@ export interface Mission {
   rain: Partial<RainConfig>;
   simMinutes: number;
   /** Creciente de la quebrada como fracción de la capacidad de su sección de control (misiones de quebrada). */
-  creek?: { fraction: number; timeToPeakMin: number; startMin: number };
+  creek?: { fraction: number; timeToPeakMin: number; startMin: number; sedimentCv?: number };
   /** Configuración del escenario A (base) de la misión. */
   setupA?: (iv: Interventions) => void;
   /** Cambio que se propone en B. «presupuesto» deja que el estudiante elija. */
@@ -302,12 +303,12 @@ export const MISSIONS: Mission[] = [
     id: 'creciente-quebrada',
     title: 'La creciente de la quebrada',
     scenarioId: 'ladera-quebrada',
-    question: 'Llega por la quebrada una creciente de una vez y media lo que cabe en su cauce. ¿Qué pasará frente a la casa del retiro?',
-    context: 'Un solo escenario. La creciente entra por la quebrada mientras llueve sobre el barrio. La sección de control queda frente a la casa del retiro.',
+    question: 'Llega por la quebrada una creciente de una vez y media lo que cabe en su cauce. ¿Qué pasará con las casas construidas en la orilla?',
+    context: 'Un solo escenario. La creciente entra por la quebrada mientras llueve sobre el barrio. Cuatro casas están construidas a ras de la orilla, dentro del retiro.',
     options: [
-      { id: 'cabe', text: 'El agua cabe en el cauce' },
-      { id: 'retiro', text: 'Se desborda hacia el retiro verde' },
-      { id: 'calle', text: 'Se desborda y además sale agua por la red de aguas lluvias de la carrera' },
+      { id: 'cabe', text: 'El agua cabe en el cauce y no llega a las casas' },
+      { id: 'retiro', text: 'Se desborda y les llega agua, pero sin poner en riesgo su estructura' },
+      { id: 'grave', text: 'Se desborda con tanta fuerza que las casas quedan expuestas a daño estructural' },
     ],
     rain: { intensityMmH: 60, durationMin: 20, pattern: 'constante', spatial: 'uniforme' },
     simMinutes: 35,
@@ -315,20 +316,61 @@ export const MISSIONS: Mission[] = [
     change: { kind: 'ninguno', describe: 'Sin intervención: se observa la creciente.' },
     evaluate: (a) => {
       const out = a.creekOutsideMax, over = a.creekOverBankMax, back = a.sewerOverflow[0];
+      const orilla = a.damage.buildings.filter((b) => b.id.startsWith('orilla-'));
+      const worst = orilla.reduce((m, b) => Math.max(m, b.depth), 0);
+      const hz = orilla.reduce((m, b) => Math.max(m, b.hazard), 0);
       return {
-        outcome: out < 0.05 && over <= 0 ? 'cabe' : back > 0.01 ? 'calle' : 'retiro',
+        outcome: !orilla.length ? 'cabe' : hz >= 5 ? 'grave' : 'retiro',
         observed: [
           `Entró un caudal pico de ${fmtNum(a.creekPeakIn, 0)} m³/s por la quebrada.`,
-          over > 0 ? `En la sección de control el agua subió ${fmtNum(over * 100, 0)} cm por encima de la orilla y pasaron hasta ${fmtNum(out, 1)} m³/s por fuera del cauce, por el retiro.` : 'En la sección de control el agua no pasó la orilla.',
+          over > 0 ? `En la sección de control el agua subió ${fmtNum(over * 100, 0)} cm por encima de la orilla y pasaron hasta ${fmtNum(out, 1)} m³/s por fuera del cauce.` : 'En la sección de control el agua no pasó la orilla.',
+          orilla.length
+            ? `Llegó agua a ${orilla.length} de las 4 casas de la orilla: hasta ${fmtDepth(worst)} contra sus muros. Peligro máximo junto a ellas: ${HAZARD[hz].code} (${HAZARD[hz].text.replace(/\.$/, '').toLowerCase()}).`
+            : 'No llegó agua a las casas de la orilla.',
+          a.vehicles.moved > 0 ? `El agua movió ${a.vehicles.moved} de los ${a.vehicles.total} vehículos estacionados cerca de la quebrada.` : 'Ningún vehículo estacionado se movió.',
           back > 0.01 ? `La quebrada crecida ahogó la descarga de aguas lluvias: la red devolvió ${m3(back)} a la calle por cámaras y sumideros de la carrera sur.` : 'La red de aguas lluvias siguió descargando a la quebrada sin devolver agua a la calle.',
-          probe(a, 'casa-retiro') >= 0.001 ? `Junto a la casa del retiro el agua llegó a ${fmtDepth(probe(a, 'casa-retiro'))}.` : 'Junto a la casa del retiro no llegó agua de la quebrada con esta creciente.',
         ],
         rows: [],
-        caveat: 'Creciente hipotética (hidrograma triangular): no es un caudal medido ni un pronóstico de inundación.',
+        caveat: 'Creciente hipotética (hidrograma triangular). Peligro según la guía australiana AIDR 7-3: no es la zonificación oficial de amenaza de Medellín ni un pronóstico.',
       };
     },
-    explain: 'Cada cauce tiene una capacidad: el caudal que cabe hasta la orilla. Cuando llega más, el agua se sale y ocupa el retiro de la quebrada; por eso el retiro se deja sin construir. Además, la descarga del alcantarillado de aguas lluvias queda bajo el agua: la red no puede vaciarse e incluso entra agua de la quebrada, que sale por los sumideros más bajos.',
-    terms: ['creciente', 'capacidad-hidraulica', 'retiro-de-quebrada', 'caudal-pico', 'sobrecarga'],
+    explain: 'Cada cauce tiene una capacidad: el caudal que cabe hasta la orilla. Cuando llega más, el agua se sale y ocupa el retiro de la quebrada. Las casas construidas a ras de la orilla son las primeras en inundarse, y el peligro no depende solo de la profundidad: también de la velocidad. Por eso el retiro se deja sin construir.',
+    terms: ['creciente', 'capacidad-hidraulica', 'retiro-de-quebrada', 'caudal-pico', 'peligro-de-inundacion'],
+  },
+  {
+    id: 'avenida-torrencial',
+    title: 'La avenida torrencial',
+    scenarioId: 'ladera-quebrada',
+    question: 'Baja una avenida torrencial: tres veces y media lo que cabe en el cauce, cargada de lodo y piedras, y sube en solo 3 minutos. ¿Hasta dónde llega el daño?',
+    context: 'Un solo escenario. La mezcla de agua y lodo (30 % de sedimentos) entra por la quebrada mientras llueve. El modelo la mueve como agua: muestra el volumen y la velocidad, no el comportamiento del lodo.',
+    options: [
+      { id: 'orilla', text: 'Solo afecta las casas de la orilla' },
+      { id: 'barrio', text: 'Afecta también casas lejos de la quebrada, pero ninguna queda expuesta a colapsar' },
+      { id: 'colapso', text: 'Afecta casas lejos de la quebrada y algunas quedan expuestas a colapsar (H6)' },
+    ],
+    rain: { intensityMmH: 60, durationMin: 20, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 30,
+    creek: { fraction: 3.5, timeToPeakMin: 3, startMin: 2, sedimentCv: 0.3 },
+    change: { kind: 'ninguno', describe: 'Sin intervención: se observa la avenida.' },
+    evaluate: (a) => {
+      const d = a.damage;
+      const lejos = d.buildings.filter((b) => !b.id.startsWith('orilla-'));
+      const area45 = a.hazardArea[4] + a.hazardArea[5] + a.hazardArea[6];
+      return {
+        outcome: !lejos.length ? 'orilla' : d.failure > 0 ? 'colapso' : 'barrio',
+        observed: [
+          `Entró un caudal pico de ${fmtNum(a.creekPeakIn, 0)} m³/s de agua con lodo.`,
+          `Llegó agua (10 cm o más junto a la fachada) a ${d.affected} edificaciones: ${d.buildings.length - lejos.length} en la orilla y ${lejos.length} más lejos.`,
+          d.severe > 0 ? `${d.severe} quedaron con peligro H5 o mayor (expuestas a daño estructural)${d.failure > 0 ? `, y ${d.failure} con H6 (cualquier edificación puede fallar)` : ''}.` : 'Ninguna quedó con peligro de daño estructural (H5).',
+          `Zona donde el agua es peligrosa para cualquier persona (H4 o más): ${fmtNum(area45, 0)} m².`,
+          a.vehicles.out > 0 ? `${a.vehicles.out} de los ${a.vehicles.total} vehículos fueron arrastrados fuera del sector.` : `${a.vehicles.moved} de los ${a.vehicles.total} vehículos se movieron.`,
+        ],
+        rows: [],
+        caveat: 'Avenida hipotética. El modelo no simula el lodo como fluido viscoso ni el golpe de piedras y troncos, que en una avenida real aumentan el daño. Peligro según AIDR 7-3, no la zonificación oficial de Medellín.',
+      };
+    },
+    explain: 'Una avenida torrencial sube en minutos y arrastra lodo, piedras y troncos: lleva más volumen que el agua sola y corre muy rápido en las quebradas de ladera. El peligro combina profundidad y velocidad: un metro de agua quieta no es lo mismo que un metro de agua a 3 m/s. Por eso los retiros y las zonas de alto riesgo se definen con estudios y no se construyen.',
+    terms: ['avenida-torrencial', 'creciente', 'peligro-de-inundacion', 'retiro-de-quebrada', 'caudal-pico'],
   },
 ];
 
