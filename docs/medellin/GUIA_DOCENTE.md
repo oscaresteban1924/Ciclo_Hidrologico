@@ -42,7 +42,10 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
 - **¿Adónde fue la lluvia?** Una barra en el panel muestra, en vivo, cómo se reparte el agua que entró: lo que sigue sobre el suelo, lo que salió del sector, lo que entró al suelo, lo que tomaron los sumideros y lo que guardan los depósitos. Cada parte lleva su valor en m³ y en porcentaje. La barra confirma que la cuenta cierra; si en algún caso no cerrara, mostraría la diferencia medida. En la pestaña Comparar aparece una barra para A y otra para B. Es un buen punto de partida para hablar del ciclo del agua en la ciudad.
 - **Primeros pasos:** la primera vez que se entra a un sector aparece una guía breve de cuatro pasos. Se puede volver a abrir desde Herramientas.
 
-- **Colores del agua:** una sola tonalidad azul, más oscura cuanto más profunda. La leyenda muestra los valores (1 mm a 30 cm), así que no hay que adivinar por el color.
+- **Colores del agua:** en la vista realista el agua tiene su color natural: una lámina gris-café, turbia, más oscura cuanto más profunda, que refleja el cielo y las fachadas. La leyenda muestra los valores (1 mm a 30 cm), así que no hay que adivinar por el color.
+  - El botón **«Agua en azul»** cambia a una sola tonalidad azul, también más oscura cuanto más profunda, con los mismos valores. Ayuda a distinguir el agua del pavimento mojado, por ejemplo en un proyector con poco contraste. «Materiales» y «Resultados» usan siempre el azul.
+  - El pavimento, las fachadas y los techos se oscurecen y brillan con la lluvia: eso es **superficie mojada**, no agua acumulada. El agua que cuenta es la que tiene color en la leyenda.
+  - **Pregunta para la clase:** «En la calle, ¿dónde ven solo pavimento mojado y dónde hay agua de verdad? ¿Cómo lo saben?» (medir con un toque o mirar la leyenda).
 - **Escala real:** el agua se dibuja a escala real. «Agua ×5» la engrosa solo en el dibujo y lo avisa en pantalla.
 - **Flechas:** muestran la dirección y la rapidez calculadas.
 - **Lo que se mueve sobre el agua sale del cálculo:**
@@ -100,6 +103,7 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
 - Alrededor de la maqueta se ve el mismo valle, a escala real y sin exagerar. El botón **Valle** pone la cámara detrás del sector, ladera arriba, mirando hacia el río y la otra ladera.
 - La ubicación de la calle y de la ladera en el valle es **ilustrativa**: son escenarios didácticos.
 - Las fachadas, los avisos de los locales, los postes con cables, las motos y la ropa tendida son **ambientación**: ayudan a reconocer un barrio de Medellín, pero no son la red eléctrica, el alumbrado ni casas reales. El cálculo usa solo las huellas, las alturas y las bajantes de los edificios.
+- Durante un aguacero fuerte el valle se pierde en la bruma, las nubes bajan por las laderas y se encienden ventanas y luminarias, como en Medellín en una tarde de lluvia. El sector sigue nítido. Todo eso es ambiente: la lluvia que se calcula es la que se eligió en «Crear lluvia».
 - En equipos sin tarjeta gráfica, el entorno lejano se simplifica solo para que la maqueta responda mejor; el cálculo no cambia.
 - **Preguntas para la clase:** «Si toda la ladera de enfrente está cubierta de techos, ¿adónde va la lluvia que cae ahí?» «¿Qué diferencia hay entre la quebrada con árboles y la calle de concreto?»
 

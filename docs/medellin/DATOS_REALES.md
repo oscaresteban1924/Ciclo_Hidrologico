@@ -80,3 +80,43 @@ Para reemplazarla, no hace falta descargar toda la ciudad. Basta con un DEM grue
 | Perímetro urbano y comunas | Polígonos | `fabricAt(x, y, z)`: la zona de cada punto saldría del polígono que lo contiene |
 
 La misma tabla dibuja, a escala 1:1, el entorno de cada sector: al reemplazarla, también el entorno pasa a usar los datos oficiales, y un escenario de datos reales con `extent.lonLat` se dibuja en su lugar del valle. Si se reemplaza la tabla, las pruebas V7 y V8 siguen sirviendo como control: el río debe bajar de sur a norte y las estaciones del metro deben quedar cerca de su cota. La atribución de cada fuente debe agregarse al encabezado de la vista y a la pestaña Docente.
+
+## 8. Servicios oficiales de la Alcaldía de Medellín: lo que se revisó y lo que falta
+
+Se pidió usar diez servicios del servidor de mapas de la Alcaldía para hacer más robusta la modelación. Sus **metadatos** se leyeron el 9 de noviembre de 2026 con el lector web. Los **datos** no se pudieron descargar: el proxy del entorno de trabajo rechaza `www.medellin.gov.co` (403, comprobado dos veces). Nada de lo que hoy dibuja o calcula la aplicación sale de estos servicios.
+
+Todos usan **EPSG:9377** (MAGNA-SIRGAS 2018 / Origen-Nacional), el mismo sistema de salida del pipeline.
+
+| Servicio (`…/rest/services/…`) | Qué es | Campos útiles | Uso previsto |
+|---|---|---|---|
+| `ServiciosCiudad/CartografiaBase/MapServer/15` | Construcciones (polígonos) | `numero_pisos`, `numero_sotanos`, `numero_mezanines`, `tipo_construccion`, `area_construida`, `cbml`, `id_construccion` | Huellas y alturas de un sector de datos reales (pipeline). Barrio alrededor de los sectores con sus edificios reales. |
+| `…/MapServer/14` | Vías de Medellín (líneas) | `tipo_via`, `nombre_comun`, `jerarquia_via`, `importancia`, `comuna` | Calzadas del sector y calles del entorno. |
+| `…/MapServer/13` | Vías urbanas y rurales (líneas) | `clasificacion_via`, `jerarquizacion_via`, `retiro`, `estado` | Complemento de la anterior fuera del área urbana. |
+| `…/MapServer/25` | Red hídrica (líneas) | `JERARQUIA`, `NOMBRE` | Quebradas del valle y del entorno. |
+| `…/MapServer/27` | Hidrografía del POT (líneas; Resolución DAP 126 de 2016) | `jerarquia`, `nombre` | Cauces y retiros cerca de cada sector. |
+| `…/MapServer/6` | Ríos (polígonos) | `nombre` | Cauce del río Medellín. |
+| `…/MapServer/9` | Barrios y veredas (polígonos) | `codigo`, `nombre`, `nombre_comuna_corregimiento` | Rótulos de barrio y comuna; tejido urbano. |
+| `…/MapServer/18` | Equipamientos (polígonos) | `nombre`, `tipo`, `categoria`, `nom_barrio` | Colegios, centros de salud y otros hitos cercanos. |
+| `…/MapServer/17` | Espacio público existente (polígonos) | `nombre`, `categoria`, `subcategoria` | Parques y zonas verdes (coberturas permeables). |
+| `ServiciosImagen/Ortofoto_Medellin_2024/ImageServer` | Ortofoto 2024 | 0,08 m por píxel, 5 bandas de 8 bits; exportación de hasta 4 100 × 4 100 píxeles | Textura del suelo alrededor de cada sector. |
+| `ServiciosImagen/Modelo_digital_de_elevacion_medellin_2024/ImageServer` | Modelo digital de elevación 2024 | 1 m por píxel, 1 banda de 32 bits en coma flotante, cotas de 1 143 a 3 141 m; exportación de hasta 15 000 × 4 100 píxeles | Relieve real del valle (reemplaza `valleyZ`) y del terreno de un sector de datos reales (`--dem` del pipeline). |
+
+Las capas vectoriales entregan hasta 2 000 registros por consulta; el pipeline pide la caja del sector por páginas. Ninguna trae sumideros, tuberías ni bordillos: el pipeline no los inventa.
+
+**Ya adaptado.** El pipeline lee el esquema de la capa de construcciones: altura = `numero_pisos` × 3 m, marcada como **estimada**; sin dato, 6 m, marcados como **supuestos**. Conserva `cbml`, `tipo_construccion` y los demás atributos en cada edificio. `tools/geo/test_pipeline.py` lo prueba con una capa simulada con ese esquema: 14 de 14 comprobaciones cumplen.
+
+**Qué se descargaría, sin bajar toda la ciudad.**
+- **Valle:** el DEM a 25 m (1 115 × 958 valores, una sola exportación) y, generalizadas, las capas de ríos, red hídrica y barrios.
+- **Alrededor de cada sector:** una caja de unos 3 × 3 km con el DEM a 1 m, las construcciones, las vías y el espacio público, y la ortofoto a 0,5–1 m.
+
+**Cómo seguir.**
+1. Habilitar `www.medellin.gov.co` en el acceso a red del entorno de trabajo.
+2. O descargar desde un navegador las dos exportaciones del DEM y adjuntarlas. Para la caja de los dos sectores de laboratorio:
+
+```text
+…/Modelo_digital_de_elevacion_medellin_2024/ImageServer/exportImage?bbox=4712700,2252570,4715700,2255740&bboxSR=9377&imageSR=9377&size=3000,3170&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image
+```
+
+Para el valle, la misma consulta con `bbox=4698974,2239446,4726835,2263390` y `size=1115,958`.
+
+El DEM es del municipio de Medellín. Fuera de él (Bello, Itagüí, Envigado y los demás municipios del valle), el relieve seguiría siendo el de la tabla de referencia, fundido en el borde, y así se rotularía.

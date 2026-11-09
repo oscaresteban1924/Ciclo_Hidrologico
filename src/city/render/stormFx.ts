@@ -37,6 +37,9 @@ export interface FxHost {
 export interface FxUniforms {
   uField: { value: THREE.DataTexture | null };
   uRamp: { value: THREE.DataTexture | null };
+  /** Rampa natural (agua turbia) y si se usa en la vista realista (1) o la azul (0). */
+  uRampN: { value: THREE.DataTexture | null };
+  uNat: { value: number };
   uNoise: { value: THREE.DataTexture | null };
   uHalf: { value: THREE.Vector2 };
   uTime: { value: number };
@@ -52,17 +55,17 @@ export interface FxUniforms {
 export const FLOW_CYCLE = 1.6; // s: periodo de reinicio de las vetas (técnica de dos fases)
 
 /** Rampa de color de la profundidad: la misma escala de la leyenda, en una textura de 256×1. */
-export function depthRampTexture(): THREE.DataTexture {
+export function depthRampTexture(natural = false): THREE.DataTexture {
   const n = 256;
   const data = new Uint8Array(n * 4);
   const tmp = new Float32Array(4);
   for (let i = 0; i < n; i++) {
     const h = 0.001 * Math.pow(300, i / (n - 1));
-    depthColor(h, tmp, 0);
+    depthColor(h, tmp, 0, natural);
     for (let c = 0; c < 3; c++) data[i * 4 + c] = Math.round(tmp[c] * 255);
     // la lámina de pocos milímetros se dibuja más transparente para que se vea el suelo mojado debajo;
     // desde 1 cm la opacidad es la de la leyenda
-    const thin = 0.5 + 0.5 * Math.min(1, Math.log(h / 0.001) / Math.log(10));
+    const thin = natural ? 1 : 0.5 + 0.5 * Math.min(1, Math.log(h / 0.001) / Math.log(10));
     data[i * 4 + 3] = Math.round(tmp[3] * thin * 255);
   }
   const t = new THREE.DataTexture(data, n, 1, THREE.RGBAFormat);
@@ -247,6 +250,37 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+// Velo de lluvia en pantalla: trazos finos que caen y una bruma tenue arriba (donde queda lo lejano).
+// Es solo ambientación; abajo, donde suele estar el sector, apenas se nota, y se apaga al mirar hacia
+// abajo, en la vista de resultados y con movimiento reducido.
+const WHITE = new THREE.Color('#ffffff');
+
+const VEIL_VS = /* glsl */ `
+varying vec2 vUv;
+void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const VEIL_FS = /* glsl */ `
+uniform float uTime, uOpacity, uHaze, uAspect;
+uniform vec3 uColor;
+varying vec2 vUv;
+float vh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float streaks(vec2 uv, float cols, float speed, float seed) {
+  float px = (uv.x + uv.y * 0.07) * uAspect * cols;
+  float c = floor(px);
+  float r1 = vh(vec2(c, seed)), r2 = vh(vec2(seed, c + 7.0));
+  float core = smoothstep(0.1, 0.0, abs(fract(px) - (0.2 + 0.6 * r1)));
+  float y = fract(uv.y * (1.1 + r2) + uTime * speed * (0.7 + 0.6 * r2) + r1 * 5.0);
+  float seg = smoothstep(0.0, 0.06, y) * smoothstep(0.3, 0.1, y);
+  return core * seg * step(0.4, r2);
+}
+void main() {
+  float s = streaks(vUv, 70.0, 1.7, 1.0) * 0.6 + streaks(vUv, 30.0, 1.15, 2.0);
+  float a = uOpacity * s * (0.35 + 0.65 * vUv.y) + uHaze * smoothstep(0.3, 1.0, vUv.y);
+  if (a < 0.003) discard;
+  gl_FragColor = vec4(uColor, min(a, 0.5));
+  #include <colorspace_fragment>
+}`;
+
 const SKY_VS = /* glsl */ `
 varying vec3 vDir;
 void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
@@ -375,6 +409,8 @@ export class StormFx {
   private curtainMat: THREE.ShaderMaterial;
   private sky: THREE.Mesh;
   private skyMat: THREE.ShaderMaterial;
+  private veil: THREE.Mesh;
+  private veilMat: THREE.ShaderMaterial;
   private group = new THREE.Group(); // efectos que dependen del sector compilado
   private vortex: THREE.InstancedMesh | null = null;
   private vortexQ: THREE.InstancedBufferAttribute | null = null;
@@ -391,6 +427,7 @@ export class StormFx {
   private drainQ = new Float64Array(0);
   private outQ = new Float64Array(0);
   private storm = 0;
+  private tmpDir = new THREE.Vector3();
   private lastFieldT = -1;
   private lastFieldMax = false;
   readonly fxTimeMat: THREE.ShaderMaterial[] = [];
@@ -408,11 +445,14 @@ export class StormFx {
   constructor(host: FxHost) {
     this.host = host;
     const ramp = depthRampTexture();
+    const rampN = depthRampTexture(true);
     this.noise = noiseTexture();
-    this.textures.push(ramp, this.noise);
+    this.textures.push(ramp, rampN, this.noise);
     this.u = {
       uField: { value: null },
       uRamp: { value: ramp },
+      uRampN: { value: rampN },
+      uNat: { value: 1 },
       uNoise: { value: this.noise },
       uHalf: { value: new THREE.Vector2(1, 1) },
       uTime: { value: 0 },
@@ -453,7 +493,20 @@ export class StormFx {
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 32, 16), this.skyMat);
     this.sky.renderOrder = -10;
     this.sky.frustumCulled = false;
-    host.scene.add(this.sky, this.rainFar.mesh, this.rainNear.mesh, this.splash.mesh, this.curtain, this.group);
+    this.veilMat = new THREE.ShaderMaterial({
+      vertexShader: VEIL_VS,
+      fragmentShader: VEIL_FS,
+      uniforms: { uTime: this.u.uTime, uOpacity: { value: 0 }, uHaze: { value: 0 }, uAspect: { value: 1.6 }, uColor: { value: new THREE.Color('#d3dbe2') } },
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      fog: false,
+    });
+    this.veil = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.veilMat);
+    this.veil.frustumCulled = false;
+    this.veil.renderOrder = 1000;
+    this.veil.visible = false;
+    host.scene.add(this.sky, this.rainFar.mesh, this.rainNear.mesh, this.splash.mesh, this.curtain, this.group, this.veil);
     this.setSky(0);
   }
 
@@ -887,6 +940,19 @@ export class StormFx {
     lerp('#b9c7d1', '#6f7a83', this.skyMat.uniforms.uLow.value);
   }
 
+  /** Oculta lluvia y efectos pasajeros mientras se captura el entorno para los reflejos (queda el cielo). */
+  setCaptureMode(on: boolean): void {
+    for (const o of [this.rainFar.mesh, this.rainNear.mesh, this.splash.mesh, this.curtain, this.group, this.veil]) {
+      if (on) {
+        o.userData.capVis = o.visible;
+        o.visible = false;
+      } else if (o.userData.capVis !== undefined) {
+        o.visible = o.userData.capVis;
+        delete o.userData.capVis;
+      }
+    }
+  }
+
   /** Color del horizonte (para la niebla y el fondo de reserva). */
   horizon(out: THREE.Color): THREE.Color {
     return out.copy(this.skyMat.uniforms.uHor.value);
@@ -975,6 +1041,14 @@ export class StormFx {
       this.curtainMat.uniforms.uHgt.value = Hc;
       this.curtainMat.uniforms.uOpacity.value = (r.spatial === 'localizada' ? 0.32 : 0.42) * this.storm;
     }
+    // velo en pantalla: más denso con la tormenta, nulo al mirar hacia abajo (la vista cenital lee el agua)
+    const look = camera.getWorldDirection(this.tmpDir).y;
+    const vk = raining && !h.reducedMotion && opts.view === 0 ? this.storm * (1 - THREE.MathUtils.smoothstep(-look, 0.5, 0.85)) : 0;
+    this.veil.visible = vk > 0.01;
+    this.veilMat.uniforms.uOpacity.value = 0.12 * vk;
+    this.veilMat.uniforms.uHaze.value = 0.1 * vk;
+    this.veilMat.uniforms.uAspect.value = camera.aspect;
+    this.horizon(this.veilMat.uniforms.uColor.value).lerp(WHITE, 0.25);
     // efectos ligados al cálculo
     this.updateLinked(sim, opts.flowing);
   }

@@ -15,7 +15,8 @@ Pasos
   4. Reparación de geometrías (make_valid), separación de multipolígonos, descarte de astillas, recorte a la
      caja y simplificación.
   5. Homogeneización de CRS y unidades: todo a EPSG:9377 en metros; comprobación de que el centro cae en Medellín.
-  6. Alturas: agl si es plausible; si no, n_pisos × 3 m (estimado); si no hay dato, 6 m (marcado «sin dato»).
+  6. Alturas: agl si es plausible; si no, número de pisos × 3 m (estimado; campos n_pisos, n_pisostot o
+     numero_pisos de la capa oficial «Construccion»); si no hay dato, 6 m (marcado «sin dato»).
   7. Terreno: DEM (GeoTIFF con rasterio, o ASCII Grid .asc sin dependencias) remuestreado a la malla del
      sector; se registran resolución, datum vertical y exactitud declarada.
   8. Coordenadas locales (origen en la esquina suroeste), exportación y registro de procedencia.
@@ -26,7 +27,7 @@ trae marcados como «hipotético» solo si se pide con --hypothetical-inlets.
 
 Uso típico
   python3 medellin_pipeline.py \\
-      --layer https://www.medellin.gov.co/servidormapas/rest/services/mapas_nacionales/VM_Cartografia_City_Urban_2022/MapServer/9 \\
+      --layer https://www.medellin.gov.co/servidormapas/rest/services/ServiciosCiudad/CartografiaBase/MapServer/15 \\
       --bbox -75.5795 6.2440 -75.5775 6.2458 --bbox-crs EPSG:4326 \\
       --dem dem_sector.tif --dem-datum "alturas sobre el nivel medio del mar (verificar)" \\
       --outlet E:20:40:0.03 --id mi-sector --title "Mi sector" --out mi-sector.json
@@ -53,7 +54,12 @@ from shapely.geometry import MultiPolygon, Polygon, box, shape
 from shapely.validation import make_valid
 
 TARGET_CRS = "EPSG:9377"
-EXPECTED_FIELDS = ("agl", "n_pisos", "n_pisostot")
+# Campos de altura y de pisos reconocidos. La capa oficial «Construccion» (CartografiaBase/MapServer/15)
+# trae numero_pisos, numero_sotanos, numero_mezanines, tipo_construccion, cbml e id_construccion; otras
+# capas traen agl (altura sobre el suelo) y n_pisos o n_pisostot. Se conservan como atributos de cada edificio.
+HEIGHT_FIELDS = ("agl",)
+FLOOR_FIELDS = ("n_pisos", "n_pisostot", "numero_pisos")
+EXPECTED_FIELDS = HEIGHT_FIELDS + FLOOR_FIELDS + ("numero_sotanos", "numero_mezanines", "tipo_construccion", "cbml", "id_construccion")
 # Caja amplia de Medellín y su área urbana [lon, lat] para comprobar el CRS
 MEDELLIN_LONLAT = (-75.72, 6.13, -75.47, 6.37)
 PIPELINE_VERSION = "1.0.0"
@@ -143,9 +149,10 @@ def fetch_buildings(layer: str, env: tuple[float, float, float, float], page: in
     meta, meta_hash = http_json(layer, {"f": "pjson"})
     fields = [f.get("name") for f in meta.get("fields", [])]
     log.add("metadatos", f"Capa «{meta.get('name')}»; {len(fields)} campos; maxRecordCount = {meta.get('maxRecordCount')}; paginación = {meta.get('advancedQueryCapabilities', {}).get('supportsPagination')}")
-    missing = [f for f in EXPECTED_FIELDS if f not in fields]
-    if missing:
-        log.add("metadatos", f"Faltan campos esperados: {missing}. Se usarán alturas estimadas donde falten.", "advertencia")
+    have = [f for f in EXPECTED_FIELDS if f in fields]
+    log.add("metadatos", f"Campos reconocidos: {have}")
+    if not any(f in fields for f in HEIGHT_FIELDS + FLOOR_FIELDS):
+        log.add("metadatos", f"La capa no trae altura ni número de pisos ({', '.join(HEIGHT_FIELDS + FLOOR_FIELDS)}): todas las alturas serán supuestas (6 m).", "advertencia")
     oid = next((f.get("name") for f in meta.get("fields", []) if f.get("type") == "esriFieldTypeOID"), "OBJECTID")
     page = min(page, int(meta.get("maxRecordCount") or page))
     pages: list[dict[str, str]] = [{"url": f"{layer}?f=pjson", "sha256": meta_hash}]
@@ -221,19 +228,24 @@ def repair(features: list[dict[str, Any]], clip: Polygon, src_crs: str, simplify
 
 def height_of(props: dict[str, Any]) -> tuple[float, int, str]:
     agl = props.get("agl")
-    pisos = props.get("n_pisos") or props.get("n_pisostot")
     try:
         agl = float(agl) if agl is not None else None
     except (TypeError, ValueError):
         agl = None
-    try:
-        pisos = int(float(pisos)) if pisos is not None else None
-    except (TypeError, ValueError):
-        pisos = None
+    # primer campo de pisos con un valor positivo (n_pisos, n_pisostot o numero_pisos)
+    pisos = None
+    for f in FLOOR_FIELDS:
+        try:
+            v = int(float(props.get(f)))
+        except (TypeError, ValueError):
+            continue
+        if v > 0:
+            pisos = v
+            break
     if agl is not None and 2.0 <= agl <= 250.0:
         return agl, pisos or max(1, round(agl / 3.0)), "real (agl)"
     if pisos and 1 <= pisos <= 80:
-        return pisos * 3.0, pisos, "estimado (n_pisos × 3 m)"
+        return pisos * 3.0, pisos, "estimado (pisos × 3 m)"
     return 6.0, 2, "sin dato (6 m supuestos)"
 
 
@@ -348,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Edificios en coordenadas locales
     buildings = []
-    sources_h = {"real (agl)": 0, "estimado (n_pisos × 3 m)": 0, "sin dato (6 m supuestos)": 0}
+    sources_h = {"real (agl)": 0, "estimado (pisos × 3 m)": 0, "sin dato (6 m supuestos)": 0}
     for n, b in enumerate(polys):
         hgt, floors, how = height_of(b["props"])
         sources_h[how] += 1
@@ -365,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
             "downspout": [round(dp.x - env[0], 2), round(dp.y - env[1], 2)],
             "style": "ladrillo" if hgt <= 15 else "torre",
             "kind": "real",
-            "attrs": {k: b["props"].get(k) for k in EXPECTED_FIELDS},
+            "attrs": {k: b["props"].get(k) for k in EXPECTED_FIELDS if k in b["props"]},
         })
     log.add("alturas", f"Origen de alturas: {sources_h}")
 

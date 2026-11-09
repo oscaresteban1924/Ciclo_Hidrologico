@@ -57,7 +57,8 @@ export interface Backdrop {
   /** Rehace la franja de unión con el borde actual del sector (al cambiar la resolución). */
   refreshApron(): void;
   /** Avanza los elementos móviles (metro y cabinas), la luz de las ventanas y el tono de la tormenta. */
-  update(dt: number, storm: number): void;
+  /** Avanza trenes y cabinas; oscurece y moja con la tormenta; muestra las nubes bajas (lejos de la cámara). */
+  update(dt: number, storm: number, cam?: THREE.Vector3): void;
   /** Lugares para rotular (río, metro, metrocables, cerros, Centro…). */
   landmarks: Landmark[];
   /** Texturas propias (se liberan al salir). */
@@ -1152,6 +1153,7 @@ ${CARPET_GLSL}`)
 
   // ---- nubes recostadas en las cuchillas (sprites suaves que se desvanecen cerca de la cámara)
   const clouds: THREE.Sprite[] = [];
+  const lowClouds: THREE.Sprite[] = [];
   if (typeof document !== 'undefined') {
     const cvs = document.createElement('canvas');
     cvs.width = cvs.height = 128;
@@ -1179,6 +1181,21 @@ ${CARPET_GLSL}`)
         const sc = 700 + rnd() * 1100;
         sp.scale.set(sc, sc * 0.42, 1);
         clouds.push(sp);
+        group.add(sp);
+      }
+      // Nubes bajas de tormenta: jirones grises que se arrastran por las laderas, a cientos de metros del
+      // sector. Solo aparecen con lluvia y se desvanecen cerca de la cámara para no tapar lo que se calcula.
+      for (let k = 0; k < (alta ? 26 : 10); k++) {
+        const ang = rnd() * Math.PI * 2, d = 850 + rnd() * 2600;
+        const x = Math.cos(ang) * d, z = Math.sin(ang) * d;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: '#8d969d', transparent: true, depthWrite: false, opacity: 0, fog: true }));
+        sp.position.set(x, gy(x, z) + 45 + rnd() * 190, z);
+        const sc = 320 + rnd() * 520;
+        sp.scale.set(sc, sc * (0.3 + rnd() * 0.12), 1);
+        sp.visible = false;
+        sp.userData.drift = 3 + rnd() * 5;
+        sp.userData.lift = sp.position.y - gy(x, z);
+        lowClouds.push(sp);
         group.add(sp);
       }
     }
@@ -1230,10 +1247,25 @@ ${CARPET_GLSL}`)
       detail = level;
       for (const o of farObjs) o.visible = level === 2;
     },
-    update(dt: number, storm: number) {
+    update(dt: number, storm: number, cam?: THREE.Vector3) {
       night.value = storm;
       wet.value = storm;
       for (const c of clouds) (c.material as THREE.SpriteMaterial).color.setScalar(1 - 0.45 * storm);
+      const low = detail === 2 ? THREE.MathUtils.smoothstep(storm, 0.3, 0.8) : 0;
+      for (const c of lowClouds) {
+        if (dt > 0 && low > 0) {
+          // el viento las arrastra hacia el occidente; al salir del anillo reaparecen del otro lado
+          c.position.x -= dt * c.userData.drift;
+          if (c.position.x < -3600) c.position.x += 7200;
+          c.position.y = gy(c.position.x, c.position.z) + c.userData.lift;
+        }
+        // nunca sobre el sector (al derivar pueden pasarle cerca) ni pegadas a la cámara
+        const away = THREE.MathUtils.smoothstep(Math.hypot(c.position.x, c.position.z), 550, 900);
+        const near = away * (cam ? THREE.MathUtils.smoothstep(c.position.distanceTo(cam), 260, 700) : 1);
+        const m = c.material as THREE.SpriteMaterial;
+        m.opacity = 0.78 * low * near;
+        c.visible = m.opacity > 0.01;
+      }
       if (dt <= 0) return;
       for (const mv of movers) for (let k = 0; k < mv.heads.length; k++) mv.heads[k] += dt * mv.speed;
       placeMovers();

@@ -407,3 +407,24 @@ export function facadeAtlas(): FacadeAtlas {
     },
   };
 }
+
+/**
+ * Mancha luminosa radial (halo de una luminaria o su reflejo en el suelo mojado). Es una textura de
+ * datos, así que también se construye fuera del navegador.
+ */
+export function glowTexture(size = 64): THREE.DataTexture {
+  const d = new Uint8Array(size * size * 4);
+  for (let j = 0; j < size; j++)
+    for (let i = 0; i < size; i++) {
+      const r = Math.hypot((i + 0.5) / size - 0.5, (j + 0.5) / size - 0.5) * 2;
+      const a = r >= 1 ? 0 : Math.pow(1 - r, 2.2) * (0.6 + 0.4 * Math.exp(-r * r * 18));
+      const k = (j * size + i) * 4;
+      d[k] = d[k + 1] = d[k + 2] = 255;
+      d[k + 3] = Math.round(255 * a);
+    }
+  const t = new THREE.DataTexture(d, size, size, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}

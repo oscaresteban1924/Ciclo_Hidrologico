@@ -464,6 +464,7 @@ function ViewBar({ api }: { api: LabApi }) {
         {btn('Flechas', ctrl.arrowsOn(), () => ctrl.setArrows(!ctrl.arrowsOn()), 'Flechas de dirección del flujo')}
         {btn('Bajo la calle', ctrl.cutOn(), () => ctrl.setCut(!ctrl.cutOn()), 'Ver bajo la calle: tuberías esquemáticas')}
         {api.renderer === 'webgl' && btn('Agua ×5', ctrl.amplify() > 1, () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5), 'Dibujar el agua cinco veces más gruesa (solo el dibujo)')}
+        {api.renderer === 'webgl' && v === 'realista' && btn('Agua en azul', ctrl.waterBlue(), () => ctrl.setWaterBlue(!ctrl.waterBlue()), 'Colorear el agua en azul según su profundidad, en vez de su color natural')}
       </div>
       {api.renderer === 'webgl' && <div className="vb-group" role="group" aria-label="Cámara">
         {btn('Calle', false, () => ctrl.camera('calle'), 'Vista a nivel de calle')}
@@ -528,10 +529,12 @@ function Legend({ api }: { api: LabApi }) {
       </div>
     );
   }
+  // agua natural (turbia) en la vista realista de la escena 3D, salvo que se pida el agua en azul
+  const natural = api.renderer === 'webgl' && v === 'realista' && !ctrl.waterBlue();
   return (
     <div className="city-ov city-legend">
-      <strong>{v === 'resultados' ? 'Profundidad máxima' : 'Profundidad del agua'}</strong>
-      <div className="depth-bar" style={{ background: cssDepthGradient() }} aria-hidden="true" />
+      <strong>{v === 'resultados' ? 'Profundidad máxima' : natural ? 'Profundidad del agua (color natural)' : 'Profundidad del agua'}</strong>
+      <div className="depth-bar" style={{ background: cssDepthGradient(natural) }} aria-hidden="true" />
       <div className="depth-ticks">
         {DEPTH_STOPS.map((s) => (
           <span key={s.label}>{s.label}</span>

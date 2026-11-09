@@ -67,6 +67,24 @@ META = {
     ],
 }
 
+# Esquema de la capa oficial «Construccion» (CartografiaBase/MapServer/15): sin agl, con numero_pisos
+META_OFICIAL = {
+    **META,
+    "name": "Construccion (prueba con el esquema oficial)",
+    "description": "",
+    "fields": [
+        {"name": "OBJECTID", "type": "esriFieldTypeOID"},
+        {"name": "cobama", "type": "esriFieldTypeString"},
+        {"name": "cbml", "type": "esriFieldTypeString"},
+        {"name": "numero_pisos", "type": "esriFieldTypeSmallInteger"},
+        {"name": "numero_sotanos", "type": "esriFieldTypeSmallInteger"},
+        {"name": "numero_mezanines", "type": "esriFieldTypeSmallInteger"},
+        {"name": "tipo_construccion", "type": "esriFieldTypeString"},
+        {"name": "area_construida", "type": "esriFieldTypeDouble"},
+        {"name": "id_construccion", "type": "esriFieldTypeString"},
+    ],
+}
+
 REQUESTS: list[str] = []
 
 
@@ -99,12 +117,16 @@ class Handler(BaseHTTPRequestHandler):
                 b = bbox_of(f["g"])
                 if b[2] < env[0] or b[0] > env[2] or b[3] < env[1] or b[1] > env[3]:
                     continue
-                sel.append({"type": "Feature", "id": i + 1, "geometry": f["g"], "properties": {"OBJECTID": i + 1, "agl": f["agl"], "n_pisos": f["n_pisos"], "n_pisostot": f["n_pisostot"]}})
+                if "/oficial/" in u.path:
+                    props = {"OBJECTID": i + 1, "cbml": f"1001{i:04d}", "numero_pisos": f["n_pisos"], "numero_sotanos": 0, "numero_mezanines": 0, "tipo_construccion": "Convencional", "id_construccion": f"C{i + 1}"}
+                else:
+                    props = {"OBJECTID": i + 1, "agl": f["agl"], "n_pisos": f["n_pisos"], "n_pisostot": f["n_pisostot"]}
+                sel.append({"type": "Feature", "id": i + 1, "geometry": f["g"], "properties": props})
             off, cnt = int(q.get("resultOffset", 0)), int(q.get("resultRecordCount", 4))
             page = sel[off : off + cnt]
             body = {"type": "FeatureCollection", "features": page, "exceededTransferLimit": off + cnt < len(sel)}
         else:
-            body = META
+            body = META_OFICIAL if "/oficial/" in u.path else META
         raw = json.dumps(body).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -157,13 +179,29 @@ def main() -> int:
     ck("Multipolígono separado en partes", sum(1 for b in sc["buildings"] if b["attrs"]["agl"] == 12.0) == 2, "")
     widths = [max(p[0] for p in b["polygon"]) for b in sc["buildings"]]
     ck("Recorte a la caja", max(widths) <= sc["extent"]["width"] + 1e-6, f"máx x local = {max(widths):.2f} m")
-    ck("Alturas: agl real, n_pisos estimado y sin dato marcados", "'real (agl)'" in r.stderr and "estimado" in r.stderr and "sin dato" in r.stderr, "")
+    ck("Alturas: agl real, pisos estimado y sin dato marcados", "'real (agl)'" in r.stderr and "estimado" in r.stderr and "sin dato" in r.stderr, "")
     ck("CRS de salida EPSG:9377 y centro en Medellín", sc["extent"]["crs"] == "EPSG:9377" and abs(sc["extent"]["lonLat"][0] - LON) < 0.002, str(sc["extent"]["lonLat"]))
     ck("Hashes de cada página registrados", all(len(p["sha256"]) == 64 for p in sc["pipelinePages"]), f"{len(sc['pipelinePages'])} archivos")
     ck("Sin sumideros inventados", len(sc["drains"]) == 0 and len(sc["pipes"]) == 0, "")
     # Validación con el código de la aplicación
     rc = subprocess.run(["npx", "tsx", "tests/city/scenario-check.ts", out], cwd=ROOT, capture_output=True, text=True)
     ck("La aplicación valida, compila y simula el escenario", rc.returncode == 0, rc.stdout.strip().splitlines()[-1] if rc.stdout.strip() else rc.stderr[-300:])
+    # Segunda corrida: capa con el esquema de «Construccion» de la cartografía base oficial (numero_pisos, sin agl)
+    out2 = os.path.join(tmp, "escenario-oficial.json")
+    cmd2 = [a if "MapServer/9" not in a else f"http://127.0.0.1:{port}/rest/services/oficial/MapServer/15" for a in cmd]
+    cmd2[cmd2.index("--out") + 1] = out2
+    cmd2[cmd2.index("--cache") + 1] = os.path.join(tmp, "cache2")
+    r2 = subprocess.run(cmd2, capture_output=True, text=True)
+    if r2.returncode != 0:
+        print(r2.stderr)
+    sc2 = json.load(open(out2, encoding="utf-8")) if r2.returncode == 0 else {"buildings": []}
+    b2 = sc2["buildings"]
+    okh = bool(b2) and all((b["attrs"].get("numero_pisos") or 0) > 0 and b["heightM"] == 3.0 * b["attrs"]["numero_pisos"] or not (b["attrs"].get("numero_pisos") or 0) and b["heightM"] == 6.0 for b in b2)
+    ck("Esquema oficial «Construccion»: altura = numero_pisos × 3 m (estimado), sin dato = 6 m; atributos cbml y tipo conservados",
+       r2.returncode == 0 and okh and all("cbml" in b["attrs"] and "tipo_construccion" in b["attrs"] for b in b2) and "no trae altura" not in r2.stderr,
+       f"{len(b2)} edificios; alturas {sorted({b['heightM'] for b in b2})}")
+    rc2 = subprocess.run(["npx", "tsx", "tests/city/scenario-check.ts", out2], cwd=ROOT, capture_output=True, text=True) if r2.returncode == 0 else None
+    ck("La aplicación valida, compila y simula el escenario del esquema oficial", bool(rc2) and rc2.returncode == 0, (rc2.stdout.strip().splitlines()[-1] if rc2 and rc2.stdout.strip() else "sin salida"))
     ok = all(c[1] for c in checks)
     for name, good, detail in checks:
         print(f"{'PASA ' if good else 'FALLA'} {name} — {detail}")

@@ -15,6 +15,8 @@ import { TracerSet } from '../../src/city/sim/tracers';
 import { FIELD_CHANNELS, outletFlows, packField, spoutFlows, tankFx } from '../../src/city/render/fxData';
 import { EXTENT as ABURRA_EXTENT, HILLS, METRO_A, METRO_B, RIVER, SECTOR_SPOTS, cross as abCross, fabricAt, outerZ, riverAt, valleyZ } from '../../src/city/render/aburra';
 import { buildBackdrop } from '../../src/city/render/backdrop';
+import { DEPTH_STOPS, NATURAL_STOPS, depthColor } from '../../src/city/render/palette';
+import { depthRampTexture } from '../../src/city/render/stormFx';
 import * as THREE from 'three';
 
 interface Result {
@@ -583,6 +585,44 @@ const sens: { dx: number; P: number; B: number; D: number; I: number; esq: numbe
     tolerance: 'unión con el borde del sector < 1 mm; relieve dibujado frente al de referencia: diferencia media < 2 m entre 0,3 y 2 km y < 15 m entre 2 y 8 km (la malla se abre con la distancia); ningún objeto del entorno dentro del sector; río en su posición (< 1 m)',
     measured: `borde: ${fmt(edgeErr * 1000, 2)} mm; relieve 0,3–2 km: media ${fmt(mean.near, 1)} m (máx. local ${fmt(max.near, 0)} m); 2–8 km: media ${fmt(mean.far, 1)} m (máx. local ${fmt(max.far, 0)} m, en cañones de quebradas); objetos dentro del sector: ${inside} de ${objects}; río: ${fmt(rioErr, 2)} m`,
     pass: edgeErr < 1e-3 && mean.near < 2 && mean.far < 15 && inside === 0 && objects > 1000 && rioErr < 1,
+  });
+}
+
+// ---------------------------------------------------------------- Escala de color natural del agua
+{
+  // La vista realista colorea el agua con su color natural (lámina gris-café turbia) en vez del azul.
+  // Debe seguir siendo una escala de profundidad fiel: los mismos cortes que la azul, más oscura y más
+  // opaca a mayor profundidad, sin agua dibujada donde el cálculo no la tiene, y la textura que usa la
+  // tarjeta gráfica igual a la leyenda.
+  const lum = (o: Float32Array) => 0.2126 * o[0] + 0.7152 * o[1] + 0.0722 * o[2];
+  const out = new Float32Array(4), prev = new Float32Array(4);
+  let monoL = true, monoA = true, worst = 0;
+  for (let i = 0; i <= 400; i++) {
+    const h = 0.001 * Math.pow(300, i / 400);
+    depthColor(h, out, 0, true);
+    if (i > 0) {
+      if (lum(out) > lum(prev) + 1e-6) monoL = false;
+      if (out[3] < prev[3] - 1e-6) monoA = false;
+    }
+    prev.set(out);
+  }
+  depthColor(0.0004, out, 0, true);
+  const dryA = out[3];
+  const sameCuts = NATURAL_STOPS.length === DEPTH_STOPS.length && NATURAL_STOPS.every((s, k) => s.depth === DEPTH_STOPS[k].depth && s.label === DEPTH_STOPS[k].label);
+  const tex = depthRampTexture(true);
+  const td = tex.image.data as Uint8Array;
+  for (let i = 0; i < 256; i++) {
+    depthColor(0.001 * Math.pow(300, i / 255), out, 0, true);
+    for (let c = 0; c < 4; c++) worst = Math.max(worst, Math.abs(td[i * 4 + c] - Math.round(out[c] * 255)));
+  }
+  tex.dispose();
+  record({
+    id: 'V9',
+    kind: 'verificacion',
+    name: 'El color natural del agua es una escala de profundidad fiel (los mismos cortes que la azul)',
+    tolerance: 'de 1 mm a 30 cm: luminancia no creciente y opacidad no decreciente; con menos de 0,5 mm no se dibuja agua; cortes y rótulos idénticos a la escala azul; textura de la tarjeta gráfica = leyenda (±1/255)',
+    measured: `luminancia ${monoL ? 'no creciente' : 'CRECE en algún tramo'}; opacidad ${monoA ? 'no decreciente' : 'DECRECE en algún tramo'}; opacidad con 0,4 mm: ${fmt(dryA, 2)}; cortes ${sameCuts ? 'idénticos' : 'distintos'}; diferencia máxima textura–leyenda: ${worst}/255`,
+    pass: monoL && monoA && dryA === 0 && sameCuts && worst <= 1,
   });
 }
 

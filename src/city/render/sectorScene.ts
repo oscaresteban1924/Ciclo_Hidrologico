@@ -19,7 +19,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { SECTOR_SPOTS, toKm } from './aburra';
 import { FLOW_CYCLE, StormFx } from './stormFx';
 import { TracerFx } from './tracerFx';
-import { facadeAtlas, glassTexture, plasterTexture, roofTexture, type FacadeAtlas, type TileId } from './textures';
+import { facadeAtlas, glassTexture, glowTexture, plasterTexture, roofTexture, type FacadeAtlas, type TileId } from './textures';
 
 export type ViewMode = 'realista' | 'materiales' | 'resultados';
 export type Pick =
@@ -84,6 +84,14 @@ export class SectorScene {
   /** Tanques, ropa tendida, cubiertas y varillas de las azoteas (se ocultan en la vista bajo la calle). */
   private roofExtras = new THREE.Group();
   private lampMat: THREE.MeshStandardMaterial | null = null;
+  private glowTex: THREE.DataTexture | null = null;
+  /** Nivel de tormenta con que se capturaron los reflejos, y el del cuadro anterior. */
+  private envStorm = 0;
+  private prevStorm = 0;
+  private lampGlowMat: THREE.PointsMaterial | null = null;
+  private lampPoolMat: THREE.MeshBasicMaterial | null = null;
+  /** Mojado de las fachadas y ventanas encendidas (según la lluvia y la tormenta). */
+  private facadeU = { uWetF: { value: 0 }, uLit: { value: 0 } };
   /** Tiempo por cuadro suavizado [s] y tiempo acumulado en el estado actual, para el detalle del entorno. */
   private frameEma = 0;
   private lodClock = 0;
@@ -91,6 +99,12 @@ export class SectorScene {
   private pipeMat: THREE.MeshStandardMaterial;
   private drainLeafMeshes: THREE.Mesh[] = [];
   private envMap: THREE.Texture | null = null;
+  /** Entorno capturado de la propia escena (calles, fachadas y cielo) para los reflejos del agua y del suelo mojado. */
+  private sceneEnv: THREE.Texture | null = null;
+  /** Cuadros que faltan para capturarlo (se hace después de mostrar la escena, una sola vez). */
+  private envPending = 0;
+  /** Agua en la escala azul (analítica) en vez de la natural. */
+  private blueWater = false;
   private cornerNb = new Int32Array(0);
   private cornerZ = new Float32Array(0);
   private backdrop: Backdrop | null = null;
@@ -217,7 +231,7 @@ export class SectorScene {
           float wetT = clamp(max(uWet * rainHereT, trailT * uWetTrail * 0.9), 0.0, 1.0);
           diffuseColor.rgb *= mix(1.0, 0.64, wetT);`,
         )
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.36, wetT);');
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.24, wetT);');
     };
     // Vista «bajo la calle»: las tuberías esquemáticas se dibujan por encima del terreno translúcido (rayos X)
     this.pipeMat = new THREE.MeshStandardMaterial({ color: '#25405c', roughness: 0.45, metalness: 0.2, emissive: new THREE.Color('#2b6cb0'), emissiveIntensity: 0, transparent: true, opacity: 0.92, depthTest: false });
@@ -316,6 +330,55 @@ export class SectorScene {
     this.lastWaterT = -1;
     this.lastResultsT = -1;
     this.applyView();
+    if (first) this.envPending = 3;
+  }
+
+  /** Agua dibujada con la escala azul (analítica) o la natural (agua turbia, por defecto). */
+  get waterBlue(): boolean {
+    return this.blueWater;
+  }
+
+  set waterBlue(v: boolean) {
+    this.blueWater = v;
+    this.fx.u.uNat.value = v ? 0 : 1;
+  }
+
+  /**
+   * Captura la escena desde el centro del sector (sin agua, lluvia ni flechas) y la usa como entorno de
+   * reflejo: los charcos y el pavimento mojado espejan las fachadas y el cielo reales de la escena.
+   */
+  private captureEnv(): void {
+    if (this.disposed) return;
+    const res = this.quality === 'alta' ? 256 : 96;
+    const rt = new THREE.WebGLCubeRenderTarget(res, { type: THREE.HalfFloatType });
+    const cc = new THREE.CubeCamera(1, 9000, rt);
+    cc.position.set(0, this.fitA + 2.5, 0);
+    const hide: THREE.Object3D[] = [this.water, this.arrows, this.tracerFx.group, this.highlight, this.pipeGroup];
+    const was = hide.map((o) => o.visible);
+    hide.forEach((o) => (o.visible = false));
+    this.fx.setCaptureMode(true);
+    this.scene.add(cc);
+    cc.update(this.renderer, this.scene);
+    this.scene.remove(cc);
+    this.fx.setCaptureMode(false);
+    hide.forEach((o, i) => (o.visible = was[i]));
+    const pm = new THREE.PMREMGenerator(this.renderer);
+    const env = pm.fromCubemap(rt.texture).texture;
+    pm.dispose();
+    rt.dispose();
+    if (this.sceneEnv) {
+      this.sceneEnv.dispose();
+      this.textures = this.textures.filter((t) => t !== this.sceneEnv);
+    }
+    this.sceneEnv = env;
+    this.textures.push(env);
+    const mats: THREE.MeshStandardMaterial[] = [this.water.material as THREE.MeshStandardMaterial, this.terrainMat, ...(this.buildingMats as THREE.MeshStandardMaterial[])];
+    for (const m of mats) {
+      // cambiar un mapa por otro igual no exige recompilar el sombreador
+      if (!m.envMap) m.needsUpdate = true;
+      m.envMap = env;
+    }
+    this.envStorm = this.fx.stormLevel;
   }
 
   private disposeGroup(g: THREE.Group): void {
@@ -501,7 +564,7 @@ export class SectorScene {
       // no cambia: solo cambian el color y la normal.
       m.onBeforeCompile = (sh) => {
         const u = this.fx.u;
-        Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode });
+        Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uRampN: u.uRampN, uNat: u.uNat, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode });
         sh.vertexShader = sh.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
@@ -509,9 +572,9 @@ export class SectorScene {
           .replace(
             '#include <common>',
             `#include <common>
-            uniform sampler2D uField, uRamp, uNoise;
+            uniform sampler2D uField, uRamp, uRampN, uNoise;
             uniform vec2 uHalf;
-            uniform float uTime, uFlowT, uRainAmt, uMode;
+            uniform float uTime, uFlowT, uRainAmt, uMode, uNat;
             uniform vec4 uRainGeo;
             varying vec3 vWPos;`,
           )
@@ -523,7 +586,10 @@ export class SectorScene {
             float hs = max(F.r, 0.0);
             if (vColor.a < 0.001 || hs < 0.0005) discard;
             float sDepth = clamp(log(hs / 0.001) / log(300.0), 0.0, 1.0);
-            vec4 rc = texture2D(uRamp, vec2(sDepth * (255.0 / 256.0) + 0.5 / 256.0, 0.5));
+            // vista realista: agua turbia (escala natural de la leyenda); si no, la escala azul
+            float nat = (uNat > 0.5 && uMode < 0.5) ? 1.0 : 0.0;
+            vec2 rampUv = vec2(sDepth * (255.0 / 256.0) + 0.5 / 256.0, 0.5);
+            vec4 rc = nat > 0.5 ? texture2D(uRampN, rampUv) : texture2D(uRamp, rampUv);
             diffuseColor = vec4(rc.rgb, rc.a);
             if (uMode > 1.5) diffuseColor.a = max(diffuseColor.a, 0.9);
             vec2 vel = F.gb;
@@ -546,7 +612,9 @@ export class SectorScene {
               foam = smoothstep(0.85, 1.35, fr) * smoothstep(0.45, 0.72, nflow) * smoothstep(0.005, 0.015, hs);
             }
             float wmix = clamp(streak * 0.38 + foam * 0.65, 0.0, 0.85);
-            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.95, 1.0), wmix);
+            // vetas: en el agua turbia, crestas más claras del mismo café; espuma casi blanca
+            vec3 streakC = nat > 0.5 ? mix(vec3(0.8, 0.74, 0.62), vec3(0.94, 0.93, 0.9), foam) : vec3(0.9, 0.95, 1.0);
+            diffuseColor.rgb = mix(diffuseColor.rgb, streakC, wmix);
             diffuseColor.a = clamp(max(diffuseColor.a, wmix), 0.0, 0.97) * opacity;`,
           )
           .replace(
@@ -577,6 +645,17 @@ export class SectorScene {
               diffuseColor.rgb += vec3(0.1, 0.12, 0.14) * rip * ripAmt;
             }
             normal = normalize(normal + (viewMatrix * vec4(pert, 0.0)).xyz);`,
+          )
+          .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.05, nat);')
+          .replace(
+            '#include <opaque_fragment>',
+            `#include <opaque_fragment>
+            // agua natural: refleja más cuanto más rasante se mira (Fresnel); la película fina se ve como
+            // suelo mojado que espeja la calle, el agua honda como agua turbia
+            if (nat > 0.5) {
+              float fres = pow(1.0 - clamp(dot(normal, geometryViewDir), 0.0, 1.0), 5.0);
+              gl_FragColor.a = max(gl_FragColor.a, min(0.9, (0.1 + fres * 1.15) * smoothstep(0.0005, 0.002, hs)));
+            }`,
           );
       };
       this.water = new THREE.Mesh(g, m);
@@ -599,9 +678,39 @@ export class SectorScene {
       const fm = new THREE.MeshStandardMaterial({ map: atlas.map, vertexColors: true, roughness: 0.88 });
       fm.onBeforeCompile = (sh) => {
         sh.uniforms.uMask = { value: atlas.mask };
+        sh.uniforms.uWetF = this.facadeU.uWetF;
+        sh.uniforms.uLit = this.facadeU.uLit;
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vFW;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFW = (modelMatrix * vec4(position, 1.0)).xyz;');
         sh.fragmentShader = sh.fragmentShader
-          .replace('#include <common>', '#include <common>\nuniform sampler2D uMask;')
-          .replace('#include <color_fragment>', '#if defined( USE_COLOR )\n  float wallM = texture2D(uMask, vMapUv).r;\n  diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, wallM);\n#endif');
+          .replace('#include <common>', '#include <common>\nuniform sampler2D uMask;\nuniform float uWetF, uLit;\nvarying vec3 vFW;\nfloat fh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }')
+          .replace(
+            '#include <color_fragment>',
+            `float wallM = 1.0;
+            #if defined( USE_COLOR )
+              wallM = texture2D(uMask, vMapUv).r;
+              diffuseColor.rgb *= mix(vec3(1.0), vColor.rgb, wallM);
+            #endif
+            // vidrio de las ventanas (oscuro y azulado en el atlas): refleja el entorno y se enciende de noche
+            float lumT = dot(sampledDiffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+            float glassM = (1.0 - wallM) * step(lumT, 0.34) * step(sampledDiffuseColor.r, sampledDiffuseColor.b + 0.03);
+            // mojado: el muro se oscurece, con chorreaduras verticales bajo pretiles y ventanas
+            float colId = floor((vFW.x + vFW.z) * 2.6);
+            float sr = fh(vec2(colId, floor(vFW.y / 2.9)));
+            float fy = fract(vFW.y / 2.9);
+            float streak = step(0.62, sr) * smoothstep(0.15 + 0.5 * fh(vec2(colId, 7.0)), 1.0, fy);
+            float wetW = uWetF * wallM;
+            diffuseColor.rgb *= mix(1.0, 0.7, wetW) * (1.0 - 0.22 * streak * wetW);`,
+          )
+          .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.5, wetW), 0.12, glassM);')
+          .replace(
+            '#include <emissivemap_fragment>',
+            `#include <emissivemap_fragment>
+            // con el cielo oscuro de la tormenta se encienden algunas ventanas (luz cálida de las casas)
+            float onW = step(0.58, fh(vec2(floor((vFW.x + vFW.z) / 1.4), floor(vFW.y / 2.9) + 3.0)));
+            totalEmissiveRadiance += vec3(1.0, 0.76, 0.46) * glassM * onW * uLit * 0.85;`,
+          );
       };
       fm.side = THREE.DoubleSide;
       this.buildingMats = [
@@ -1096,6 +1205,7 @@ export class SectorScene {
     const heads = new THREE.InstancedMesh(headG, this.lampMat, d.lamps.length);
     const crosses = new THREE.InstancedMesh(crossG, poleM, d.lamps.length);
     const tops: THREE.Vector3[] = [];
+    const headPos: THREE.Vector3[] = [];
     const wires: number[] = [];
     d.lamps.forEach(([x, y], n) => {
       const g0 = this.groundAt(x, y);
@@ -1115,10 +1225,41 @@ export class SectorScene {
       arms.setMatrixAt(n, m4.compose(new THREE.Vector3(base.x, base.y + 8.2, base.z), q, s.set(1, 1, 1)));
       const hp = new THREE.Vector3(Math.cos(best) * 1.6, 8.12, -Math.sin(best) * 1.6).add(base);
       heads.setMatrixAt(n, m4.compose(hp, q, s.set(1, 1, 1)));
+      headPos.push(hp.clone());
       crosses.setMatrixAt(n, m4.compose(new THREE.Vector3(base.x, base.y + 9.4, base.z), q, s.set(1, 1, 1)));
       tops.push(new THREE.Vector3(base.x, base.y + 9.5, base.z));
     });
     this.decorGroup.add(poles, arms, heads, crosses);
+    // Con la tormenta las luminarias encienden: halo alrededor de cada una y su luz sobre el suelo mojado.
+    // Es ambientación (la intensidad sigue a la lluvia, no a un alumbrado real) y solo en la vista realista.
+    if (headPos.length) {
+      if (!this.glowTex) {
+        this.glowTex = glowTexture();
+        this.textures.push(this.glowTex);
+      }
+      this.lampGlowMat = new THREE.PointsMaterial({ map: this.glowTex, color: '#ffd59a', size: 11, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+      const glow = new THREE.Points(new THREE.BufferGeometry().setFromPoints(headPos.map((p) => p.clone().setY(p.y - 0.2))), this.lampGlowMat);
+      glow.renderOrder = 6;
+      this.lampPoolMat = new THREE.MeshBasicMaterial({ map: this.glowTex, color: '#ffcf8c', transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const pools = headPos.map((hp) => {
+        // disco de 14 m que sigue el relieve (en ladera no queda flotando ni enterrado)
+        const g = new THREE.PlaneGeometry(14, 14, 6, 6);
+        g.rotateX(-Math.PI / 2);
+        g.translate(hp.x, 0, hp.z);
+        const pa = g.getAttribute('position') as THREE.BufferAttribute;
+        for (let v = 0; v < pa.count; v++) {
+          const mx = pa.getX(v) + this.W / 2, my = this.H / 2 - pa.getZ(v);
+          pa.setY(v, this.w(mx, my, this.groundAt(Math.min(this.W - 0.01, Math.max(0, mx)), Math.min(this.H - 0.01, Math.max(0, my))) + 0.04).y);
+        }
+        return g;
+      });
+      const pool = new THREE.Mesh(mergeGeometries(pools), this.lampPoolMat);
+      pools.forEach((g) => g.dispose());
+      pool.renderOrder = 2;
+      glow.visible = pool.visible = false;
+      glow.userData.lampFx = pool.userData.lampFx = true;
+      this.decorGroup.add(glow, pool);
+    }
     // cables entre postes cercanos (con comba) y hacia afuera del sector, por las calles del barrio
     const sag = (a: THREE.Vector3, b: THREE.Vector3, dy: number, off: number) => {
       const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
@@ -1444,14 +1585,21 @@ export class SectorScene {
     // Tormenta: lluvia, cielo, mojado y efectos ligados al cálculo
     this.fx.update(sim, this.camera, this.container.clientHeight || 600, dtReal, { mmh: this.rainMmh, flowing: sim.t > 0 && !sim.finished, view: VIEW_CODE[this.view], amplify: this.amplify });
     const storm = this.fx.stormLevel;
+    // Los reflejos se vuelven a capturar cuando el cielo cambió mucho y ya se asentó (una vez al
+    // empezar la tormenta y otra al terminar): el agua y el pavimento espejan el cielo gris, no el soleado.
+    if (this.sceneEnv && this.envPending === 0 && Math.abs(storm - this.envStorm) > 0.2 && Math.abs(storm - this.prevStorm) < 0.0015) this.envPending = 1;
+    this.prevStorm = storm;
     const bg = this.scene.background as THREE.Color;
     this.fx.horizon(bg);
     const fog = this.scene.fog as THREE.Fog;
     fog.color.copy(bg);
-    // bruma del valle; con lluvia fuerte la visibilidad baja a unos pocos kilómetros
-    fog.near = 700 * (1 - 0.65 * storm);
-    fog.far = 17000 * (1 - 0.8 * storm);
-    this.backdrop?.update(this.reducedMotion ? 0 : dtReal, storm);
+    // Bruma del valle. Con lluvia fuerte la visibilidad cae a un kilómetro o poco más, pero la niebla
+    // empieza justo antes del punto que se mira: el sector (y el cálculo) queda nítido y lo de atrás se pierde.
+    const camD = this.camera.position.distanceTo(this.controls.target);
+    const nearS = Math.max(60, camD * 0.95);
+    fog.near = 700 + (nearS - 700) * storm;
+    fog.far = 17000 + (nearS + 1150 - 17000) * Math.pow(storm, 0.8);
+    this.backdrop?.update(this.reducedMotion ? 0 : dtReal, storm, this.camera.position);
     // Detalle del entorno según lo que aguanta el equipo: si cada cuadro tarda mucho (equipos sin
     // tarjeta gráfica), se ocultan los volúmenes lejanos y las nubes; el relieve sigue mostrando la ciudad.
     const now = performance.now();
@@ -1467,12 +1615,32 @@ export class SectorScene {
         this.lodClock = 0;
       }
     }
-    this.sun.intensity = 2.1 * (1 - storm * 0.7);
+    this.sun.intensity = 2.1 * (1 - storm * 0.8);
     if (this.lampMat) this.lampMat.emissiveIntensity = 0.15 + storm * 0.9;
-    this.hemi.intensity = 1.1 * (1 - storm * 0.18);
-    this.hemi.color.set('#e8f2ff').lerp(new THREE.Color('#b9c6d3'), storm);
-    // fachadas y techos se oscurecen al mojarse
-    for (let i = 0; i < 4 && i < this.buildingMats.length; i++) (this.buildingMats[i] as THREE.MeshStandardMaterial).color.setScalar(1 - 0.2 * storm);
+    if (this.lampGlowMat && this.lampPoolMat) {
+      const lit = this.view === 'realista' ? Math.max(0, storm - 0.2) / 0.8 : 0;
+      this.lampGlowMat.opacity = 0.55 * lit;
+      this.lampPoolMat.opacity = 0.3 * lit * (0.4 + 0.6 * this.fx.u.uWet.value);
+      for (const o of this.decorGroup.children) if (o.userData.lampFx) o.visible = lit > 0.01;
+    }
+    this.hemi.intensity = 1.1 * (1 - storm * 0.28);
+    this.hemi.color.set('#e8f2ff').lerp(new THREE.Color('#a9b6c3'), storm);
+    // fachadas y techos se oscurecen al mojarse (lo hacen sus sombreadores con el mojado de la lluvia);
+    // la luz cae con la tormenta
+    const wet = this.fx.u.uWet.value;
+    this.facadeU.uWetF.value = wet;
+    this.facadeU.uLit.value = Math.max(0, storm - 0.25) / 0.75;
+    for (let i = 1; i < 4 && i < this.buildingMats.length; i++) (this.buildingMats[i] as THREE.MeshStandardMaterial).color.setScalar(1 - 0.22 * wet);
+    const roofM = this.buildingMats[3] as THREE.MeshStandardMaterial | undefined;
+    if (roofM) roofM.roughness = 0.95 - 0.5 * wet;
+    // reflejos del entorno capturado: el agua natural espeja calles y cielo; el pavimento mojado también
+    if (this.sceneEnv) {
+      const natural = this.fx.u.uNat.value > 0.5 && this.view === 'realista';
+      (this.water.material as THREE.MeshStandardMaterial).envMapIntensity = natural ? 1.6 - 0.6 * storm : 0.4;
+      this.terrainMat.envMapIntensity = wet * (0.95 - 0.35 * storm);
+      for (let i = 0; i < 4 && i < this.buildingMats.length; i++) (this.buildingMats[i] as THREE.MeshStandardMaterial).envMapIntensity = 0.25 + 0.5 * wet;
+    }
+    this.renderer.toneMappingExposure = 1.05 * (1 - 0.16 * storm);
 
     if (sim.t !== this.lastWaterT || this.amplify !== this.lastAmp) {
       this.updateWater(sim);
@@ -1719,6 +1887,7 @@ export class SectorScene {
       if (k >= 1) this.tween = null;
     }
     this.controls.update();
+    if (this.envPending > 0 && --this.envPending === 0) this.captureEnv();
     this.renderer.render(this.scene, this.camera);
     // etiquetas
     const w = this.container.clientWidth, h = this.container.clientHeight;
@@ -1730,10 +1899,12 @@ export class SectorScene {
     };
     // los rótulos lejanos (río, metro, cerros…) solo en las vistas altas: a nivel de calle quedarían
     // dibujados sobre las fachadas
+    // y, con la tormenta, tampoco los que quedaron perdidos en la niebla (no se rotula lo que no se ve)
     const high = this.camera.position.y - this.fitA > 22;
+    const fogFar = (this.scene.fog as THREE.Fog).far * 0.8;
     for (const l of this.labelItems) {
       project(l.id, l.at);
-      if (!high && l.kind === 'lejano') pos.set(l.id, { x: 0, y: 0, visible: false });
+      if (l.kind === 'lejano' && (!high || l.at.distanceTo(this.camera.position) > fogFar)) pos.set(l.id, { x: 0, y: 0, visible: false });
     }
     for (const l of this.tracerFx.labels) project(l.id, l.at);
     if (this.cut && this.sc.pipes.length) {

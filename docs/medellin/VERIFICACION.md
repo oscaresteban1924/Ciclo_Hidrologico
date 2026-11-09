@@ -202,6 +202,31 @@ En calidad alta (la de un equipo con GPU), la calle tiene ≈ 1,35 millones de t
 
 **Comparación:** `medellin-sector-antes-ahora.png` (entregada aparte) y capturas 02, 03, 05, 11 y 15 de `docs/medellin/capturas`.
 
+## 4 octies. Lluvia en los sectores: agua natural, superficies mojadas y tormenta (ejecutada)
+
+**Pedido.** Analizar con más profundidad y mejorar sustancialmente cómo se ve Medellín, sobre todo en las zonas de lluvia.
+
+**Diagnóstico** (capturas de los dos sectores con 100 mm/h, minuto 10, en cuatro encuadres: `tools/verificacion/lluvia_capturas.py`):
+- la escena parecía un día nublado y claro, no un aguacero;
+- el agua era una pintura azul clara sobre todas las calles, sin reflejos;
+- pavimento, fachadas y techos no se veían mojados;
+- el valle se veía nítido hasta el horizonte en plena tormenta.
+
+**El cálculo no cambia.** Profundidades, velocidades, balance y misiones son los mismos; solo cambia el dibujo. `npm run test:city` da 23 de 23, con la prueba nueva V9.
+
+| Cambio | Cómo se verificó |
+|---|---|
+| **Color natural del agua** en la vista realista: lámina gris-café turbia, más oscura y opaca cuanto más profunda, con los mismos cortes y rótulos que la escala azul. Leyenda «Profundidad del agua (color natural)». | V9: luminancia no creciente y opacidad no decreciente de 1 mm a 30 cm; sin agua con menos de 0,5 mm; cortes idénticos a la escala azul; textura de la tarjeta gráfica igual a la leyenda (diferencia 0/255). |
+| **Botón «Agua en azul»** para volver a la escala azul (proyectores con poco contraste). «Materiales» y «Resultados» siguen en azul. | En el navegador (`tools/verificacion/agua_azul.py`): el botón cambia `aria-pressed`, la leyenda y el color, y vuelve al estado anterior. Consola limpia. |
+| **Reflejos.** El agua espeja una captura de la propia escena (fachadas, calles, cielo), con más brillo en ángulo rasante, solo donde hay agua calculada. La captura se repite cuando el cielo de la tormenta se asienta: el agua y el pavimento espejan el cielo gris. | Capturas a nivel de calle. |
+| **Superficies mojadas.** Pavimento, fachadas (con chorreaduras) y techos se oscurecen y brillan con la lluvia; los vidrios reflejan. Es superficie mojada, no agua acumulada: la guía docente lo explica y propone distinguirlos con un toque o con la leyenda. | Capturas; lectura de la guía. |
+| **Tormenta.** Luz más baja; ventanas, luminarias (halo y luz sobre el suelo mojado) y barrios del entorno encendidos; bruma que empieza justo detrás del punto que se mira (el sector queda nítido y el valle se pierde a algo más de 1 km); nubes bajas en las laderas, siempre lejos del sector y de la cámara; velo de lluvia en pantalla solo en la vista realista, que se apaga al mirar hacia abajo y con movimiento reducido. Los rótulos lejanos que quedan en la bruma se ocultan. | Capturas en los cuatro encuadres de los dos sectores. Con movimiento reducido, `tools/city4.py` sin solapes ni errores. |
+| **Regresión** | `npm run test:city`: 23 de 23. 0 solapes en 1280×720, 1024×1366 y 390×844. 40 tabulaciones con foco visible; P pausa el cálculo; al salir quedan 0 recursos activos. Pestañas sin cortes en 5 tamaños. Alternativa 2D sin cambios. Versión de un solo archivo sin peticiones externas. Consola limpia. |
+
+**Comparación:** `medellin-lluvia-antes-ahora.png` (en `docs/medellin/capturas` y entregada aparte). Las capturas 02, 03, 05, 11 y 15 de esa carpeta se rehicieron con la lluvia nueva.
+
+**Datos oficiales de Medellín.** Las capas de la cartografía base (red hídrica, ríos, barrios, construcciones con número de pisos, vías, equipamientos, espacio público, hidrografía del POT), la ortofoto 2024 y el modelo digital de elevación 2024 (1 m) **no se pudieron descargar**: el proxy de este entorno rechaza `www.medellin.gov.co` (403). Sus metadatos sí se leyeron y están en `DATOS_REALES.md`, sección 8. Por eso el relieve y el entorno siguen siendo la tabla de referencia aproximada.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
@@ -218,12 +243,12 @@ En calidad alta (la de un equipo con GPU), la calle tiene ≈ 1,35 millones de t
 
 | Sector y tamaño | Cuadros/s | Cálculo por cuadro | Velocidad lograda |
 |---|---|---|---|
-| Calle, 1280×720 | 1,9 (antes 2,5) | 4,7 ms | ×14,6 (antes ×18,5) |
-| Ladera, 1280×720 | 1,7 (antes 2,0) | 13,2 ms | ×12,0 (antes ×14,6) |
-| Calle, 390×844 | 3,1 (antes 4,2) | 6,5 ms | ×23,3 (antes ×29,4) |
-| Ladera, 390×844 | 2,9 (antes 3,0) | 17,7 ms | ×19,5 (antes ×23,4) |
+| Calle, 1280×720 | 2,2 (antes 1,9) | 3,8 ms | ×17,0 (antes ×14,6) |
+| Ladera, 1280×720 | 2,0 (antes 1,7) | 12,3 ms | ×15,1 (antes ×12,0) |
+| Calle, 390×844 | 3,9 (antes 3,1) | 3,0 ms | ×12,5 (antes ×23,3) |
+| Ladera, 390×844 | 2,9 (antes 2,9) | 12,8 ms | ×21,0 (antes ×19,5) |
 
-Las cifras actuales son las del sector con el valle alrededor (sección 4 septies), medidas el 9 de noviembre con el detalle ya adaptado (a los ≈ 3 s de entrar); entre paréntesis, las de la versión anterior. El cálculo por cuadro no cambió: la diferencia es solo de dibujo. Con el entorno anterior, el 9 de noviembre se repitieron, con la vista nueva del valle: calle 2,7 y ladera 2,0 cuadros/s a 1280×720; calle 4,1 y ladera 3,0 a 390×844. Los sectores no cambian, porque la vista del valle se libera por completo al entrar a un sector. Una primera repetición dio 2,0 en la calle a 1280×720: entre mediciones hay variaciones de hasta ≈ 25 % en este entorno compartido. La aplicación detecta que el navegador dibuja por software (SwiftShader) y, en calidad automática, usa la calidad **ligera**. La calidad alta es la que se usaría en un equipo con GPU; en este entorno, con calidad alta forzada, la calle a 1280×720 baja a ≈ 1,6 cuadros/s. Entre mediciones repetidas hay variaciones de ±15 %, y a veces mayores.
+Las cifras actuales son las de la lluvia nueva (sección 4 octies), medidas el 9 de noviembre con lluvia de 100 mm/h y el detalle ya adaptado; entre paréntesis, las del sector con el valle alrededor (sección 4 septies). Los efectos nuevos no restaron cuadros por segundo: las diferencias están dentro de la variación entre mediciones de este entorno compartido (la velocidad lograda en la calle a 390×844 bajó en esta medición aunque los cuadros por segundo subieron). Las cifras del sector con el valle alrededor también se midieron el 9 de noviembre, con el detalle ya adaptado (a los ≈ 3 s de entrar). El cálculo por cuadro no cambió: la diferencia es solo de dibujo. Con el entorno anterior, el 9 de noviembre se repitieron, con la vista nueva del valle: calle 2,7 y ladera 2,0 cuadros/s a 1280×720; calle 4,1 y ladera 3,0 a 390×844. Los sectores no cambian, porque la vista del valle se libera por completo al entrar a un sector. Una primera repetición dio 2,0 en la calle a 1280×720: entre mediciones hay variaciones de hasta ≈ 25 % en este entorno compartido. La aplicación detecta que el navegador dibuja por software (SwiftShader) y, en calidad automática, usa la calidad **ligera**. La calidad alta es la que se usaría en un equipo con GPU; en este entorno, con calidad alta forzada, la calle a 1280×720 baja a ≈ 1,6 cuadros/s. Entre mediciones repetidas hay variaciones de ±15 %, y a veces mayores.
 
 Los pocos cuadros por segundo se deben al **dibujo por software** del entorno, no al cálculo. **No se midió en un equipo con GPU**: queda pendiente.
 
@@ -237,6 +262,8 @@ Historia en el mismo entorno, en cuadros/s (calle y ladera a 1280×720, calle y 
 | Entorno y gotas (1.ª ronda), con calidad ligera automática | 3,4 | 2,6 | 5,3 | 3,7 |
 | Entorno y gotas (2.ª ronda: barrio y loma) | 2,9 | 2,1 | 4,3 | 3,5 |
 | Sector asentado y barrio de ladera | 2,5 | 2,0 | 4,2 | 3,0 |
+| Valle alrededor del sector, fachadas y vida de calle | 1,9 | 1,7 | 3,1 | 2,9 |
+| Lluvia: agua natural, reflejos, mojado y tormenta | 2,2 | 2,0 | 3,9 | 2,9 |
 
 Cada ronda del entorno agregó casas y árboles: primero el barrio alrededor del sector y luego el barrio de ladera, de unas 5 200 casas en calidad alta y 1 800 en ligera. Por eso, con el dibujo por software, todo es algo más lento que en la primera ronda. En una GPU esta carga es moderada, porque las casas se dibujan con una sola malla de instancias.
 
@@ -258,7 +285,7 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
 
 **Tamaño de las versiones.**
 - `dist/`: el código principal no cambió (≈ 624 kB); Three.js y el módulo se cargan aparte al entrar (≈ 600 kB + 144 kB + 34 kB + 8 kB).
-- `dist-single/index.html`: pasa de ≈ 0,8 MB a 1,70 MB porque incluye Three.js en el mismo archivo. Los efectos de lluvia y agua agregan ≈ 35 kB; el entorno y el recorrido de las gotas, ≈ 34 kB; el sector asentado con el barrio de ladera, ≈ 6 kB; la vista nueva del valle, ≈ 33 kB (1,70 → 1,74 MB); y el entorno, las fachadas y la vida de calle de los sectores, ≈ 35 kB (1,74 → 1,77 MB). En `dist/`, la escena del valle pasa de ≈ 10 kB a ≈ 26 kB y se carga solo al entrar al módulo.
+- `dist-single/index.html`: pasa de ≈ 0,8 MB a 1,70 MB porque incluye Three.js en el mismo archivo. Los efectos de lluvia y agua agregan ≈ 35 kB; el entorno y el recorrido de las gotas, ≈ 34 kB; el sector asentado con el barrio de ladera, ≈ 6 kB; la vista nueva del valle, ≈ 33 kB (1,70 → 1,74 MB); el entorno, las fachadas y la vida de calle de los sectores, ≈ 35 kB (1,74 → 1,77 MB); y la lluvia nueva (agua natural, reflejos, mojado y tormenta), ≈ 13 kB (1,77 → 1,79 MB). En `dist/`, la escena del valle pasa de ≈ 10 kB a ≈ 26 kB y se carga solo al entrar al módulo.
 
 ## 6. Pendiente o no verificado
 

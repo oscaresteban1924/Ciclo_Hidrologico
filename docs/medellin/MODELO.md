@@ -108,15 +108,18 @@ Los efectos leen el estado calculado en cada cuadro (`src/city/render/fxData.ts`
 
 | Efecto | Qué lo controla | Qué es solo dibujo |
 |---|---|---|
-| **Color del agua** | Profundidad calculada de cada celda, con la misma escala de la leyenda. Entre celdas se interpola el color, no la altura. | La lámina de pocos milímetros se dibuja más transparente, para que se vea el suelo mojado debajo. Desde 1 cm, la opacidad es la de la leyenda. |
+| **Color del agua** | Profundidad calculada de cada celda, con la misma escala de la leyenda. Entre celdas se interpola el color, no la altura. En la vista realista la escala es **de color natural**: lámina gris-café turbia, más oscura y opaca cuanto más profunda, con los mismos cortes (1 mm a 30 cm) y rótulos de la escala azul (prueba V9). El botón «Agua en azul» vuelve a la escala azul; las vistas «Materiales» y «Resultados» usan siempre la azul. | Los tonos de la escala natural. En la escala azul, la lámina de pocos milímetros se dibuja más transparente, para que se vea el suelo mojado debajo; desde 1 cm, la opacidad es la de la leyenda. |
+| **Reflejos del agua** | Solo dónde hay agua (profundidad calculada mayor que ≈ 1 mm). El brillo crece en ángulo rasante (Fresnel), como en un charco real. | El entorno que se espeja: una captura de la propia escena (fachadas, calles y cielo) que se repite cuando el cielo de la tormenta se asienta, para que el agua y el pavimento espejen el cielo gris y no el soleado. |
 | **Altura de la lámina** | Profundidad calculada, a escala 1:1. | Solo «Agua ×5» la engrosa, y lo avisa en pantalla. Los efectos nuevos no cambian la altura: solo el color y la normal de la superficie. |
 | **Vetas sobre el agua** | Velocidad calculada en la celda, la misma de las flechas. Avanzan en la dirección del flujo a esa velocidad, **en tiempo real**: la velocidad de simulación (×30) no las acelera. | El dibujo de la veta (ruido estirado) y su reinicio cada 1,6 s, que evita que se deformen. |
 | **Espuma** | Agua rápida: número de Froude local (velocidad ÷ √(g·h)) mayor que ≈ 0,85, con al menos 5 mm de profundidad. | La forma de la espuma. |
 | **Gotas de lluvia** | Intensidad aplicada en ese instante (cantidad y opacidad) y zona de lluvia: en la lluvia localizada solo caen dentro del círculo, con la misma regla del motor. | Posición de cada gota. Caen a ≈ 9 m/s, la velocidad típica de una gota de lluvia, también en tiempo real. |
 | **Salpicaduras y anillos** | Solo donde llueve. Sobre agua de más de 1,5 mm (profundidad calculada) se dibujan anillos; sobre superficie seca, una corona de gotitas. | Posición y ritmo de cada salpicadura. Se desvanecen con la distancia. |
 | **Cortina de lluvia** | Borde del círculo de lluvia localizada. Con lluvia uniforme no se dibuja: la bruma de la tormenta la da la niebla. | Su textura. |
-| **Suelo mojado** | Donde llueve, y la huella de la profundidad máxima alcanzada (hasta 3 mm), que marca por dónde pasó el agua. | Cuánto se oscurece. |
-| **Cielo y luz** | Intensidad de lluvia: el cielo se oscurece y la luz baja durante el aguacero. | Los colores. |
+| **Suelo mojado** | Donde llueve, y la huella de la profundidad máxima alcanzada (hasta 3 mm), que marca por dónde pasó el agua. | Cuánto se oscurece y cuánto brilla. Las fachadas, los techos y el entorno también se oscurecen y brillan con la lluvia, con chorreaduras en las paredes; esto no indica agua acumulada. |
+| **Cielo y luz** | Intensidad de lluvia: el cielo se oscurece y la luz baja durante el aguacero. | Los colores. Con la tormenta se encienden ventanas, luminarias (halo y luz sobre el suelo mojado) y los barrios del entorno; es ambiente, no el alumbrado real. |
+| **Bruma y nubes bajas** | Intensidad de lluvia. Con lluvia fuerte, la visibilidad cae a algo más de un kilómetro detrás del punto que se mira: el sector queda nítido y el valle se pierde en el aguacero. | Nubes bajas que se arrastran por las laderas, siempre lejos del sector y de la cámara. Los rótulos lejanos que quedan en la bruma se ocultan. |
+| **Velo de lluvia en pantalla** | Intensidad de lluvia; solo en la vista realista. | Trazos finos que caen y una bruma tenue en la parte alta de la pantalla. Desaparece al mirar hacia abajo (la vista «Arriba» lee el agua sin velo). |
 | **Chorro de cada bajante** | Caudal que el techo envía a la superficie: intensidad × área del techo donde llueve, si el techo no está conectado a un depósito. Es el mismo reparto del motor (V5). | Forma parabólica del chorro y grosor visual, que crece con la raíz del caudal. |
 | **Remolino del sumidero** | Caudal captado por ese sumidero en el último paso. Un sumidero obstruido por completo no muestra remolino. | Dibujo del remolino. |
 | **Escurrimiento de salida** | Caudal que sale por cada cara de salida del borde del sector: el que el balance cuenta como «Salió del sector» (V5). | Una lámina que sigue unos 7 m por la calle vecina y se desvanece. Fuera del sector no se calcula nada: la lámina solo señala dónde y cuánto sale. |
@@ -133,7 +136,7 @@ Además, siguen siendo **decorativos**:
     - Cerca del sector, el terreno sigue el plano de su pendiente, calculado por mínimos cuadrados sobre sus celdas. Ese plano se funde con el relieve del valle a unos 230 m.
     - Una franja de unión empieza con la altura exacta del borde del sector y con el color de su superficie (calle, andén, prado o cauce), sin escalón. A unos 12 a 30 m se une con el terreno del entorno.
     - Las casas cercanas se apoyan en ese suelo y, en pendiente, se entierran hasta su esquina más baja.
-  - **Relieve.** El de la tabla de referencia, sin exagerar, con las montañas que cierran el valle (`outerZ`). La malla es fina cerca (20 m en calidad alta, 40 m en ligera) y se abre hacia el horizonte (hasta 30 km). Con lluvia fuerte la bruma baja la visibilidad a unos pocos kilómetros.
+  - **Relieve.** El de la tabla de referencia, sin exagerar, con las montañas que cierran el valle (`outerZ`). La malla es fina cerca (20 m en calidad alta, 40 m en ligera) y se abre hacia el horizonte (hasta 30 km). Con lluvia fuerte la bruma baja la visibilidad a algo más de un kilómetro detrás del sector.
   - **Barrios, por tipo de tejido urbano** (el mismo de la vista del valle):
     - hasta ≈ 650 m (340 m en ligera): cuadras con casas pegadas en lo plano y casas escalonadas en las laderas, con el frente hacia la calle o ladera abajo; culatas de ladrillo sin ventanas aunque el frente esté pintado; puertas, persianas de locales, ventanas con reja y balcones; tanques negros y azules, pisos en obra gris con varillas y algunos murales; carros, taxis y busetas parqueados;
     - hasta ≈ 5 km (2,4 km en ligera): volúmenes por tejido (ladera, plano, Centro, El Poblado, industria, municipios);
@@ -156,7 +159,8 @@ Además, siguen siendo **decorativos**:
 **Movimiento reducido.** Si el sistema operativo lo pide:
 - las gotas quedan quietas y más tenues;
 - no hay salpicaduras ni anillos;
-- las vetas, el remolino y el escurrimiento de salida no se desplazan.
+- las vetas, el remolino y el escurrimiento de salida no se desplazan;
+- no hay velo de lluvia en pantalla y las nubes bajas no se mueven.
 
 Toda la información sigue disponible en colores, números y flechas.
 

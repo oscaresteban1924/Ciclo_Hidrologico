@@ -1,5 +1,7 @@
-// Escalas de color del laboratorio. La profundidad usa una sola tonalidad (azul) de claro a oscuro;
-// siempre se acompaña de números en la leyenda y en las mediciones (no se depende solo del color).
+// Escalas de color del laboratorio. La profundidad tiene dos escalas de un solo tono, de claro a
+// oscuro: la NATURAL (escorrentía turbia: película brillante que se vuelve café, como el agua que corre
+// por las calles y quebradas de Medellín en un aguacero) y la AZUL (analítica: resultados, plano 2D y
+// cuando se pide «Agua en azul»). Ambas se acompañan de números en la leyenda y en las mediciones.
 
 /** Exageración vertical del esquema del valle (se informa en la interfaz; no afecta el cálculo). */
 export const VALLEY_EXAGGERATION = 1.5;
@@ -21,25 +23,38 @@ export const DEPTH_STOPS: DepthStop[] = [
   { depth: 0.3, color: '#0b2f66', alpha: 0.94, label: '30 cm' },
 ];
 
+/** Escala natural (agua turbia): misma profundidad en cada parada; más opaca y más oscura al crecer. */
+export const NATURAL_STOPS: DepthStop[] = [
+  { depth: 0.001, color: '#a9aaa0', alpha: 0.2, label: '1 mm' },
+  { depth: 0.005, color: '#9c8d6c', alpha: 0.42, label: '5 mm' },
+  { depth: 0.02, color: '#87714d', alpha: 0.66, label: '2 cm' },
+  { depth: 0.05, color: '#745b3a', alpha: 0.8, label: '5 cm' },
+  { depth: 0.15, color: '#5d452a', alpha: 0.9, label: '15 cm' },
+  { depth: 0.3, color: '#44311d', alpha: 0.95, label: '30 cm' },
+];
+
 const hex = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
-const STOPS_RGB = DEPTH_STOPS.map((s) => ({ ...s, rgb: hex(s.color), ld: Math.log(s.depth) }));
+const toRgb = (stops: DepthStop[]) => stops.map((s) => ({ ...s, rgb: hex(s.color), ld: Math.log(s.depth) }));
+const STOPS_RGB = toRgb(DEPTH_STOPS);
+const NATURAL_RGB = toRgb(NATURAL_STOPS);
 
 /** Color y opacidad para una profundidad [m] (interpolación en escala logarítmica). */
-export function depthColor(h: number, out: Float32Array, o: number): void {
+export function depthColor(h: number, out: Float32Array, o: number, natural = false): void {
+  const STOPS = natural ? NATURAL_RGB : STOPS_RGB;
   if (h < DEPTH_STOPS[0].depth * 0.5) {
     out[o] = out[o + 1] = out[o + 2] = 0;
     out[o + 3] = 0;
     return;
   }
   const lh = Math.log(Math.max(h, DEPTH_STOPS[0].depth));
-  let a = STOPS_RGB[0], b = STOPS_RGB[0];
-  for (let k = 0; k < STOPS_RGB.length - 1; k++) {
-    if (lh <= STOPS_RGB[k + 1].ld) {
-      a = STOPS_RGB[k];
-      b = STOPS_RGB[k + 1];
+  let a = STOPS[0], b = STOPS[0];
+  for (let k = 0; k < STOPS.length - 1; k++) {
+    if (lh <= STOPS[k + 1].ld) {
+      a = STOPS[k];
+      b = STOPS[k + 1];
       break;
     }
-    a = b = STOPS_RGB[STOPS_RGB.length - 1];
+    a = b = STOPS[STOPS.length - 1];
   }
   const t = a === b ? 0 : Math.min(1, Math.max(0, (lh - a.ld) / (b.ld - a.ld)));
   out[o] = a.rgb[0] + (b.rgb[0] - a.rgb[0]) * t;
@@ -48,8 +63,14 @@ export function depthColor(h: number, out: Float32Array, o: number): void {
   out[o + 3] = a.alpha + (b.alpha - a.alpha) * t;
 }
 
-export function cssDepthGradient(): string {
-  return `linear-gradient(90deg, ${DEPTH_STOPS.map((s, i) => `${s.color} ${(i / (DEPTH_STOPS.length - 1)) * 100}%`).join(', ')})`;
+export function cssDepthGradient(natural = false): string {
+  if (!natural) return `linear-gradient(90deg, ${DEPTH_STOPS.map((s, i) => `${s.color} ${(i / (DEPTH_STOPS.length - 1)) * 100}%`).join(', ')})`;
+  // la escala natural se muestra sobre asfalto: la película fina deja ver el suelo, el agua honda no
+  const rgba = (s: DepthStop) => {
+    const [r, g, b] = hex(s.color).map((v) => Math.round(v * 255));
+    return `rgba(${r}, ${g}, ${b}, ${s.alpha})`;
+  };
+  return `linear-gradient(90deg, ${NATURAL_STOPS.map((s, i) => `${rgba(s)} ${(i / (NATURAL_STOPS.length - 1)) * 100}%`).join(', ')}), #55585c`;
 }
 
 export const hexToRgb = hex;

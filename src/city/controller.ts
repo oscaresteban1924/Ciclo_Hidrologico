@@ -420,6 +420,14 @@ export class CityController {
   amplify(): number {
     return this.view?.amplify ?? 1;
   }
+  /** Agua en la escala azul (analítica) en vez de la natural (agua turbia). Solo en la escena 3D. */
+  setWaterBlue(on: boolean): void {
+    if (this.view && 'waterBlue' in this.view) this.view.waterBlue = on;
+    this.notify(true);
+  }
+  waterBlue(): boolean {
+    return this.view && 'waterBlue' in this.view ? this.view.waterBlue : true;
+  }
   camera(cmd: 'general' | 'calle' | 'arriba' | 'valle' | 'izq' | 'der' | 'acercar' | 'alejar'): void {
     if (this.valley) {
       if (cmd === 'general') this.valley.home(true);

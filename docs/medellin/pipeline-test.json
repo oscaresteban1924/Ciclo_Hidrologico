@@ -37,7 +37,7 @@
       "detail": "máx x local = 120.00 m"
     },
     {
-      "name": "Alturas: agl real, n_pisos estimado y sin dato marcados",
+      "name": "Alturas: agl real, pisos estimado y sin dato marcados",
       "pass": true,
       "detail": ""
     },
@@ -58,6 +58,16 @@
     },
     {
       "name": "La aplicación valida, compila y simula el escenario",
+      "pass": true,
+      "detail": "OK: escenario válido, compilado y simulado"
+    },
+    {
+      "name": "Esquema oficial «Construccion»: altura = numero_pisos × 3 m (estimado), sin dato = 6 m; atributos cbml y tipo conservados",
+      "pass": true,
+      "detail": "10 edificios; alturas [6.0, 9.0, 12.0, 15.0, 60.0]"
+    },
+    {
+      "name": "La aplicación valida, compila y simula el escenario del esquema oficial",
       "pass": true,
       "detail": "OK: escenario válido, compilado y simulado"
     }
