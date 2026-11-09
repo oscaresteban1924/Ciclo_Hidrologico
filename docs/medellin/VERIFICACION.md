@@ -9,7 +9,7 @@ Entorno de verificación:
 
 ## 1. Pruebas numéricas obligatorias (ejecutadas)
 
-Comando: `npm run test:city`. Resultado: **22 de 22** comprobaciones cumplen su tolerancia. El detalle (tolerancia, medido y notas) está en `docs/medellin/PRUEBAS.md`.
+Comando: `npm run test:city`. Resultado: **31 de 31** comprobaciones cumplen su tolerancia (incluidas las de la red separada y la creciente: S1 a S7 y C1, sección 4 nonies). El detalle (tolerancia, medido y notas) está en `docs/medellin/PRUEBAS.md`.
 
 | # | Prueba | Resultado medido (resumen) |
 |---|---|---|
@@ -227,28 +227,85 @@ En calidad alta (la de un equipo con GPU), la calle tiene ≈ 1,35 millones de t
 
 **Datos oficiales de Medellín.** Las capas de la cartografía base (red hídrica, ríos, barrios, construcciones con número de pisos, vías, equipamientos, espacio público, hidrografía del POT), la ortofoto 2024 y el modelo digital de elevación 2024 (1 m) **no se pudieron descargar**: el proxy de este entorno rechaza `www.medellin.gov.co` (403). Sus metadatos sí se leyeron y están en `DATOS_REALES.md`, sección 8. Por eso el relieve y el entorno siguen siendo la tabla de referencia aproximada.
 
+## 4 nonies. Alcantarillado separado y creciente de la quebrada (ejecutada)
+
+**Pedido.**
+1. Fortalecer el sistema de alcantarillado: mejorar los sumideros, agregar cámaras de inspección (MH) según la norma de EPM y separar la línea de aguas residuales de la de aguas lluvias.
+2. Simular una creciente que supere la capacidad hidráulica de la quebrada y ver cómo se comporta el agua en esa sección.
+
+**Fuente normativa.** *Normas de Diseño de Sistemas de Alcantarillado* de EPM (GD-AS002). Se leyeron en línea el 9 de noviembre de 2026 los numerales 2.3, 3.4, 5.2, 6.2, 6.3, 8.3, 8.4 y 8.5. La tabla de control del documento tiene su última entrada el 14 de febrero de 2025. La dotación y la curva IDF no están en esos numerales (la norma remite a EPM): se usaron valores **supuestos** y así se rotulan.
+
+**El cálculo cambió.** La red esquemática de 250 L/s se reemplazó por una red calculada (MODELO 6.3), y la quebrada recibe creciente (MODELO 6.4). En la ladera cambió el terreno al sur de la quebrada: antes el agua desbordada se alejaba del cauce; ahora la quebrada corre por el fondo de su valle. Las cifras de las misiones cambian; sus resultados se siguen calculando.
+
+`npm run test:city`: **31 de 31**. Pruebas nuevas:
+
+| Prueba | Qué verifica | Resultado |
+|---|---|---|
+| S1 | Tubería en flujo permanente: sale lo que entra y la lámina queda cerca de la normal de Manning | Cumple. Error de caudal 0,000 %; lámina a 8 % de la normal. |
+| S2 | Con 3 veces la capacidad la cámara rebosa y el volumen se conserva | Cumple. Residuo 4·10⁻¹³ m³. |
+| S3 | Ecuaciones de captación por tipo: ventana en pendiente y en punto bajo, rejilla y mixto | Cumple. |
+| S4 | Criterios de la norma de EPM en las dos redes | Cumple: 15 de 15 criterios en cada sector. |
+| S5 | Sin conexiones erradas no entra lluvia a las aguas residuales; con ellas entra y rebosa | Cumple. Rebose de 140 m³ con 100 mm/h. |
+| S6 | Balance calle + red con creciente al 200 %: cierra, el hidrograma entra completo y la quebrada se mete por la descarga | Cumple. Residuo de la superficie 3·10⁻¹⁰ m³ sobre 50 000 m³; residuo de la red 10⁻¹² m³. |
+| C1 | La capacidad de la sección coincide con el modelo: con el 80 % no se desborda, con el 125 % sí | Cumple. |
+| S7 | Geometría de la sección circular | Cumple. |
+
+**Sensibilidad a la resolución (prueba 12).**
+- Con los sumideros nuevos, al principio no cumplía: 16 % de diferencia en la salida entre 1 m y 0,5 m.
+- **Causa:** cuatro sumideros nuevos quedaban, con celdas de 0,5 m, en la segunda celda desde el bordillo y no en la de la cuneta.
+- **Corrección:** se pusieron a 0,2 m del bordillo, en la celda de la cuneta con cualquier malla.
+- **Resultado:** cumple con 7,2 %. El criterio no se cambió.
+
+**Misiones.** Se ejecutaron las ocho sin interfaz (`tests/city/missions.ts`).
+- «Conexiones erradas»: rebosan 32 m³ de aguas residuales con la lluvia de 60 mm/h.
+- «La creciente de la quebrada»: con el 150 % de la capacidad, el agua supera la orilla en 39 cm y la red devuelve 7 m³ por la carrera sur.
+- Las seis anteriores siguen dando un resultado calculado. «El charco de la esquina» ahora tiene su punto más hondo cerca de la salida, porque la esquina tiene un sumidero mixto.
+
+**Navegador** (`tools/verificacion/red_capturas.py`, calidad ligera; consola limpia):
+- En la calle, con 100 mm/h y conexiones erradas: el panel muestra las dos redes, el alcantarillado de aguas residuales en carga y su rebose en AR-0. La vista bajo la calle dibuja la tubería en carga en rojo y las conexiones erradas en violeta.
+- En la ladera, con la creciente al 200 %:
+  - la sección transversal en vivo muestra el agua 2,47 m sobre el fondo, por encima de la orilla (1,96 m);
+  - el hidrograma muestra lo que entra, lo que pasa por el cauce y lo que pasa por fuera, con la línea de capacidad;
+  - el perfil del colector muestra 4 tramos en carga y el rebose de LL-S1;
+  - la cámara de vista «Ver la sección» mira la sección desde aguas abajo.
+
+**Regresión.**
+- 0 solapes en 1280×720, 1024×1366 y 390×844, con y sin movimiento reducido.
+- 40 tabulaciones con foco visible; P pausa el cálculo.
+- Al salir quedan 0 recursos activos.
+- Pestañas sin cortes en 5 tamaños.
+- La alternativa 2D dibuja las dos redes y las tuberías en carga.
+- La versión de un solo archivo no hace peticiones externas.
+- Pipeline: 14 de 14.
+
+**Comparación:** `medellin-alcantarillado-creciente.png` (en `docs/medellin/capturas` y entregada aparte).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
 
 | Sector | dx | Celdas | ms por s simulado | ms por s real a ×30 |
 |---|---|---|---|---|
-| Calle de prueba | 0,5 m | 17 920 | 3,85 | 116 |
-| Calle de prueba | 1 m | 4 480 | 0,45 | 13 |
-| Calle de prueba | 2 m | 1 120 | 0,07 | 2 |
-| Ladera con quebrada | 1 m | 12 288 | 2,65 | 79 |
-| Ladera con quebrada | 2 m | 3 072 | 0,30 | 9 |
+| Calle de prueba | 0,5 m | 17 920 | 2,74 | 82 |
+| Calle de prueba | 1 m | 4 480 | 0,39 | 12 |
+| Calle de prueba | 2 m | 1 120 | 0,09 | 3 |
+| Ladera con quebrada | 1 m | 12 288 | 1,97 | 59 |
+| Ladera con quebrada | 2 m | 3 072 | 0,28 | 8 |
+| Ladera, creciente de 103 m³/s (200 %) | 1 m | 12 288 | 5,83 | 175 |
+| Ladera, creciente de 105 m³/s (200 %) | 2 m | 3 072 | 0,84 | 25 |
+
+Medido el 9 de noviembre con la red separada y lluvia de 100 mm/h. La superficie es más rápida que antes porque los sumideros nuevos captan más agua y el paso de tiempo crece cuando hay menos agua en la calle.
 
 **Navegador de pruebas con WebGL por software** (`docs/medellin/perf-navegador.json`), pidiendo ×30:
 
 | Sector y tamaño | Cuadros/s | Cálculo por cuadro | Velocidad lograda |
 |---|---|---|---|
-| Calle, 1280×720 | 2,2 (antes 1,9) | 3,8 ms | ×17,0 (antes ×14,6) |
-| Ladera, 1280×720 | 2,0 (antes 1,7) | 12,3 ms | ×15,1 (antes ×12,0) |
-| Calle, 390×844 | 3,9 (antes 3,1) | 3,0 ms | ×12,5 (antes ×23,3) |
-| Ladera, 390×844 | 2,9 (antes 2,9) | 12,8 ms | ×21,0 (antes ×19,5) |
+| Calle, 1280×720 | 2,7 (antes 2,2) | 3,8 ms | ×16,9 (antes ×17,0) |
+| Ladera, 1280×720 | 1,9 (antes 2,0) | 13,8 ms | ×13,9 (antes ×15,1) |
+| Calle, 390×844 | 3,6 (antes 3,9) | 4,1 ms | ×26,7 (antes ×12,5) |
+| Ladera, 390×844 | 2,8 (antes 2,9) | 18,1 ms | ×20,2 (antes ×21,0) |
 
-Las cifras actuales son las de la lluvia nueva (sección 4 octies), medidas el 9 de noviembre con lluvia de 100 mm/h y el detalle ya adaptado; entre paréntesis, las del sector con el valle alrededor (sección 4 septies). Los efectos nuevos no restaron cuadros por segundo: las diferencias están dentro de la variación entre mediciones de este entorno compartido (la velocidad lograda en la calle a 390×844 bajó en esta medición aunque los cuadros por segundo subieron). Las cifras del sector con el valle alrededor también se midieron el 9 de noviembre, con el detalle ya adaptado (a los ≈ 3 s de entrar). El cálculo por cuadro no cambió: la diferencia es solo de dibujo. Con el entorno anterior, el 9 de noviembre se repitieron, con la vista nueva del valle: calle 2,7 y ladera 2,0 cuadros/s a 1280×720; calle 4,1 y ladera 3,0 a 390×844. Los sectores no cambian, porque la vista del valle se libera por completo al entrar a un sector. Una primera repetición dio 2,0 en la calle a 1280×720: entre mediciones hay variaciones de hasta ≈ 25 % en este entorno compartido. La aplicación detecta que el navegador dibuja por software (SwiftShader) y, en calidad automática, usa la calidad **ligera**. La calidad alta es la que se usaría en un equipo con GPU; en este entorno, con calidad alta forzada, la calle a 1280×720 baja a ≈ 1,6 cuadros/s. Entre mediciones repetidas hay variaciones de ±15 %, y a veces mayores.
+Las cifras actuales son las del alcantarillado separado (sección 4 nonies), medidas el 9 de noviembre con lluvia de 100 mm/h y el detalle ya adaptado. Entre paréntesis van las de la lluvia nueva (sección 4 octies). La red agrega ≈ 60 llamadas de dibujo en la ladera (tapas, ventanas y la mira); su cálculo cuesta poco frente a la superficie. Con la creciente al 200 %, la ladera necesita 5,8 ms de cálculo por segundo simulado (`perf-calculo.txt`), unos 175 ms por segundo real a ×30: en este entorno la velocidad lograda baja durante el pico. Las cifras de la lluvia nueva también se midieron el 9 de noviembre, con lluvia de 100 mm/h y el detalle ya adaptado; entre paréntesis iban las del sector con el valle alrededor (sección 4 septies). Los efectos nuevos no restaron cuadros por segundo: las diferencias están dentro de la variación entre mediciones de este entorno compartido (la velocidad lograda en la calle a 390×844 bajó en esta medición aunque los cuadros por segundo subieron). Las cifras del sector con el valle alrededor también se midieron el 9 de noviembre, con el detalle ya adaptado (a los ≈ 3 s de entrar). El cálculo por cuadro no cambió: la diferencia es solo de dibujo. Con el entorno anterior, el 9 de noviembre se repitieron, con la vista nueva del valle: calle 2,7 y ladera 2,0 cuadros/s a 1280×720; calle 4,1 y ladera 3,0 a 390×844. Los sectores no cambian, porque la vista del valle se libera por completo al entrar a un sector. Una primera repetición dio 2,0 en la calle a 1280×720: entre mediciones hay variaciones de hasta ≈ 25 % en este entorno compartido. La aplicación detecta que el navegador dibuja por software (SwiftShader) y, en calidad automática, usa la calidad **ligera**. La calidad alta es la que se usaría en un equipo con GPU; en este entorno, con calidad alta forzada, la calle a 1280×720 baja a ≈ 1,6 cuadros/s. Entre mediciones repetidas hay variaciones de ±15 %, y a veces mayores.
 
 Los pocos cuadros por segundo se deben al **dibujo por software** del entorno, no al cálculo. **No se midió en un equipo con GPU**: queda pendiente.
 
@@ -264,6 +321,7 @@ Historia en el mismo entorno, en cuadros/s (calle y ladera a 1280×720, calle y 
 | Sector asentado y barrio de ladera | 2,5 | 2,0 | 4,2 | 3,0 |
 | Valle alrededor del sector, fachadas y vida de calle | 1,9 | 1,7 | 3,1 | 2,9 |
 | Lluvia: agua natural, reflejos, mojado y tormenta | 2,2 | 2,0 | 3,9 | 2,9 |
+| Alcantarillado separado y creciente | 2,7 | 1,9 | 3,6 | 2,8 |
 
 Cada ronda del entorno agregó casas y árboles: primero el barrio alrededor del sector y luego el barrio de ladera, de unas 5 200 casas en calidad alta y 1 800 en ligera. Por eso, con el dibujo por software, todo es algo más lento que en la primera ronda. En una GPU esta carga es moderada, porque las casas se dibujan con una sola malla de instancias.
 
@@ -293,5 +351,10 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
 - **Rendimiento con GPU real** y en tabletas o teléfonos físicos.
 - **Lectores de pantalla reales** (NVDA, VoiceOver). Solo se verificaron los roles, los nombres accesibles y el texto equivalente.
 - **Firefox y Safari.** Se probó solo en Chrome.
-- **Conexión con SWMM.** Solo existe la interfaz; la red sigue siendo esquemática.
+- **Red de alcantarillado.**
+  - Es didáctica: no se comparó con la red real de EPM ni con un modelo como SWMM.
+  - No calcula pérdidas locales en cámaras (numeral 8.3.6).
+  - La intensidad de diseño (100 mm/h) y la dotación (130 L/hab·día) son supuestas: no se consultaron la curva IDF ni la demanda de EPM.
+  - Los escenarios importados sin red siguen con la red esquemática. La interfaz para conectar SWMM sigue disponible.
+- **Creciente.** El hidrograma es sintético. No se verificó con caudales medidos de una quebrada de Medellín ni con estudios de amenaza por avenida torrencial.
 - **Calibración** de los parámetros de cobertura con datos locales.

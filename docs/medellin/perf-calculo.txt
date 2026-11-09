@@ -1,5 +1,7 @@
-calle-de-prueba dx=0.5 m: 160×112 celdas, 8599 pasos, 3.851 ms por s simulado, 115.5 ms por s real a ×30, 231.1 a ×60
-calle-de-prueba dx=1 m: 80×56 celdas, 4183 pasos, 0.447 ms por s simulado, 13.4 ms por s real a ×30, 26.8 a ×60
-calle-de-prueba dx=2 m: 40×28 celdas, 2812 pasos, 0.069 ms por s simulado, 2.1 ms por s real a ×30, 4.1 a ×60
-ladera-quebrada dx=1 m: 128×96 celdas, 8761 pasos, 2.648 ms por s simulado, 79.4 ms por s real a ×30, 158.9 a ×60
-ladera-quebrada dx=2 m: 64×48 celdas, 4024 pasos, 0.296 ms por s simulado, 8.9 ms por s real a ×30, 17.8 a ×60
+calle-de-prueba dx=0.5 m: 160×112 celdas, 7011 pasos, 2.739 ms por s simulado, 82.2 ms por s real a ×30, 164.4 a ×60
+calle-de-prueba dx=1 m: 80×56 celdas, 3460 pasos, 0.387 ms por s simulado, 11.6 ms por s real a ×30, 23.2 a ×60
+calle-de-prueba dx=2 m: 40×28 celdas, 2669 pasos, 0.091 ms por s simulado, 2.7 ms por s real a ×30, 5.5 a ×60
+ladera-quebrada dx=1 m: 128×96 celdas, 6498 pasos, 1.973 ms por s simulado, 59.2 ms por s real a ×30, 118.4 a ×60
+ladera-quebrada dx=2 m: 64×48 celdas, 3354 pasos, 0.279 ms por s simulado, 8.4 ms por s real a ×30, 16.7 a ×60
+ladera-quebrada con creciente de 103 m³/s dx=1 m: 19458 pasos, 5.833 ms por s simulado, 175.0 ms por s real a ×30
+ladera-quebrada con creciente de 105 m³/s dx=2 m: 9906 pasos, 0.844 ms por s simulado, 25.3 ms por s real a ×30

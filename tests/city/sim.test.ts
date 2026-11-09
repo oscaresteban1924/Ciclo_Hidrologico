@@ -17,6 +17,9 @@ import { EXTENT as ABURRA_EXTENT, HILLS, METRO_A, METRO_B, RIVER, SECTOR_SPOTS, 
 import { buildBackdrop } from '../../src/city/render/backdrop';
 import { DEPTH_STOPS, NATURAL_STOPS, depthColor } from '../../src/city/render/palette';
 import { depthRampTexture } from '../../src/city/render/stormFx';
+import { SewerModel, buildNodeTable, circ, fullFlow, inletCapture, normalDepth, windowK, type CompiledSewer, type SNode, type SPipe } from '../../src/city/sim/sewer';
+import { epmChecks } from '../../src/city/sim/sewerCheck';
+import { creekHydrograph } from '../../src/city/sim/engine';
 import * as THREE from 'three';
 
 interface Result {
@@ -677,6 +680,138 @@ const sens: { dx: number; P: number; B: number; D: number; I: number; esq: numbe
     measured: `${wet} celdas mojadas: diferencias de profundidad ${badH}, de velocidad ${badU}, huella fuera de [0,1] ${badA}; bajantes ${fmt(spoutRate * 1000, 3)} L/s frente a ${fmt(engineRate * 1000, 3)} L/s del motor (error ${relSpout.toExponential(1)}); salida en el paso ${fmt(outStep * 1000, 4)} L frente a ${fmt(outEngine * 1000, 4)} L (error ${relOut.toExponential(1)}); depósito ${(100 * tk[0].fill).toFixed(1)} % (error ${fillErr.toExponential(1)})`,
     pass: wet > 0 && badH === 0 && badU === 0 && badA === 0 && relSpout < 1e-9 && relOut < 1e-9 && outEngine > 0 && fillErr < 1e-12 && sim.c.tanks.length > 0,
   });
+}
+
+// ---------------------------------------------------------------- Red de alcantarillado separada
+/** Red mínima de prueba: nodo A → tubería → nodo B → tubería → descarga libre (o cámara de tapa baja). */
+function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: number }): CompiledSewer {
+  const mkNode = (id: string, x: number, inv: number, kind: SNode['kind'], outfall: 0 | 1 | 2): SNode => ({ id, name: id, system: 0, kind, x, y: 0, cell: 0, rim: inv + o.rimDepth, inv, area0: Math.PI * 0.36, outfall, vTab: new Float64Array(2), dy: 0.005, vRim: 0 });
+  const zA = 10, zB = zA - o.S * o.L, zC = zB - o.S * o.L;
+  const nodes = [mkNode('A', 0, zA, 'camara', 0), mkNode('B', o.L, zB, 'camara', 0), mkNode('C', 2 * o.L, zC, 'descarga', 1)];
+  const n = o.n ?? 0.013;
+  const pipes: SPipe[] = [
+    { id: 'AB', system: 0, a: 0, b: 1, D: o.D, n, L: o.L, zUp: zA, zDn: zB, role: 'colector', material: 'concreto', qFull: fullFlow(o.D, n, o.S) },
+    { id: 'BC', system: 0, a: 1, b: 2, D: o.D, n, L: o.L, zUp: zB, zDn: zC, role: 'colector', material: 'concreto', qFull: fullFlow(o.D, n, o.S) },
+  ];
+  for (let k = 0; k < 2; k++) Object.assign(nodes[k], buildNodeTable(nodes[k], pipes.filter((p) => p.a === k || p.b === k).map((p) => ({ L: p.L, D: p.D, zEnd: p.a === k ? p.zUp : p.zDn }))));
+  return { nodes, pipes, inlets: [], dryIn: new Float64Array(3), upRunoff: [], erradas: [], upErradasM2: 0, upErradasNode: -1, tankNode: -1, persons: 0, dryTotal: 0 };
+}
+{
+  // S1) Flujo permanente: el caudal que entra sale completo y la lámina se acerca a la profundidad normal de Manning
+  const D = 0.45, L = 60, S = 0.01, n = 0.013;
+  const net = miniNet({ D, L, S, rimDepth: 2, n });
+  const m = new SewerModel(net);
+  const Q0 = 0.5 * fullFlow(D, n, S);
+  const env = { h: new Float64Array(1), z: new Float64Array(1), area: 1, dx: 1 };
+  const ext = new Float64Array(3), extra = new Float64Array(3);
+  let out0 = 0;
+  for (let k = 0; k < 4000; k++) {
+    ext[0] = Q0 * 0.5;
+    if (k === 3000) out0 = m.tot.out[0];
+    m.step(0.5, env, extra, ext);
+  }
+  const qOut = (m.tot.out[0] - out0) / (1000 * 0.5);
+  const yB = m.headAt(1) - net.nodes[1].inv;
+  const yn = normalDepth(D, n, S, Q0)!;
+  const eQ = Math.abs(qOut - Q0) / Q0, eY = Math.abs(yB - yn) / yn;
+  record({ id: 'S1', kind: 'obligatoria', name: 'Tubería en flujo permanente: sale lo que entra y la lámina se acerca a la normal de Manning', tolerance: 'caudal de salida = caudal de entrada (error < 0,1 %); lámina en la cámara intermedia dentro de ±15 % de la profundidad normal', measured: `entra ${fmt(Q0 * 1000, 1)} L/s, sale ${fmt(qOut * 1000, 1)} L/s (error ${(eQ * 100).toFixed(3)} %); lámina ${fmt(yB * 100, 1)} cm frente a normal ${fmt(yn * 100, 1)} cm (diferencia ${(eY * 100).toFixed(1)} %)`, pass: eQ < 1e-3 && eY < 0.15, note: 'La aproximación inercial usa la diferencia de niveles entre cámaras, que en un tramo corto incluye la lámina; por eso no es idéntica a Manning con la pendiente del fondo.' });
+}
+{
+  // S2) Sobrecarga y rebose: con más caudal del que cabe, la cámara rebosa y el volumen se conserva
+  const D = 0.3, L = 30, S = 0.005;
+  const net = miniNet({ D, L, S, rimDepth: 1.6 });
+  const m = new SewerModel(net);
+  const env = { h: new Float64Array(1), z: new Float64Array(1), area: 1, dx: 1 };
+  const ext = new Float64Array(3), extra = new Float64Array(3);
+  const qf = fullFlow(D, 0.013, S);
+  let vin = 0, minV = 0;
+  for (let k = 0; k < 1200; k++) {
+    const q = (k < 600 ? 3 : 0) * qf;
+    ext[0] = q * 0.5;
+    vin += ext[0];
+    m.step(0.5, env, extra, ext);
+    minV = Math.min(minV, ...m.V);
+  }
+  const T = m.tot;
+  const res = vin - (m.storage() + T.out[0] + T.overflow[0]);
+  record({ id: 'S2', kind: 'obligatoria', name: 'Sobrecarga: con 3 veces la capacidad la cámara rebosa a la calle y el volumen se conserva', tolerance: 'rebose > 0 solo cuando el nivel supera la tapa; entra = guardado + sale + rebosa (residuo < 10⁻⁹ m³); ningún volumen negativo', measured: `entró ${fmt(vin, 2)} m³: salió ${fmt(T.out[0], 2)}, rebosó ${fmt(T.overflow[0], 2)} (en ${net.nodes.filter((_, k) => m.overflowTotal[k] > 0).map((x) => x.id).join(', ') || 'ninguna'}), guardado ${fmt(m.storage(), 3)}; residuo ${res.toExponential(1)} m³; llenado máximo y/D ${fmt(m.peakFill[0], 2)}`, pass: T.overflow[0] > 0 && Math.abs(res) < 1e-9 && minV >= 0 && m.peakHead[0] >= net.nodes[0].rim - 1e-9 });
+}
+{
+  // S3) Ecuaciones de captación por tipo (EPM GD-AS002, 8.5)
+  const y = 0.05;
+  const vent = inletCapture({ type: 'ventana', perimeter: 0, openArea: 0, winL: 1.5, winH: 0.15, kGrade: windowK(0.02), sag: false }, y);
+  const ventSag = inletCapture({ type: 'ventana', perimeter: 0, openArea: 0, winL: 1.5, winH: 0.15, kGrade: windowK(0.02), sag: true }, y);
+  const rej = inletCapture({ type: 'rejilla', perimeter: 2.4, openArea: 0.27, winL: 0, winH: 0, kGrade: 0, sag: false }, y);
+  const mix = inletCapture({ type: 'mixto', perimeter: 2.4, openArea: 0.27, winL: 1.5, winH: 0.15, kGrade: windowK(0.02), sag: true }, y);
+  const eV = Math.abs(vent - 0.2 * 1.5 * Math.sqrt(9.81) * y ** 1.5), eS = Math.abs(ventSag - 1.65 * 1.5 * y ** 1.5), eM = Math.abs(mix - (rej + ventSag));
+  const ks = [windowK(0.02), windowK(0.04), windowK(0.08)];
+  record({ id: 'S3', kind: 'obligatoria', name: 'Captación de sumideros por tipo: ventana en pendiente y en punto bajo, rejilla y mixto', tolerance: 'ventana en pendiente Q = k·L·√g·y^1,5 con k = 0,20 / 0,22 / 0,23 (2 / 4 / 8 %); en punto bajo Q = 1,65·L·y^1,5; mixto = rejilla + ventana (error < 10⁻¹²)', measured: `y = 5 cm: ventana en pendiente ${fmt(vent * 1000, 2)} L/s, en punto bajo ${fmt(ventSag * 1000, 2)} L/s, rejilla ${fmt(rej * 1000, 2)} L/s, mixto ${fmt(mix * 1000, 2)} L/s; k = ${ks.map((k) => k.toFixed(2)).join(' / ')}`, pass: eV < 1e-12 && eS < 1e-12 && eM < 1e-12 && Math.abs(ks[0] - 0.2) < 1e-12 && Math.abs(ks[1] - 0.22) < 1e-12 && Math.abs(ks[2] - 0.23) < 1e-12 });
+}
+{
+  // S4) Criterios de la norma de EPM en las dos redes didácticas
+  const all = ['calle-de-prueba', 'ladera-quebrada'].map((id) => {
+    const sc = builtinScenarios()[id];
+    const c = compile(sc, sc.defaults, baseInterventions(sc));
+    return { id, checks: epmChecks(sc, c) };
+  });
+  const bad = all.flatMap((a) => a.checks.filter((k) => !k.cumple).map((k) => `${a.id}: ${k.id} (${k.medido})`));
+  record({ id: 'S4', kind: 'verificacion', name: 'Las redes didácticas cumplen los criterios de diseño de EPM revisados (GD-AS002)', tolerance: 'todos los criterios cumplen en los dos sectores: sistema separado, diámetros mínimos, conductos de sumidero, recubrimiento, velocidades, lámina, distancia entre cámaras, uniones, deflexión, cámaras de caída, costado de la vía y separación en cruces', measured: all.map((a) => `${a.id}: ${a.checks.filter((k) => k.cumple).length} de ${a.checks.length} (${a.checks.map((k) => `${k.id} ${k.medido}`).join('; ')})`).join(' | ') + (bad.length ? ` — no cumplen: ${bad.join(', ')}` : ''), pass: bad.length === 0 });
+}
+{
+  // S5) Separación: sin conexiones erradas, ninguna gota de lluvia entra al alcantarillado de aguas residuales
+  const sc = builtinScenarios()['calle-de-prueba'];
+  const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 100 } };
+  const ok = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+  ok.runToEnd();
+  const ivE = baseInterventions(sc);
+  ivE.erradas = true;
+  const er = new CitySim(compile(sc, sh, ivE), sh);
+  er.runToEnd();
+  const T = ok.sewer!.tot, TE = er.sewer!.tot;
+  const sanOk = T.fromSector[1] === 0 && Math.abs(T.external[1] - (T.out[1] + T.overflow[1] + ok.sewer!.storage(1))) < 1e-9;
+  record({ id: 'S5', kind: 'obligatoria', name: 'Redes separadas: la lluvia no entra al alcantarillado de aguas residuales salvo por conexiones erradas', tolerance: 'sin conexiones erradas: lluvia que entra a residuales = 0 y lo que sale + guarda + rebosa = aguas residuales aportadas (error < 10⁻⁹ m³); con conexiones erradas: entra la lluvia de esos techos', measured: `100 mm/h, 20 min: aguas residuales aportadas ${fmt(T.external[1], 2)} m³, salen ${fmt(T.out[1], 2)}, guardadas ${fmt(ok.sewer!.storage(1), 3)}, rebose ${fmt(T.overflow[1], 2)}, lluvia que entra ${T.fromSector[1]} m³ | con conexiones erradas: techos del sector ${fmt(er.bal.roofToSewer, 2)} m³ y de aguas arriba ${fmt(TE.external[1] - T.external[1], 2)} m³; rebose de aguas residuales a la calle ${fmt(TE.overflow[1], 2)} m³`, pass: sanOk && er.bal.roofToSewer > 0 && TE.fromSector[1] > 0 });
+}
+{
+  // S6) Balance acoplado superficie + red (con creciente y conexiones erradas): ambos residuos casi nulos
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const cap = compile(sc, sc.defaults, baseInterventions(sc)).creek!.capacity;
+  const sh: Shared = { ...sc.defaults, creek: { peakM3s: 2 * cap, timeToPeakMin: 6, startMin: 2 } };
+  const iv = baseInterventions(sc);
+  iv.erradas = true;
+  const sim = new CitySim(compile(sc, sh, iv), sh);
+  sim.runToEnd();
+  const b = sim.bal, T = sim.sewer!.tot;
+  const hg = creekHydrograph(sh.creek!, sc.creek!.baseM3s);
+  const tEnd = sh.simMinutes * 60;
+  let vh = 0;
+  for (let k = 1; k < hg.t.length; k++) vh += 0.5 * (hg.q[k] + hg.q[k - 1]) * (Math.min(hg.t[k], tEnd) - Math.min(hg.t[k - 1], tEnd));
+  vh += hg.q[hg.q.length - 1] * Math.max(0, tEnd - hg.t[hg.t.length - 1]);
+  const eH = Math.abs(b.creekIn - vh) / vh;
+  const k = sim.sewer!.s.nodes.findIndex((n) => n.id === 'SL-carrera-s');
+  record({ id: 'S6', kind: 'obligatoria', name: 'Balance acoplado calle + red con creciente: cierra, el hidrograma entra completo y la quebrada se mete por la descarga', tolerance: 'residuo de superficie y de red < 10⁻⁹ del agua que entró; volumen de la creciente = área del hidrograma (error < 10⁻⁹); con 2 veces la capacidad del cauce, la descarga queda ahogada y entra agua de la quebrada a la red', measured: `entró ${fmt(b.precipitation + b.inflow, 0)} m³ (creciente ${fmt(b.creekIn, 1)} m³ frente a ${fmt(vh, 1)} m³ del hidrograma, error ${eH.toExponential(1)}); residuo superficie ${b.residual.toExponential(1)} m³, red ${b.netResidual.toExponential(1)} m³; de la quebrada a la red ${fmt(T.fromCreek[0], 1)} m³; rebose de aguas lluvias ${fmt(T.overflow[0], 1)} m³ (sumidero de la carrera sur ${fmt(sim.sewer!.overflowTotal[k], 1)} m³)`, pass: Math.abs(b.residual) / (b.precipitation + b.inflow) < 1e-9 && Math.abs(b.netResidual) / (b.drained + b.sewageIn) < 1e-9 && eH < 1e-9 && T.fromCreek[0] > 0 && sim.sewer!.overflowTotal[k] > 0 });
+}
+{
+  // C1) Capacidad de la sección: el número que muestra la aplicación coincide con el modelo
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const c0 = compile(sc, sc.defaults, baseInterventions(sc));
+  const cap = c0.creek!.capacity;
+  const run = (f: number) => {
+    const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 5, durationMin: 10 }, simMinutes: 34, creek: { peakM3s: f * cap, timeToPeakMin: 30, startMin: 0 } };
+    const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+    sim.runToEnd();
+    const pk = sim.samples.filter((q) => q.t >= 25 * 60 && q.t <= 31 * 60);
+    return { out: Math.max(...pk.map((q) => q.creek!.qOutside)), level: Math.max(...pk.map((q) => q.creek!.level)), qin: Math.max(...pk.map((q) => q.creek!.qin)) };
+  };
+  const lo = run(0.8), hi = run(1.25);
+  const bank = c0.creek!.bankLevel;
+  record({ id: 'C1', kind: 'verificacion', name: 'La capacidad a cauce lleno de la sección de control es coherente con el modelo', tolerance: 'con 80 % de la capacidad (subida lenta, casi permanente) no pasa agua por fuera del cauce (< 1 % del caudal) y el nivel queda bajo la orilla; con 125 % sí pasa agua por fuera y el nivel supera la orilla', measured: `capacidad ${fmt(cap, 1)} m³/s (Manning sin límite de Froude ${fmt(c0.creek!.capacityManning, 1)} m³/s), pendiente ${fmt(c0.creek!.slope * 100, 2)} %, orilla ${fmt(bank - c0.creek!.zBed, 2)} m sobre el fondo | 80 %: por fuera ${fmt(lo.out, 2)} m³/s, nivel ${fmt(lo.level - c0.creek!.zBed, 2)} m | 125 %: por fuera ${fmt(hi.out, 2)} m³/s, nivel ${fmt(hi.level - c0.creek!.zBed, 2)} m`, pass: lo.out < 0.01 * lo.qin && lo.level < bank && hi.out > 0 && hi.level > bank });
+}
+{
+  // C2) Sección circular: área y caudal a tubo lleno (verificación de las fórmulas geométricas)
+  const D = 0.6;
+  const half = circ(D, D / 2), full = circ(D, D);
+  const eA = Math.abs(half.A - (Math.PI * D * D) / 8), eR = Math.abs(half.R - D / 4), eF = Math.abs(full.A - (Math.PI * D * D) / 4);
+  record({ id: 'S7', kind: 'obligatoria', name: 'Geometría de la sección circular (área y radio hidráulico a medio tubo y lleno)', tolerance: 'a medio tubo A = π·D²/8 y R = D/4; lleno A = π·D²/4 (error < 10⁻¹²)', measured: `D = 0,6 m: A½ = ${half.A.toFixed(6)} m², R½ = ${half.R.toFixed(6)} m, A lleno = ${full.A.toFixed(6)} m²`, pass: eA < 1e-12 && eR < 1e-12 && eF < 1e-12 });
 }
 
 // ---------------------------------------------------------------- Sensibilidad al límite de Froude (información para docentes)

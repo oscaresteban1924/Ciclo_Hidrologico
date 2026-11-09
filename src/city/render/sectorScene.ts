@@ -20,6 +20,7 @@ import { SECTOR_SPOTS, toKm } from './aburra';
 import { FLOW_CYCLE, StormFx } from './stormFx';
 import { TracerFx } from './tracerFx';
 import { facadeAtlas, glassTexture, glowTexture, plasterTexture, roofTexture, type FacadeAtlas, type TileId } from './textures';
+import { SewerView } from './sewerView';
 
 export type ViewMode = 'realista' | 'materiales' | 'resultados';
 export type Pick =
@@ -69,6 +70,10 @@ export class SectorScene {
   private decorGroup = new THREE.Group();
   private drainGroup = new THREE.Group();
   private pipeGroup = new THREE.Group();
+  /** Red de alcantarillado separada y sección de la quebrada (si el escenario las trae). */
+  private sewerView: SewerView | null = null;
+  private sewerOver = new THREE.Group();
+  private cutOnly = new Set<string>();
   private gardenGroup = new THREE.Group();
   private arrows: THREE.InstancedMesh;
   readonly fx: StormFx;
@@ -264,7 +269,7 @@ export class SectorScene {
     this.highlight.renderOrder = 10;
     this.scene.add(this.highlight);
 
-    this.scene.add(this.buildingsGroup, this.decorGroup, this.drainGroup, this.pipeGroup, this.probeGroup, this.gardenGroup);
+    this.scene.add(this.buildingsGroup, this.decorGroup, this.drainGroup, this.pipeGroup, this.probeGroup, this.gardenGroup, this.sewerOver);
     this.setCompiled(c);
     this.goto('general', false);
     this.resize();
@@ -1051,7 +1056,18 @@ export class SectorScene {
         this.drainLeafMeshes.push(im);
       }
     });
-    // Tuberías esquemáticas (solo dibujo; visibles en la vista bajo la calle)
+    // Red de alcantarillado separada (calculada) y sección de la quebrada
+    if (this.sewerView) {
+      this.sewerView.dispose();
+      this.sewerOver.clear();
+      this.sewerView = null;
+    }
+    if (c.sewer || c.creek) {
+      this.sewerView = new SewerView(sc, c, (x, y, z, out) => this.w(x, y, z, out), (x, y) => this.groundAt(x, y), !!c.sewer && c.sewer.erradas.length > 0);
+      this.pipeGroup.add(this.sewerView.under);
+      this.sewerOver.add(this.sewerView.over);
+    }
+    // Tuberías esquemáticas de escenarios sin red (solo dibujo; visibles en la vista bajo la calle)
     for (const p of sc.pipes) {
       const path = new THREE.CurvePath<THREE.Vector3>();
       const pts = p.path.map(([x, y]) => this.w(x, y, this.groundAt(x, y) - 1.1));
@@ -1521,12 +1537,17 @@ export class SectorScene {
       const [x, y] = this.sc.decor.cable.towers[1];
       this.labelItems.push({ id: 'cable', text: this.sc.decor.cable.label, priority: 0, kind: 'aviso', at: this.w(x, y, this.groundAt(x, y) + 27) });
     }
+    this.cutOnly.clear();
+    for (const a of this.sewerView?.anchors ?? []) {
+      this.labelItems.push({ id: a.id, text: a.text, priority: a.priority, kind: 'aviso', at: a.at });
+      if (a.cutOnly) this.cutOnly.add(a.id);
+    }
     this.syncLabels();
   }
 
   private syncLabels(): void {
-    const items: LabelItem[] = this.labelItems.filter((l) => this.cut || l.id !== 'pipes').map(({ at: _at, ...rest }) => rest);
-    if (this.cut) items.push({ id: 'pipes', text: 'Tubería esquemática: no se calcula su hidráulica', priority: 5, kind: 'aviso' });
+    const items: LabelItem[] = this.labelItems.filter((l) => (this.cut || l.id !== 'pipes') && (this.cut || !this.cutOnly.has(l.id))).map(({ at: _at, ...rest }) => rest);
+    if (this.cut && !this.c.sewer && this.sc.pipes.length) items.push({ id: 'pipes', text: 'Tubería esquemática: no se calcula su hidráulica', priority: 5, kind: 'aviso' });
     if (this.pinned) items.push({ id: 'pin', text: this.pinned.text, priority: 9, kind: 'sonda' });
     for (const l of this.tracerFx.labels) items.push({ id: l.id, text: l.text, sub: l.sub, priority: 7, kind: 'gotas', color: l.color });
     this.labels.set(items);
@@ -1666,6 +1687,7 @@ export class SectorScene {
       (k) => [((k % this.c.nx) + 0.5) * this.c.dx, (Math.floor(k / this.c.nx) + 0.5) * this.c.dx],
     );
     if (this.tracerFx.labelsKey !== lk) this.syncLabels();
+    this.sewerView?.update(sim, this.time, this.reducedMotion, this.cut);
     let flow = 0;
     if (sim.lastDt > 0) for (let q = 0; q < sim.lastDrain.length; q++) flow += sim.lastDrain[q] / sim.lastDt;
     // brillo proporcional al caudal captado (calculado), tenue para no confundirlo con agua en superficie
@@ -1812,6 +1834,17 @@ export class SectorScene {
     const t = this.w(x, y, this.groundAt(x, y));
     const dir = this.camera.position.clone().sub(this.controls.target).normalize();
     const p = t.clone().add(dir.multiplyScalar(38));
+    if (this.reducedMotion) {
+      this.camera.position.copy(p);
+      this.controls.target.copy(t);
+      this.controls.update();
+    } else this.tween = { from: { p: this.camera.position.clone(), t: this.controls.target.clone() }, to: { p, t }, start: performance.now(), dur: 900 };
+  }
+
+  /** Lleva la cámara a un punto de vista (coordenadas del modelo: x, y en planta y cota z). */
+  lookFrom(eye: [number, number, number], target: [number, number, number]): void {
+    const p = this.w(eye[0], eye[1], eye[2]);
+    const t = this.w(target[0], target[1], target[2]);
     if (this.reducedMotion) {
       this.camera.position.copy(p);
       this.controls.target.copy(t);

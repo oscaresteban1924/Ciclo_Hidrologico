@@ -143,6 +143,38 @@ export class SectorMap2D {
         G.stroke();
       }
       G.setLineDash([]);
+      // Red separada: colectores por sistema (más grueso si está en carga) y cámaras
+      const sw = sim?.sewer;
+      if (c.sewer) {
+        const env = sim ? { h: sim.h, z: c.z, area: c.area, dx: c.dx } : undefined;
+        const col = ['#2f6fb3', '#8a5a2b'];
+        c.sewer.pipes.forEach((p, k) => {
+          const a = c.sewer!.nodes[p.a], b = c.sewer!.nodes[p.b];
+          const load = sw ? sw.fillOf(k, env) > 1.001 : false;
+          G.strokeStyle = load ? '#e03131' : col[p.system];
+          G.lineWidth = p.role === 'colector' ? (load ? 5 : 3) : 1.5;
+          G.beginPath();
+          G.moveTo(...P(a.x, a.y));
+          G.lineTo(...P(b.x, b.y));
+          G.stroke();
+        });
+        const dt = sim && sim.lastDt > 0 ? sim.lastDt : 1;
+        c.sewer.nodes.forEach((n, k) => {
+          if (n.kind === 'caja-sumidero' || n.outfall) return;
+          const [px, py] = P(n.x, n.y);
+          G.fillStyle = col[n.system];
+          G.beginPath();
+          G.arc(px, py, 4, 0, Math.PI * 2);
+          G.fill();
+          if (sw && sw.lastOverflow[k] / dt > 2e-4) {
+            G.strokeStyle = '#e03131';
+            G.lineWidth = 2;
+            G.beginPath();
+            G.arc(px, py, 8, 0, Math.PI * 2);
+            G.stroke();
+          }
+        });
+      }
     }
     // Sumideros
     for (const dr of c.drains) {

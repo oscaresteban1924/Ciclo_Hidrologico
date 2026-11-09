@@ -444,6 +444,19 @@ export class CityController {
   focus(x: number, y: number): void {
     this.view?.focusOn(x, y);
   }
+  /** Mira la sección de control de la quebrada desde aguas abajo, a la altura de la orilla. */
+  focusCreekSection(): void {
+    const sim = this.displayed();
+    const cr = sim?.c.creek;
+    const v = this.view;
+    if (!cr || !v || !('lookFrom' in v)) {
+      if (cr && sim) this.focus((cr.i + 0.5) * sim.c.dx, (cr.jt + 0.5) * sim.c.dx);
+      return;
+    }
+    const x = (cr.i + 0.5) * sim!.c.dx, y = (cr.jt + 0.5) * sim!.c.dx;
+    (v as SectorScene).lookFrom([x + 18, y + 3, cr.bankLevel + 24], [x - 5, y, cr.zBed + 1]);
+    this.notify(true);
+  }
   isFlying(): boolean {
     return this.flying;
   }

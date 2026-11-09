@@ -2,9 +2,10 @@
 // Contiene todos los elementos exigidos: calle en pendiente, intersección, edificios que bloquean,
 // andenes y bordillos, depresión donde se encharca, zona permeable, sumideros y salida definida.
 
-import type { BuildingSpec, Scenario } from '../sim/scenario';
+import type { BuildingSpec, DrainSpec, Pt, Scenario, SewerSpec } from '../sim/scenario';
 import { ENGINE } from '../sim/constants';
 import { prng, rasterFrom, rect } from './primitives';
+import { designNetwork, surfaceOf, type DesignNode, type DesignPipe } from './sewerDesign';
 
 const W = 80;
 const H = 56;
@@ -22,7 +23,7 @@ function b(id: string, x0: number, y0: number, x1: number, y1: number, floors: n
 }
 
 export function streetScenario(): Scenario {
-  return {
+  const sc: Scenario = {
     format: 'medellin-lluvia/escenario',
     version: 1,
     id: 'calle-de-prueba',
@@ -38,7 +39,8 @@ export function streetScenario(): Scenario {
         { layer: 'Edificios', kind: 'didactico', note: 'Huellas y alturas inventadas (3 m por piso).' },
         { layer: 'Andenes y bordillos', kind: 'hipotetico', note: 'Bordillo de 0,15 m y andén con 2 % hacia la calzada.' },
         { layer: 'Esquina baja', kind: 'didactico', note: 'Depresión de 0,12 m en la cuneta.' },
-        { layer: 'Sumideros', kind: 'hipotetico', note: 'Rejillas de 0,6 × 0,9 m con capacidad de 40 L/s. No son infraestructura levantada.' },
+        { layer: 'Sumideros', kind: 'hipotetico', note: 'Seis sumideros de rejilla, ventana o mixtos ubicados con los criterios de EPM (puntos bajos y antes de los cruces peatonales). No son infraestructura levantada.' },
+        { layer: 'Alcantarillado', kind: 'hipotetico', note: 'Red separada de aguas lluvias y de aguas residuales trazada con criterios de la norma de diseño de EPM (GD-AS002). Es didáctica: no es la red real de EPM ni un diseño de ingeniería.' },
         { layer: 'Coberturas', kind: 'estimado', note: 'Parámetros estimados de literatura general.' },
       ],
       sources: [],
@@ -85,10 +87,7 @@ export function streetScenario(): Scenario {
       b('ne-1', 71, 35.5, 79.5, 48, 6, [75, 34.6], 'torre'),
       b('ne-2', 55, 51, 79.5, 55.5, 3, [62, 50.4], 'ladrillo'),
     ],
-    drains: [
-      { id: 'sum-esquina', name: 'Sumidero de la esquina baja', at: [53.5, 24.6], widthM: 0.6, lengthM: 0.9, freeSides: 3, openFraction: 0.5, capacityLps: 40, gutterSlope: 0.02, obstruction: 0, kind: 'hipotetico' },
-      { id: 'sum-carrera', name: 'Sumidero de la carrera', at: [49.5, 36.5], widthM: 0.6, lengthM: 0.9, freeSides: 3, openFraction: 0.5, capacityLps: 40, gutterSlope: 0.02, obstruction: 0, kind: 'hipotetico' },
-    ],
+    drains: STREET_DRAINS,
     outlets: [{ id: 'salida-este', name: 'Salida: la calle sigue bajando', edge: 'E', from: 24, to: 32, slope: 0.04, kind: 'didactico' }],
     inflows: [{ id: 'desde-arriba', name: 'Agua que baja de calles más altas', edge: 'W', from: 24, to: 32, kind: 'didactico' }],
     zones: [
@@ -113,10 +112,7 @@ export function streetScenario(): Scenario {
       { id: 'torre', text: 'Torre', at: [75, 42], priority: 1 },
     ],
     streetView: { eye: [6, 26.2], look: [60, 26.8] },
-    pipes: [
-      { id: 'tubo-esquina', path: [[53.5, 24.6], [53.5, 26], [80, 26]], kind: 'hipotetico' },
-      { id: 'tubo-carrera', path: [[49.5, 36.5], [47, 36.5], [47, 26], [53.5, 26]], kind: 'hipotetico' },
-    ],
+    pipes: [],
     decor: streetDecor(),
     defaults: {
       scenarioId: 'calle-de-prueba',
@@ -129,6 +125,118 @@ export function streetScenario(): Scenario {
     },
     engine: { name: ENGINE.name, version: ENGINE.version },
     seed: 20261108,
+  };
+  sc.sewer = streetSewer(sc);
+  return sc;
+}
+
+const drain = (id: string, name: string, at: Pt, type: DrainSpec['type'], longSlope: number): DrainSpec => ({
+  id,
+  name,
+  at,
+  widthM: 0.6,
+  lengthM: 0.9,
+  freeSides: 3,
+  openFraction: 0.5,
+  capacityLps: 40,
+  gutterSlope: 0.02,
+  obstruction: 0,
+  kind: 'hipotetico',
+  type,
+  windowLengthM: type === 'rejilla' ? undefined : 1.5,
+  windowHeightM: type === 'rejilla' ? undefined : 0.15,
+  longSlope,
+  node: `SL-${id.replace('sum-', '')}`,
+});
+
+/** Sumideros: en el punto bajo (mixto) y antes de cada cruce peatonal, aguas arriba (EPM GD-AS002, 8.5.1). */
+const STREET_DRAINS: DrainSpec[] = [
+  drain('sum-esquina', 'Sumidero mixto de la esquina baja', [53.5, 24.6], 'mixto', 0.005),
+  drain('sum-carrera', 'Sumidero de la carrera norte', [49.5, 36.5], 'rejilla', 0.02),
+  drain('sum-cruce-n', 'Sumidero antes del cruce (norte)', [38.5, 31.8], 'rejilla', 0.04),
+  drain('sum-cruce-s', 'Sumidero antes del cruce (sur)', [38.5, 24.2], 'rejilla', 0.04),
+  drain('sum-carrera-so', 'Sumidero de la carrera sur (occidente)', [42.2, 20.5], 'rejilla', 0.02),
+  drain('sum-carrera-se', 'Sumidero de ventana de la carrera sur', [49.8, 20.5], 'ventana', 0.02),
+];
+
+/**
+ * Red separada didáctica (EPM GD-AS002): aguas lluvias al norte de la calle y al oriente de la carrera, a un
+ * cuarto del ancho de la calzada desde el bordillo; aguas residuales al sur y al occidente (numeral 3.4.2).
+ */
+function streetSewer(sc: Scenario): SewerSpec {
+  const surface = surfaceOf(sc);
+  const box = (d: DrainSpec): DesignNode => ({ id: d.node!, name: `Caja del ${d.name.toLowerCase()}`, at: d.at, kind: 'caja-sumidero' });
+  const conn = (d: DrainSpec, to: string): DesignPipe => ({ id: `c-${d.id}`, from: d.node!, to, diameterM: 0.25, material: 'PVC', role: 'conexion-sumidero' });
+  const D = Object.fromEntries(STREET_DRAINS.map((d) => [d.id, d]));
+  const storm = designNetwork(
+    [
+      { id: 'LL-1', name: 'Cámara LL-1 (arranque en la calle)', at: [38.5, 30], kind: 'camara' },
+      { id: 'LL-N', name: 'Cámara LL-N (carrera norte)', at: [48, 36.5], kind: 'camara' },
+      { id: 'LL-S', name: 'Cámara LL-S (carrera sur)', at: [48, 20.5], kind: 'camara' },
+      { id: 'LL-2', name: 'Cámara LL-2 (intersección)', at: [48, 30], kind: 'camara' },
+      { id: 'LL-3', name: 'Cámara LL-3 (esquina baja)', at: [53.5, 30], kind: 'camara' },
+      { id: 'LL-D', name: 'El colector de aguas lluvias sigue calle abajo', at: [80, 30], kind: 'descarga', outfall: 'colector' },
+      ...STREET_DRAINS.map(box),
+    ],
+    [
+      conn(D['sum-cruce-n'], 'LL-1'),
+      conn(D['sum-cruce-s'], 'LL-1'),
+      conn(D['sum-carrera'], 'LL-N'),
+      conn(D['sum-carrera-so'], 'LL-S'),
+      conn(D['sum-carrera-se'], 'LL-S'),
+      conn(D['sum-esquina'], 'LL-3'),
+      { id: 'LL-1>LL-2', from: 'LL-1', to: 'LL-2', diameterM: 0.45, material: 'concreto', role: 'colector' },
+      { id: 'LL-N>LL-2', from: 'LL-N', to: 'LL-2', diameterM: 0.3, material: 'concreto', role: 'colector' },
+      { id: 'LL-S>LL-2', from: 'LL-S', to: 'LL-2', diameterM: 0.3, material: 'concreto', role: 'colector' },
+      { id: 'LL-2>LL-3', from: 'LL-2', to: 'LL-3', diameterM: 0.525, material: 'concreto', role: 'colector' },
+      { id: 'LL-3>LL-D', from: 'LL-3', to: 'LL-D', diameterM: 0.525, material: 'concreto', role: 'colector' },
+    ],
+    { system: 'lluvias', surface, cover: 1.25, coverInlet: 1.22, minSlope: 0.01, minSlopeInlet: 0.02, vMax: { concreto: 4, PVC: 4 } },
+  );
+  const sanitary = designNetwork(
+    [
+      { id: 'AR-0', name: 'Cámara AR-0 (llegan las aguas residuales de arriba)', at: [2, 26], kind: 'camara' },
+      { id: 'AR-N', name: 'Cámara AR-N (carrera norte)', at: [44, 54], kind: 'camara' },
+      { id: 'AR-S', name: 'Cámara AR-S (carrera sur)', at: [44, 2], kind: 'camara' },
+      { id: 'AR-1', name: 'Cámara AR-1 (intersección)', at: [44, 26], kind: 'camara' },
+      { id: 'AR-D', name: 'Sigue al colector de aguas residuales (hacia el interceptor del río)', at: [80, 26], kind: 'descarga', outfall: 'colector' },
+    ],
+    [
+      { id: 'AR-0>AR-1', from: 'AR-0', to: 'AR-1', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-N>AR-1', from: 'AR-N', to: 'AR-1', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-S>AR-1', from: 'AR-S', to: 'AR-1', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-1>AR-D', from: 'AR-1', to: 'AR-D', diameterM: 0.2, material: 'PVC', role: 'colector' },
+    ],
+    { system: 'residuales', surface, cover: 2.35, minSlope: 0.01, vMax: { concreto: 4, PVC: 4 } },
+  );
+  const buildingNode = Object.fromEntries(sc.buildings.map((b) => {
+    const cx = b.polygon.reduce((a, p) => a + p[0], 0) / b.polygon.length;
+    return [b.id, cx < 44 ? 'AR-0' : 'AR-1'];
+  }));
+  return {
+    standard: 'Normas de Diseño de Sistemas de Alcantarillado de EPM (GD-AS002): criterios aplicados a un trazado didáctico',
+    designIntensityMmH: 100,
+    nodes: [...storm.nodes, ...sanitary.nodes],
+    pipes: [...storm.pipes, ...sanitary.pipes],
+    sanitary: {
+      dotacionLpd: 130,
+      returnCoef: 0.85,
+      peakFactor: 1.4,
+      personsPerFloor: 3,
+      infiltrationLpsHa: 0.2,
+      buildingNode,
+      upstream: [
+        { node: 'AR-0', lps: 2, name: 'Aguas residuales del barrio de arriba' },
+        { node: 'AR-N', lps: 0.4, name: 'Aguas residuales de la carrera norte' },
+        { node: 'AR-S', lps: 0.4, name: 'Aguas residuales de la carrera sur' },
+      ],
+    },
+    upstreamRunoff: [{ node: 'LL-1', areaM2: 12000, coef: 0.8, name: 'Escorrentía de las calles de arriba que llega por el colector' }],
+    streets: [
+      { axis: 'x', center: YC, halfWidth: 4, from: 0, to: W, name: 'Calle' },
+      { axis: 'y', center: XC, halfWidth: 4, from: 0, to: H, name: 'Carrera' },
+    ],
+    erradas: { buildingIds: ['so-1', 'so-3', 'se-1', 'se-2'], upstreamRoofM2: 8000, upstreamNode: 'AR-0' },
   };
 }
 

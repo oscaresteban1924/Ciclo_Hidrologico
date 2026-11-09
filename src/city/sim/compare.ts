@@ -27,6 +27,16 @@ export interface Indicators {
   roofToSurface: number;
   roofToTank: number;
   tankOverflow: number;
+  /** Red separada: rebose a la calle y salida por los colectores [m³] (lluvias, residuales); llenado máximo y/D de los colectores. */
+  sewerOverflow: [number, number];
+  sewerOut: [number, number];
+  sewerPeakFill: [number, number];
+  /** Quebrada: caudal máximo que pasa por fuera del cauce y altura máxima del agua sobre la orilla en la sección [m³/s, m]. */
+  creekOutsideMax: number;
+  creekOverBankMax: number;
+  creekPeakIn: number;
+  /** Volumen captado por cada sumidero [m³]. */
+  drainTotals: Record<string, number>;
   t: number;
 }
 
@@ -61,6 +71,13 @@ export function indicators(sim: CitySim): Indicators {
     roofToSurface: b.roofToSurface,
     roofToTank: b.roofToTank,
     tankOverflow: b.tankOverflow,
+    sewerOverflow: sim.sewer ? [sim.sewer.tot.overflow[0], sim.sewer.tot.overflow[1]] : [0, 0],
+    sewerOut: sim.sewer ? [sim.sewer.tot.out[0], sim.sewer.tot.out[1]] : [0, 0],
+    sewerPeakFill: sim.sewer ? ([0, 1] as const).map((sys) => Math.max(0, ...sim.sewer!.s.pipes.map((p, k) => (p.system === sys && p.role === 'colector' ? sim.sewer!.peakFill[k] : 0)))) as [number, number] : [0, 0],
+    creekOutsideMax: Math.max(0, ...sim.samples.map((q) => q.creek?.qOutside ?? 0)),
+    creekOverBankMax: sim.c.creek ? Math.max(-9, ...sim.samples.map((q) => (q.creek ? q.creek.level - sim.c.creek!.bankLevel : -9))) : -9,
+    creekPeakIn: Math.max(0, ...sim.samples.map((q) => q.creek?.qin ?? 0)),
+    drainTotals: Object.fromEntries(sim.c.drains.map((d, k) => [d.id, sim.drainTotal[k]])),
     t: sim.t,
   };
 }

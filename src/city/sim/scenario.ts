@@ -102,6 +102,110 @@ export interface DrainSpec {
   /** Obstrucción inicial 0–1. */
   obstruction: number;
   kind: DataKind;
+  /**
+   * Tipo de captación (EPM GD-AS002, numeral 8.5): rejilla en la cuneta, ventana en el bordillo o mixto
+   * (rejilla + ventana). Sin tipo se trata como rejilla.
+   */
+  type?: InletType;
+  /** Longitud de la ventana en el bordillo [m] (EPM: mínimo 1,5 m) y su altura libre [m]. */
+  windowLengthM?: number;
+  windowHeightM?: number;
+  /** Pendiente longitudinal de la vía en el sumidero [m/m] (elige la ecuación de la ventana: en pendiente o en punto bajo). */
+  longSlope?: number;
+  /** Caja del sumidero en la red de alcantarillado (nodo «caja-sumidero»). Sin red, se usa la red esquemática. */
+  node?: string;
+}
+
+export type InletType = 'rejilla' | 'ventana' | 'mixto';
+export type SewerSystemId = 'lluvias' | 'residuales';
+
+/** Nodo de la red de alcantarillado: cámara de inspección, cámara de caída, caja de sumidero o descarga. */
+export interface SewerNodeSpec {
+  id: string;
+  name: string;
+  system: SewerSystemId;
+  kind: 'camara' | 'caida' | 'caja-sumidero' | 'descarga';
+  at: Pt;
+  /** Cota de batea (fondo) [m], en el mismo datum del terreno. */
+  invertM: number;
+  /** Diámetro interno de la cámara [m] (EPM: 1,2; 1,5 o 2,0). En cajas de sumidero, lado equivalente en planta. */
+  diameterM: number;
+  /** Solo descargas: «quebrada» entrega a la celda del cauce (con remanso); «colector» sigue fuera del sector. */
+  outfall?: 'quebrada' | 'colector';
+  data: DataKind;
+}
+
+/** Tramo de tubería circular entre dos nodos (del de aguas arriba al de aguas abajo). */
+export interface SewerPipeSpec {
+  id: string;
+  system: SewerSystemId;
+  from: string;
+  to: string;
+  /** Diámetro interno real [m]. */
+  diameterM: number;
+  material: 'concreto' | 'PVC';
+  /** Coeficiente de Manning [s/m^(1/3)]. */
+  manning: number;
+  /** Cotas de batea de la tubería en sus dos extremos [m] (pueden quedar por encima del fondo del nodo: caída). */
+  invertUpM: number;
+  invertDownM: number;
+  role: 'colector' | 'conexion-sumidero';
+  kind: DataKind;
+}
+
+export interface SewerSpec {
+  /** Norma cuyos criterios se usaron (el diseño es didáctico, no de ingeniería). */
+  standard: string;
+  /** Intensidad de diseño supuesta para el método racional [mm/h]. */
+  designIntensityMmH: number;
+  nodes: SewerNodeSpec[];
+  pipes: SewerPipeSpec[];
+  /** Aguas residuales: aportes domiciliarios estimados y lo que llega de aguas arriba. */
+  sanitary: {
+    /** Dotación neta supuesta [L/hab·día], coeficiente de retorno y factor de mayoración. */
+    dotacionLpd: number;
+    returnCoef: number;
+    peakFactor: number;
+    personsPerFloor: number;
+    /** Infiltración [L/s·ha] sobre el área del sector. */
+    infiltrationLpsHa: number;
+    /** Nodo de aguas residuales al que llega la acometida de cada edificio. */
+    buildingNode: Record<string, string>;
+    /** Aguas residuales que llegan de aguas arriba [L/s] a un nodo. */
+    upstream: { node: string; lps: number; name: string }[];
+  };
+  /** Escorrentía que llega por el colector de aguas lluvias desde calles de aguas arriba (C·i·A, sin retardo). */
+  upstreamRunoff?: { node: string; areaM2: number; coef: number; name: string }[];
+  /** Calles del sector (para verificar el costado de cada red): eje a lo largo de x o de y, centro y semiancho. */
+  streets?: { axis: 'x' | 'y'; center: number; halfWidth: number; from: number; to: number; name: string }[];
+  /** Intervención «conexiones erradas» (hipotética): techos conectados por error a la red de aguas residuales. */
+  erradas: {
+    /** Edificios del sector cuya bajante quedaría conectada a la red de aguas residuales. */
+    buildingIds: string[];
+    /** Techos conectados por error aguas arriba [m²]: su lluvia llega por la tubería al nodo indicado. */
+    upstreamRoofM2: number;
+    upstreamNode: string;
+  };
+}
+
+/** Quebrada del sector: dónde entra la creciente y sección de control para medir su capacidad. */
+export interface CreekSpec {
+  name: string;
+  /** Entrada (InflowSpec) por la que llega la creciente. */
+  inflowId: string;
+  /** Eje del cauce (para dibujar y para la pendiente) de aguas arriba a aguas abajo. */
+  axis: Pt[];
+  /** Sección de control: punto sobre el eje y semiancho analizado [m]; semiancho del cauce hasta la orilla [m]. */
+  section: { at: Pt; halfWidthM: number; bankHalfWidthM: number; name: string };
+  /** Caudal base mientras dura la creciente [m³/s]. */
+  baseM3s: number;
+}
+
+/** Creciente: hidrograma triangular (tiempo al pico tp, base 2,67·tp) sobre el caudal base. */
+export interface CreekFlood {
+  peakM3s: number;
+  timeToPeakMin: number;
+  startMin: number;
 }
 
 export interface OutletSpec {
@@ -205,6 +309,10 @@ export interface Scenario {
   streetView: { eye: Pt; look: Pt };
   /** Puntos de las tuberías esquemáticas (solo dibujo) hacia la descarga. */
   pipes: { id: string; path: Pt[]; kind: DataKind }[];
+  /** Red de alcantarillado separada (aguas lluvias y aguas residuales). Opcional. */
+  sewer?: SewerSpec;
+  /** Quebrada con creciente simulable. Opcional. */
+  creek?: CreekSpec;
   /** Elementos decorativos: no participan en el cálculo. */
   decor?: Decor;
   defaults: Shared;
@@ -245,6 +353,8 @@ export interface Shared {
   /** Agua que llega desde calles de arriba [L/s] (entrada externa). */
   inflowLps: number;
   seed: number;
+  /** Creciente de la quebrada (solo escenarios con quebrada). null o ausente: sin creciente. */
+  creek?: CreekFlood | null;
 }
 
 /** Lo que el estudiante puede cambiar en la ciudad. */
@@ -253,6 +363,8 @@ export interface Interventions {
   gardens: Record<string, boolean>;
   tanks: Record<string, { on: boolean; destination: 'red' | 'retener' }>;
   drains: Record<string, number>;
+  /** Conexiones erradas al alcantarillado de aguas residuales (solo escenarios con red separada). */
+  erradas?: boolean;
 }
 
 export interface CityConfig {
@@ -271,6 +383,7 @@ export function baseInterventions(sc: Scenario): Interventions {
     gardens: Object.fromEntries(sc.gardens.map((g) => [g.id, false])),
     tanks: Object.fromEntries(sc.tanks.map((t) => [t.id, { on: false, destination: 'red' as const }])),
     drains: Object.fromEntries(sc.drains.map((d) => [d.id, d.obstruction])),
+    erradas: false,
   };
 }
 
@@ -280,6 +393,7 @@ export function cloneInterventions(iv: Interventions): Interventions {
     gardens: { ...iv.gardens },
     tanks: Object.fromEntries(Object.entries(iv.tanks).map(([k, v]) => [k, { ...v }])),
     drains: { ...iv.drains },
+    erradas: iv.erradas ?? false,
   };
 }
 
@@ -319,6 +433,11 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
   if (sh.soilInitial !== 'seco' && sh.soilInitial !== 'humedo') errors.push('Humedad inicial desconocida.');
   if (!isNum(sh.inflowLps, 0, 500)) errors.push('Entrada externa fuera de rango (0–500 L/s).');
   if (!isNum(sh.seed, 0, 2 ** 31)) errors.push('Semilla inválida.');
+  if (sh.creek != null) {
+    const cf = sh.creek as Partial<CreekFlood>;
+    if (sc && !sc.creek) errors.push('Este escenario no tiene quebrada: no admite creciente.');
+    if (!isNum(cf.peakM3s, 0, 500) || !isNum(cf.timeToPeakMin, 1, 60) || !isNum(cf.startMin, 0, 60)) errors.push('Creciente mal definida (pico 0–500 m³/s, tiempo al pico 1–60 min, inicio 0–60 min).');
+  }
   if (sc) {
     for (const key of ['A', 'B'] as const) {
       const iv = o[key] as Partial<Interventions> | undefined;
@@ -340,6 +459,8 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
         if (!sc.drains.some((d) => d.id === did)) errors.push(`${key}: sumidero desconocido «${did}».`);
         if (!isNum(ob, 0, 1)) errors.push(`${key}: obstrucción de «${did}» fuera de 0–1.`);
       }
+      if (iv.erradas !== undefined && typeof iv.erradas !== 'boolean') errors.push(`${key}: «conexiones erradas» debe ser sí o no.`);
+      if (iv.erradas && !sc.sewer) errors.push(`${key}: este escenario no tiene red separada (conexiones erradas).`);
     }
   }
   if (errors.length) return { ok: false, errors };
@@ -350,6 +471,7 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
     gardens: { ...base.gardens, ...(iv.gardens ?? {}) },
     tanks: { ...base.tanks, ...(iv.tanks ?? {}) },
     drains: { ...base.drains, ...(iv.drains ?? {}) },
+    erradas: iv.erradas ?? false,
   });
   return { ok: true, errors: [], config: { format: 'medellin-lluvia/config', version: 1, shared: sh as Shared, A: fill(o.A as Interventions), B: fill(o.B as Interventions) } };
 }

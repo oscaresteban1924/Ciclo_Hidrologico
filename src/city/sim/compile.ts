@@ -1,8 +1,9 @@
 // Convierte un escenario (polígonos + ráster) y las intervenciones en campos de malla para el cálculo.
 // Es determinista: la misma entrada produce exactamente la misma malla (se verifica con un hash).
 
-import { COVERS, COVER_LIST, coverIndex, mmhToMs, type CoverId } from './constants';
+import { COVERS, COVER_LIST, G, NUMERICS, coverIndex, mmhToMs, type CoverId } from './constants';
 import type { Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
+import { buildNodeTable, fullFlow, windowK, type CompiledSewer, type SInlet, type SNode, type SPipe } from './sewer';
 
 export interface CompiledBuilding {
   id: string;
@@ -76,7 +77,36 @@ export interface Compiled {
   outlets: OutletFace[];
   inflowCells: number[];
   probes: { id: string; name: string; cell: number }[];
+  /** Red de alcantarillado separada (si el escenario la trae). */
+  sewer: CompiledSewer | null;
+  /** Por edificio: nodo de aguas residuales al que va su bajante por conexión errada (−1 si no). */
+  erradaNode: Int32Array;
+  /** Quebrada con creciente (si el escenario la trae). */
+  creek: CompiledCreek | null;
   hash: string;
+}
+
+/** Sección de control de la quebrada (columna de celdas a lo largo de y en la abscisa x). */
+export interface CompiledCreek {
+  /** Celdas por donde entra la creciente. */
+  cells: number[];
+  baseM3s: number;
+  /** Columna i de la sección, filas analizadas [j0, j1] y filas del cauce entre orillas [jb0, jb1]. */
+  i: number;
+  j0: number;
+  j1: number;
+  jb0: number;
+  jb1: number;
+  /** Fila del fondo (talweg), cota del fondo y cota de cauce lleno (la orilla más baja) [m]. */
+  jt: number;
+  zBed: number;
+  bankLevel: number;
+  /** Pendiente local del fondo y capacidad a cauce lleno con la regla del modelo [m³/s]. */
+  slope: number;
+  capacity: number;
+  /** Capacidad con Manning en flujo uniforme, sin el límite de Froude del modelo [m³/s]. */
+  capacityManning: number;
+  name: string;
 }
 
 export function pointInPolygon(x: number, y: number, poly: Polygon): boolean {
@@ -389,6 +419,155 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
 
   const probes = sc.probes.map((p) => ({ id: p.id, name: p.name, cell: nearestFree(solid, nx, ny, dx, p.at) }));
 
+  // Red de alcantarillado separada
+  const erradaNode = new Int32Array(sc.buildings.length).fill(-1);
+  let sewer: CompiledSewer | null = null;
+  if (sc.sewer) {
+    const sp = sc.sewer;
+    const idx = new Map<string, number>();
+    const sysOf = (v: 'lluvias' | 'residuales') => (v === 'lluvias' ? 0 : 1) as 0 | 1;
+    const nodes: SNode[] = sp.nodes.map((nd, k) => {
+      idx.set(nd.id, k);
+      // la caja de un sumidero queda en la celda del sumidero (misma que usa la captación)
+      const di = sc.drains.findIndex((d) => d.node === nd.id);
+      const cell = di >= 0 ? drains[di].cell : nearestFree(solid, nx, ny, dx, nd.at);
+      const area0 = nd.kind === 'caja-sumidero' ? nd.diameterM * nd.diameterM : (Math.PI * nd.diameterM * nd.diameterM) / 4;
+      return { id: nd.id, name: nd.name, system: sysOf(nd.system), kind: nd.kind, x: nd.at[0], y: nd.at[1], cell, rim: z[cell], inv: nd.invertM, area0, outfall: nd.kind === 'descarga' ? (nd.outfall === 'quebrada' ? 2 : 1) : 0, vTab: new Float64Array(2), dy: 0.005, vRim: 0 };
+    });
+    const pipes: SPipe[] = sp.pipes.map((pp) => {
+      const a = idx.get(pp.from), b = idx.get(pp.to);
+      if (a === undefined || b === undefined) throw new Error(`Tramo ${pp.id}: nodo desconocido.`);
+      if (nodes[a].system !== sysOf(pp.system) || nodes[b].system !== sysOf(pp.system)) throw new Error(`Tramo ${pp.id}: une sistemas distintos (la red debe ser separada).`);
+      const L = Math.max(1, Math.hypot(nodes[b].x - nodes[a].x, nodes[b].y - nodes[a].y));
+      if (pp.invertUpM < nodes[a].inv - 1e-6 || pp.invertDownM < nodes[b].inv - 1e-6) throw new Error(`Tramo ${pp.id}: la batea queda por debajo del fondo de su nodo.`);
+      return { id: pp.id, system: sysOf(pp.system), a, b, D: pp.diameterM, n: pp.manning, L, zUp: pp.invertUpM, zDn: pp.invertDownM, role: pp.role, material: pp.material, qFull: fullFlow(pp.diameterM, pp.manning, (pp.invertUpM - pp.invertDownM) / L) };
+    });
+    nodes.forEach((nd, k) => {
+      if (nd.outfall) return;
+      const ends = pipes.filter((pp) => pp.a === k || pp.b === k).map((pp) => ({ L: pp.L, D: pp.D, zEnd: pp.a === k ? pp.zUp : pp.zDn }));
+      Object.assign(nd, buildNodeTable(nd, ends));
+    });
+    const inlets: (SInlet | null)[] = sc.drains.map((d, di) => {
+      if (!d.node) return null;
+      const k = idx.get(d.node);
+      if (k === undefined || nodes[k].kind !== 'caja-sumidero' || nodes[k].system !== 0) throw new Error(`Sumidero ${d.id}: debe entregar a una caja de sumidero de aguas lluvias.`);
+      const obs = drains[di].obstruction;
+      const type = d.type ?? 'rejilla';
+      return {
+        drain: di,
+        node: k,
+        cell: drains[di].cell,
+        type,
+        perimeter: type === 'ventana' ? 0 : drains[di].perimeter,
+        openArea: type === 'ventana' ? 0 : drains[di].openArea,
+        winL: type === 'rejilla' ? 0 : (d.windowLengthM ?? 1.5) * (1 - obs),
+        winH: d.windowHeightM ?? 0.15,
+        kGrade: windowK(d.longSlope ?? 0.02),
+        sag: (d.longSlope ?? 0) < 0.01,
+        gutterSlope: d.gutterSlope ?? 0,
+      };
+    });
+    const dryIn = new Float64Array(nodes.length);
+    let persons = 0;
+    const san = sp.sanitary;
+    sc.buildings.forEach((b) => {
+      const k = idx.get(san.buildingNode[b.id] ?? '');
+      if (k === undefined) return;
+      const pers = b.floors * san.personsPerFloor;
+      persons += pers;
+      dryIn[k] += (pers * san.dotacionLpd * san.returnCoef * san.peakFactor) / 86400 / 1000;
+    });
+    const sanNodes = nodes.map((n, k) => (n.system === 1 && !n.outfall ? k : -1)).filter((k) => k >= 0);
+    const inf = (san.infiltrationLpsHa * (sc.extent.width * sc.extent.height)) / 1e4 / 1000;
+    for (const k of sanNodes) dryIn[k] += inf / sanNodes.length;
+    for (const u of san.upstream) {
+      const k = idx.get(u.node);
+      if (k !== undefined) dryIn[k] += u.lps / 1000;
+    }
+    let dryTotal = 0;
+    for (let k = 0; k < dryIn.length; k++) dryTotal += dryIn[k];
+    const erradas: { building: number; node: number }[] = [];
+    if (iv.erradas) {
+      for (const bid of sp.erradas.buildingIds) {
+        const bi = sc.buildings.findIndex((b) => b.id === bid);
+        const k = idx.get(san.buildingNode[bid] ?? '');
+        if (bi >= 0 && k !== undefined) {
+          erradas.push({ building: bi, node: k });
+          erradaNode[bi] = k;
+        }
+      }
+    }
+    // los depósitos con descarga a la red entregan en la cámara de aguas lluvias más cercana
+    let tankNode = -1;
+    if (tanks.length) {
+      const oc = tanks[0].overflowCell;
+      const ox = ((oc % nx) + 0.5) * dx, oy = (Math.floor(oc / nx) + 0.5) * dx;
+      let bd = Infinity;
+      nodes.forEach((n, k) => {
+        if (n.system !== 0 || n.outfall || n.kind === 'caja-sumidero') return;
+        const dd = Math.hypot(n.x - ox, n.y - oy);
+        if (dd < bd) {
+          bd = dd;
+          tankNode = k;
+        }
+      });
+    }
+    const upRunoff = (sp.upstreamRunoff ?? []).map((u) => ({ node: idx.get(u.node) ?? -1, cA: u.coef * u.areaM2 })).filter((u) => u.node >= 0);
+    sewer = { nodes, pipes, inlets, dryIn, upRunoff, erradas, upErradasM2: iv.erradas ? sp.erradas.upstreamRoofM2 : 0, upErradasNode: idx.get(sp.erradas.upstreamNode) ?? -1, tankNode, persons, dryTotal };
+  }
+
+  // Quebrada: celdas de la creciente y sección de control (capacidad a cauce lleno con la regla del modelo)
+  let creek: CompiledCreek | null = null;
+  if (sc.creek) {
+    const ck = sc.creek;
+    const f = sc.inflows.find((q) => q.id === ck.inflowId);
+    const cells: number[] = [];
+    if (f && (f.edge === 'E' || f.edge === 'W')) {
+      const i = f.edge === 'E' ? nx - 1 : 0;
+      for (let j = 0; j < ny; j++) {
+        const y = (j + 0.5) * dx;
+        if (y >= f.from && y <= f.to && !solid[j * nx + i]) cells.push(j * nx + i);
+      }
+    } else if (f) {
+      const j = f.edge === 'N' ? ny - 1 : 0;
+      for (let i = 0; i < nx; i++) {
+        const x = (i + 0.5) * dx;
+        if (x >= f.from && x <= f.to && !solid[j * nx + i]) cells.push(j * nx + i);
+      }
+    }
+    const [sx, sy] = ck.section.at;
+    const i = Math.min(nx - 1, Math.max(0, Math.floor(sx / dx)));
+    const j0 = Math.max(0, Math.floor((sy - ck.section.halfWidthM) / dx));
+    const j1 = Math.min(ny - 1, Math.floor((sy + ck.section.halfWidthM) / dx));
+    let jt = j0;
+    for (let j = j0; j <= j1; j++) if (z[j * nx + i] < z[jt * nx + i]) jt = j;
+    const zBed = z[jt * nx + i];
+    // orillas: primera celda a cada lado cuyo centro queda fuera del cauce encajado (a ≥ semiancho del eje)
+    const yb = sy;
+    const jb0 = Math.max(j0, Math.floor((yb - ck.section.bankHalfWidthM) / dx - 0.5));
+    const jb1 = Math.min(j1, Math.ceil((yb + ck.section.bankHalfWidthM) / dx - 0.5));
+    const bankLevel = Math.min(z[jb0 * nx + i], z[jb1 * nx + i]);
+    // pendiente del fondo: talweg 5 m aguas arriba y aguas abajo
+    const bedAt = (ii: number) => {
+      let m = Infinity;
+      for (let j = j0; j <= j1; j++) m = Math.min(m, z[j * nx + Math.min(nx - 1, Math.max(0, ii))]);
+      return m;
+    };
+    const di = Math.max(1, Math.round(5 / dx));
+    const slope = Math.max(1e-4, (bedAt(i - di) - bedAt(i + di)) / (2 * di * dx));
+    let capacity = 0, capacityManning = 0;
+    for (let j = jb0; j <= jb1; j++) {
+      const k = j * nx + i;
+      const hh = bankLevel - z[k];
+      if (hh <= 0 || solid[k]) continue;
+      const qm = (Math.pow(hh, 5 / 3) * Math.sqrt(slope)) / n[k];
+      const qf = NUMERICS.froudeMax * hh * Math.sqrt(G * hh);
+      capacity += Math.min(qm, qf) * dx;
+      capacityManning += qm * dx;
+    }
+    creek = { cells, baseM3s: ck.baseM3s, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name };
+  }
+
   let h = 2166136261;
   for (let k = 0; k < N; k++) {
     h = fnv(h, Math.round(z[k] * 1e4));
@@ -396,6 +575,11 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
   }
   for (const d of drains) h = fnv(h, d.cell ^ Math.round(d.perimeter * 1e4) ^ Math.round(d.gutterSlope * 1e4));
   for (const t of tanks) h = fnv(h, Math.round(t.capacity * 1e3) ^ (t.destination === 'red' ? 1 : 2));
+  if (sewer) {
+    for (const nd of sewer.nodes) h = fnv(h, nd.cell ^ Math.round(nd.inv * 1e3));
+    for (const pp of sewer.pipes) h = fnv(h, Math.round(pp.D * 1e3) ^ Math.round(pp.zUp * 1e3) ^ Math.round(pp.zDn * 1e3));
+    h = fnv(h, iv.erradas ? 7 : 3);
+  }
 
   return {
     scenarioId: sc.id,
@@ -420,6 +604,9 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     outlets,
     inflowCells,
     probes,
+    sewer,
+    erradaNode,
+    creek,
     hash: (h >>> 0).toString(16).padStart(8, '0'),
   };
 }

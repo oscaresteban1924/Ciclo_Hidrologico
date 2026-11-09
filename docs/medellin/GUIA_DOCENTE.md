@@ -80,7 +80,21 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
   - La **cámara «Valle»** se aleja hasta el otro lado del río: muestra las autopistas, el parque del río y el barrio que sube por la ladera.
   - El entorno no indica dónde queda el sector: los sectores son didácticos.
   - **Pregunta para la clase:** «Si el agua sale del sector por la calle de abajo, ¿hacia dónde seguirá?» (hacia el río).
-- **Bajo la calle:** muestra tuberías **esquemáticas**; su hidráulica no se calcula.
+- **Alcantarillado (herramienta y botón «Bajo la calle»):** cada sector tiene **dos redes separadas**, trazadas con criterios de la norma de EPM. Son didácticas: no son la red real.
+  - **Aguas lluvias** (azul): recoge los sumideros y entrega a la quebrada o al colector de aguas abajo. Va por el costado norte y oriente de la vía.
+  - **Aguas residuales** (café): recoge el agua usada de las casas y va hacia el interceptor del río y la planta de tratamiento. Va por el otro costado y más profunda. Nunca va a la quebrada.
+  - Las **cámaras de inspección** son las tapas redondas de la calle. Unen tramos, y la norma pide una cada 80 m como máximo si hay sumideros. Donde la tubería baja más de 0,7 m hay una **cámara de caída**.
+  - El agua dentro de tubos y cámaras es la calculada. Una tubería **en carga** (llena, a presión) se ve en rojo. Si el nivel llega a la tapa, la cámara **rebosa** y la tapa se levanta. Si llega a la rejilla, el sumidero **devuelve** agua a la calle.
+  - El **perfil del colector** muestra el terreno, la tubería y el nivel del agua de punta a punta.
+  - **Conexiones erradas:** al activarlas, algunos techos entregan la lluvia al alcantarillado de aguas residuales, que se llena y rebosa en la calle. Es la razón práctica para separar las redes. Misión «Conexiones erradas».
+  - **Preguntas para la clase:** «¿Por qué la lluvia no debe ir a la tubería de aguas residuales?» «¿Qué tapa de la calle rebosó primero y por qué esa?»
+- **Creciente (ladera):** una creciente entra por la quebrada.
+  - La **sección de control**, frente a la casa del retiro, tiene una capacidad de unos 51 m³/s con el cauce lleno. Los ejemplos van del 60 % al 200 % de esa capacidad.
+  - El panel muestra la sección transversal en vivo, con el agua calculada y la cota de cauce lleno, y el hidrograma de lo que entra, lo que pasa por el cauce y lo que pasa por fuera.
+  - En la maqueta, una mira en la orilla marca la cota de cauce lleno.
+  - Con una creciente grande, la quebrada ahoga la descarga de aguas lluvias y sale agua por los sumideros de la carrera sur.
+  - **Pregunta para la clase:** «¿Para qué sirve el retiro de la quebrada?» Misión «La creciente de la quebrada».
+  - Es un ejercicio: **no es un pronóstico de inundación**.
 - **Materiales:** cada superficie tiene un color y además un patrón (puntos, rayas, cuadros u ondas).
 - **Resultados:** muestra la profundidad máxima alcanzada.
 

@@ -19,7 +19,9 @@ for (const m of MISSIONS) {
     console.log(`  presupuesto de ejemplo: ${used} puntos`);
     B.drains['sum-esquina'] = 0; B.drains['sum-carrera-s'] = 0; B.gardens['jardin-calle'] = true;
   }
-  const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, ...m.rain }, simMinutes: m.simMinutes };
+  const cap = m.creek && sc.creek ? compile(sc, sc.defaults, A).creek?.capacity ?? 0 : 0;
+  const creek = m.creek && cap > 0 ? { peakM3s: Math.round(m.creek.fraction * cap), timeToPeakMin: m.creek.timeToPeakMin, startMin: m.creek.startMin } : null;
+  const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, ...m.rain }, simMinutes: m.simMinutes, creek };
   let r;
   if (m.change.kind === 'ninguno') {
     const s = new CitySim(compile(sc, sh, B), sh);

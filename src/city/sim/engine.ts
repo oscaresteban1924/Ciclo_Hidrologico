@@ -15,7 +15,8 @@
 import { G, H_FLOW_MIN, H_WET, INLET, NUMERICS, mmhToMs } from './constants';
 import type { Compiled } from './compile';
 import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from './drainage';
-import { SOIL_INITIAL_FRACTION, type RainConfig, type Shared } from './scenario';
+import { SOIL_INITIAL_FRACTION, type CreekFlood, type RainConfig, type Shared } from './scenario';
+import { SewerModel, type SewerTotals } from './sewer';
 
 export interface Hyetograph {
   /** Tiempos de cambio [s]; el último es el fin de la lluvia. */
@@ -52,6 +53,22 @@ export function hyetograph(r: RainConfig): Hyetograph {
   return { times, mmh };
 }
 
+/** Hidrograma de la creciente: tiempos [s] y caudales [m³/s] (lineal a tramos), sobre el caudal base. */
+export function creekHydrograph(f: CreekFlood, baseM3s: number): { t: number[]; q: number[] } {
+  const t0 = f.startMin * 60, tp = f.timeToPeakMin * 60;
+  const peak = Math.max(f.peakM3s, baseM3s);
+  // hidrograma unitario triangular del SCS: base = 2,67·tp (subida tp, bajada 1,67·tp)
+  return { t: [0, t0, t0 + tp, t0 + 2.67 * tp], q: [baseM3s, baseM3s, peak, baseM3s] };
+}
+
+/** Caudal de un hidrograma lineal a tramos en t [m³/s] (constante fuera de los extremos). */
+export function hydroAt(hg: { t: number[]; q: number[] }, t: number): number {
+  const { t: ts, q } = hg;
+  if (t <= ts[0]) return q[0];
+  for (let k = 1; k < ts.length; k++) if (t <= ts[k]) return q[k - 1] + ((q[k] - q[k - 1]) * (t - ts[k - 1])) / Math.max(1e-9, ts[k] - ts[k - 1]);
+  return q[q.length - 1];
+}
+
 export interface Balance {
   /** Lluvia caída en todo el dominio (incluidos techos) [m³]. */
   precipitation: number;
@@ -81,6 +98,18 @@ export interface Balance {
   roofToSurface: number;
   roofToTank: number;
   tankOverflow: number;
+  /** Lluvia de techos que fue al alcantarillado de aguas residuales por conexiones erradas [m³]. */
+  roofToSewer: number;
+  /** Agua de la creciente que entró por la quebrada [m³] (incluida en `inflow`). */
+  creekIn: number;
+  /** Aportes externos a la red: aguas residuales domésticas, de aguas arriba y conexiones erradas de arriba [m³]. */
+  sewageIn: number;
+  /** Agua que salió del sector por la red (descargas libres) [m³]. */
+  netOut: number;
+  /** Residuo de la red = entradas − (almacenado + descargado + devuelto) [m³]. */
+  netResidual: number;
+  /** Totales por sistema de la red separada (0 = lluvias, 1 = residuales), o null sin red. */
+  sewer: SewerTotals | null;
 }
 
 export interface Sample {
@@ -98,6 +127,10 @@ export interface Sample {
   residual: number;
   /** Medidor colocado por el estudiante: profundidad [m] y velocidad [m/s], si existe. */
   extra?: [number, number];
+  /** Red separada: caudal medio que sale por cada sistema y rebose a la calle [m³/s] (lluvias, residuales). */
+  sewer?: { out: [number, number]; overflow: [number, number]; toCreek: number };
+  /** Quebrada: caudal que entra, que pasa por la sección dentro del cauce y por fuera [m³/s]; nivel en el talweg [m]. */
+  creek?: { qin: number; qChannel: number; qOutside: number; level: number };
 }
 
 export interface Diagnostics {
@@ -155,6 +188,13 @@ export class CitySim {
   private gardenFaces: { g: number; axis: 0 | 1; face: number; outSign: 1 | -1 }[];
   private ex: DrainExchange;
   private out: Float64Array; // flujo saliente por celda (limitador)
+  /** Red de alcantarillado separada (si el escenario la trae). */
+  readonly sewer: SewerModel | null;
+  private extraIn: Float64Array;
+  private extIn: Float64Array;
+  /** Hidrograma de la creciente (si hay). */
+  readonly creekHydro: { t: number[]; q: number[] } | null;
+  private lastSampleSewer = { out: [0, 0], overflow: [0, 0], toCreek: 0 };
 
   t = 0;
   lastDt = 0;
@@ -200,6 +240,10 @@ export class CitySim {
     const nIn = c.drains.length + c.tanks.length;
     this.ex = { offered: new Float64Array(nIn), accepted: new Float64Array(nIn), returned: new Float64Array(nIn) };
     this.out = new Float64Array(N);
+    this.sewer = c.sewer ? new SewerModel(c.sewer) : null;
+    this.extraIn = new Float64Array(c.sewer ? c.sewer.nodes.length : 0);
+    this.extIn = new Float64Array(this.extraIn.length);
+    this.creekHydro = c.creek && shared.creek ? creekHydrograph(shared.creek, c.creek.baseM3s) : null;
     // Caras del borde de cada jardín (para medir lo que entra y lo que rebosa)
     const gardens = new Set<number>();
     for (let k = 0; k < N; k++) if (c.garden[k] >= 0) gardens.add(c.garden[k]);
@@ -241,6 +285,8 @@ export class CitySim {
     this.gardenOut.fill(0);
     this.gardenIn.fill(0);
     this.network.reset();
+    this.sewer?.reset();
+    this.lastSampleSewer = { out: [0, 0], overflow: [0, 0], toCreek: 0 };
     this.t = 0;
     this.lastDt = 0;
     let s0 = 0;
@@ -269,6 +315,12 @@ export class CitySim {
       roofToSurface: 0,
       roofToTank: 0,
       tankOverflow: 0,
+      roofToSewer: 0,
+      creekIn: 0,
+      sewageIn: 0,
+      netOut: 0,
+      netResidual: 0,
+      sewer: this.sewer ? this.sewer.tot : null,
     };
     this.diag = { steps: 0, dtMin: Infinity, dtMax: 0, froudeLimited: 0, faceUpdates: 0, limiterHits: 0, maxCourant: 0, computeMs: 0, nonFinite: 0, negativeFixes: 0 };
     this.samples = [];
@@ -296,6 +348,7 @@ export class CitySim {
   private nextBreak(t: number): number {
     let nb = this.endT;
     for (const tb of this.hyeto.times) if (tb > t + 1e-9 && tb < nb) nb = tb;
+    if (this.creekHydro) for (const tb of this.creekHydro.t) if (tb > t + 1e-9 && tb < nb) nb = tb;
     if (this.nextSample > t + 1e-9 && this.nextSample < nb) nb = this.nextSample;
     return nb;
   }
@@ -334,7 +387,11 @@ export class CitySim {
       for (const b of c.buildings) {
         if (b.rainWeight === 0) continue;
         const vol = d * b.rainWeight * area;
-        if (b.tank >= 0) {
+        if (this.sewer && c.erradaNode[b.index] >= 0) {
+          // conexión errada: la bajante entrega al alcantarillado de aguas residuales
+          this.extraIn[c.erradaNode[b.index]] += vol;
+          bal.roofToSewer += vol;
+        } else if (b.tank >= 0) {
           this.tankVol[b.tank] += vol;
           bal.roofToTank += vol;
         } else {
@@ -356,6 +413,21 @@ export class CitySim {
       const per = vol / c.inflowCells.length / area;
       for (const k of c.inflowCells) h[k] += per;
       bal.inflow += vol;
+    }
+    // Creciente de la quebrada: volumen exacto del hidrograma en [t, t+dt] (los quiebres coinciden con pasos)
+    if (this.creekHydro && c.creek && c.creek.cells.length > 0) {
+      const vol = 0.5 * (hydroAt(this.creekHydro, this.t) + hydroAt(this.creekHydro, this.t + dt)) * dt;
+      const per = vol / c.creek.cells.length / area;
+      for (const k of c.creek.cells) h[k] += per;
+      bal.inflow += vol;
+      bal.creekIn += vol;
+    }
+    // Aportes a la red separada en este paso: aguas residuales, lluvia de conexiones erradas de arriba
+    if (this.sewer) {
+      const sw = c.sewer!;
+      for (let k = 0; k < this.extIn.length; k++) this.extIn[k] = sw.dryIn[k] * dt;
+      if (sw.upErradasM2 > 0 && sw.upErradasNode >= 0 && R > 0) this.extIn[sw.upErradasNode] += R * dt * sw.upErradasM2;
+      if (R > 0) for (const u of sw.upRunoff) this.extIn[u.node] += R * dt * u.cA;
     }
 
     // --- 3) Momento en caras interiores
@@ -532,6 +604,9 @@ export class CitySim {
     bal.infiltrated += inf * area;
 
     // --- 7) Sumideros y descarga de depósitos hacia la red
+    if (this.sewer) {
+      this.stepSewer(dt);
+    } else {
     const ex = this.ex;
     const nd = c.drains.length;
     for (let d = 0; d < nd; d++) {
@@ -579,6 +654,7 @@ export class CitySim {
     }
     bal.drained += dr;
     bal.returned += ret;
+    }
 
     // --- 8) Estado, máximos y balance
     let surf = 0;
@@ -594,7 +670,7 @@ export class CitySim {
     let dev = 0;
     for (let q = 0; q < this.tankVol.length; q++) dev += this.tankVol[q];
     bal.devices = dev;
-    bal.network = this.network.storage();
+    bal.network = this.sewer ? this.sewer.storage() : this.network.storage();
     bal.residual =
       bal.precipitation + bal.inflow + bal.returned -
       (bal.surface - bal.surface0 + bal.infiltrated + bal.devices + bal.drained + bal.boundaryOut);
@@ -617,6 +693,37 @@ export class CitySim {
     if (this.t >= this.nextSample - 1e-9) this.record();
     dg.computeMs += performance.now() - t0;
     return dt;
+  }
+
+  /** Paso de la red separada: captación, red, rebose y descargas; acumula el balance. */
+  private stepSewer(dt: number): void {
+    const c = this.c, sw = this.sewer!, bal = this.bal, area = c.area;
+    const T = sw.tot;
+    const before = [T.fromSector[0] + T.fromSector[1] + T.fromCreek[0] + T.fromCreek[1], T.overflow[0] + T.overflow[1] + T.toCreek[0] + T.toCreek[1], T.external[0] + T.external[1], T.out[0] + T.out[1]];
+    // depósitos que descargan a la red: a la cámara de aguas lluvias más cercana
+    for (const tk of c.tanks) {
+      if (tk.destination !== 'red' || c.sewer!.tankNode < 0) continue;
+      const v = Math.min(tk.release * dt, this.tankVol[tk.index]);
+      if (v <= 0) continue;
+      this.tankVol[tk.index] -= v;
+      this.extraIn[c.sewer!.tankNode] += v;
+    }
+    sw.step(dt, { h: this.h, z: c.z, area, dx: c.dx }, this.extraIn, this.extIn);
+    this.extraIn.fill(0);
+    this.extIn.fill(0);
+    for (let d = 0; d < c.drains.length; d++) {
+      const acc = sw.lastCapture[d];
+      this.lastDrain[d] = acc;
+      this.drainTotal[d] += acc;
+      const rate = acc / dt;
+      if (rate > this.drainPeak[d]) this.drainPeak[d] = rate;
+    }
+    bal.drained += T.fromSector[0] + T.fromSector[1] + T.fromCreek[0] + T.fromCreek[1] - before[0];
+    bal.returned += T.overflow[0] + T.overflow[1] + T.toCreek[0] + T.toCreek[1] - before[1];
+    bal.sewageIn += T.external[0] + T.external[1] - before[2];
+    bal.netOut += T.out[0] + T.out[1] - before[3];
+    const stored = sw.storage();
+    bal.netResidual = bal.drained + bal.sewageIn - (stored + bal.netOut + bal.returned);
   }
 
   /** Avanza hasta tTarget (sin recortar el último paso) o hasta agotar el presupuesto de tiempo real. */
@@ -677,12 +784,46 @@ export class CitySim {
       s.extra = [this.h[this.extraProbe], Math.hypot(u, v)];
     }
     if (this.t === 0) s.rainMmH = this.rainAt(0);
+    if (this.sewer) {
+      const T = this.sewer.tot, L = this.lastSampleSewer;
+      const r = (a: number, b: number) => (dtS > 0 ? (a - b) / dtS : 0);
+      s.sewer = {
+        out: [r(T.out[0], L.out[0]), r(T.out[1], L.out[1])],
+        overflow: [r(T.overflow[0], L.overflow[0]), r(T.overflow[1], L.overflow[1])],
+        toCreek: r(T.toCreek[0], L.toCreek),
+      };
+      this.lastSampleSewer = { out: [T.out[0], T.out[1]], overflow: [T.overflow[0], T.overflow[1]], toCreek: T.toCreek[0] };
+    }
+    if (c.creek) s.creek = this.creekSection();
     this.samples.push(s);
     this.lastSampleT = this.t;
     this.lastSampleB = this.bal.boundaryOut;
     this.lastSampleD = this.bal.drained;
     this.nextSample = Math.round((this.t + this.num.sampleEvery) / this.num.sampleEvery) * this.num.sampleEvery;
     if (this.nextSample <= this.t + 1e-9) this.nextSample += this.num.sampleEvery;
+  }
+
+  /** Caudal de la creciente que entra ahora [m³/s] (0 sin creciente). */
+  creekInflowAt(t = this.t): number {
+    return this.creekHydro ? hydroAt(this.creekHydro, t) : 0;
+  }
+
+  /**
+   * Sección de control de la quebrada, del estado calculado: caudal que la cruza dentro del cauce (entre
+   * orillas) y por fuera (desborde), y nivel del agua en el talweg.
+   */
+  creekSection(): { qin: number; qChannel: number; qOutside: number; level: number } {
+    const c = this.c, cr = c.creek!;
+    const { nx, dx } = c;
+    let qc = 0, qo = 0;
+    for (let j = cr.j0; j <= cr.j1; j++) {
+      const f = j * (nx + 1) + cr.i + 1;
+      const q = this.qx[f] * dx;
+      if (j > cr.jb0 && j < cr.jb1) qc += q;
+      else qo += q;
+    }
+    const kt = cr.jt * nx + cr.i;
+    return { qin: this.creekInflowAt(), qChannel: qc, qOutside: qo, level: c.z[kt] + this.h[kt] };
   }
 
   /** Cuenta valores no finitos o negativos (verificación). */

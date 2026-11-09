@@ -31,6 +31,8 @@ export interface Mission {
   options: { id: string; text: string }[];
   rain: Partial<RainConfig>;
   simMinutes: number;
+  /** Creciente de la quebrada como fracción de la capacidad de su sección de control (misiones de quebrada). */
+  creek?: { fraction: number; timeToPeakMin: number; startMin: number };
   /** Configuración del escenario A (base) de la misión. */
   setupA?: (iv: Interventions) => void;
   /** Cambio que se propone en B. «presupuesto» deja que el estudiante elija. */
@@ -120,8 +122,8 @@ export const MISSIONS: Mission[] = [
         outcome: Math.abs(diff) < 0.001 ? 'igual' : diff > 0 ? 'mas' : 'menos',
         observed: [
           `Profundidad máxima en la esquina: A ${fmtDepth(da)}, B ${fmtDepth(db)}.`,
-          `El sumidero captó ${m3(a.drained)} en A y ${m3(b!.drained)} en B.`,
-          `El agua que no entró al sumidero siguió calle abajo: salida ${m3(a.boundaryOut)} en A y ${m3(b!.boundaryOut)} en B.`,
+          `El sumidero de la esquina captó ${m3(a.drainTotals['sum-esquina'] ?? 0)} en A y ${m3(b!.drainTotals['sum-esquina'] ?? 0)} en B; entre todos los sumideros, ${m3(a.drained)} en A y ${m3(b!.drained)} en B.`,
+          `El agua que no entró al sumidero de la esquina se acumuló en el bajo o siguió calle abajo: salida ${m3(a.boundaryOut)} en A y ${m3(b!.boundaryOut)} en B.`,
         ],
         rows: [{ label: 'Profundidad máxima en la esquina', a: fmtDepth(da), b: fmtDepth(db), change: changeText(da, db, 0.0005, fmtDepth) }, ...baseRows(a, b!)],
       };
@@ -261,6 +263,72 @@ export const MISSIONS: Mission[] = [
     },
     explain: 'Cada medida actúa en un lugar: el jardín y el pavimento permeable retienen e infiltran donde están; limpiar un sumidero ayuda en su esquina; el depósito retiene la lluvia de un techo. Combinar medidas en los lugares por donde pasa el agua suele funcionar mejor.',
     terms: ['balance-hidrico', 'caudal-pico', 'infiltracion'],
+  },
+  {
+    id: 'conexiones-erradas',
+    title: 'Conexiones erradas',
+    scenarioId: 'calle-de-prueba',
+    question: 'Algunas casas conectaron sus techos, por error, al alcantarillado de aguas residuales. ¿Qué le pasa a esa tubería cuando llueve fuerte?',
+    context: 'A: las dos redes están bien separadas (la lluvia va solo a la red de aguas lluvias). B: cuatro casas del sector y techos de calles de arriba entregan su lluvia al alcantarillado de aguas residuales. Misma lluvia en A y B.',
+    options: [
+      { id: 'nada', text: 'Nada: esa tubería no recibe lluvia' },
+      { id: 'llena', text: 'Se llena, pero aguanta' },
+      { id: 'rebosa', text: 'Se llena y las aguas residuales salen a la calle' },
+    ],
+    rain: { intensityMmH: 60, durationMin: 20, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 35,
+    change: { kind: 'auto', describe: 'Activar las conexiones erradas en B.', apply: (iv) => (iv.erradas = true) },
+    evaluate: (a, b) => {
+      const ov = b!.sewerOverflow[1], fill = b!.sewerPeakFill[1];
+      return {
+        outcome: ov > 0.01 ? 'rebosa' : fill > 0.85 ? 'llena' : 'nada',
+        observed: [
+          `Alcantarillado de aguas residuales: en A trabajó hasta el ${fmtNum(Math.min(1, a.sewerPeakFill[1]) * 100, 0)} % de su diámetro; en B ${b!.sewerPeakFill[1] > 1 ? 'se llenó y trabajó a presión' : `llegó al ${fmtNum(b!.sewerPeakFill[1] * 100, 0)} %`}.`,
+          ov > 0.01 ? `En B rebosaron ${m3(ov)} de aguas residuales mezcladas con lluvia por las cámaras, a la calle.` : 'En B no rebosó.',
+          `En A, la red de aguas residuales no recibió lluvia: llevó solo el agua usada de las casas (salieron ${m3(a.sewerOut[1])} hacia el interceptor).`,
+        ],
+        rows: [
+          { label: 'Rebose de aguas residuales a la calle', a: m3(a.sewerOverflow[1]), b: m3(ov), change: changeText(a.sewerOverflow[1], ov, 1e-3, m3) },
+          { label: 'Hacia el interceptor (aguas residuales)', a: m3(a.sewerOut[1]), b: m3(b!.sewerOut[1]), change: changeText(a.sewerOut[1], b!.sewerOut[1], 1e-3, m3) },
+          ...baseRows(a, b!),
+        ],
+        caveat: 'Las conexiones erradas de este ejercicio son hipotéticas: cuatro techos del sector y 8 000 m² de techos aguas arriba.',
+      };
+    },
+    explain: 'La red de aguas residuales se diseña para el agua usada de las casas, que es poca. Si le llega la lluvia de los techos, se llena, trabaja a presión y rebosa por las cámaras: el agua sucia sale a la calle y llega más agua a la planta de tratamiento. Por eso las dos redes deben ir separadas y cada bajante debe ir a la red de aguas lluvias.',
+    terms: ['sistema-separado', 'conexion-errada', 'alcantarillado-sanitario', 'sobrecarga'],
+  },
+  {
+    id: 'creciente-quebrada',
+    title: 'La creciente de la quebrada',
+    scenarioId: 'ladera-quebrada',
+    question: 'Llega por la quebrada una creciente de una vez y media lo que cabe en su cauce. ¿Qué pasará frente a la casa del retiro?',
+    context: 'Un solo escenario. La creciente entra por la quebrada mientras llueve sobre el barrio. La sección de control queda frente a la casa del retiro.',
+    options: [
+      { id: 'cabe', text: 'El agua cabe en el cauce' },
+      { id: 'retiro', text: 'Se desborda hacia el retiro verde' },
+      { id: 'calle', text: 'Se desborda y además sale agua por la red de aguas lluvias de la carrera' },
+    ],
+    rain: { intensityMmH: 60, durationMin: 20, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 35,
+    creek: { fraction: 1.5, timeToPeakMin: 6, startMin: 2 },
+    change: { kind: 'ninguno', describe: 'Sin intervención: se observa la creciente.' },
+    evaluate: (a) => {
+      const out = a.creekOutsideMax, over = a.creekOverBankMax, back = a.sewerOverflow[0];
+      return {
+        outcome: out < 0.05 && over <= 0 ? 'cabe' : back > 0.01 ? 'calle' : 'retiro',
+        observed: [
+          `Entró un caudal pico de ${fmtNum(a.creekPeakIn, 0)} m³/s por la quebrada.`,
+          over > 0 ? `En la sección de control el agua subió ${fmtNum(over * 100, 0)} cm por encima de la orilla y pasaron hasta ${fmtNum(out, 1)} m³/s por fuera del cauce, por el retiro.` : 'En la sección de control el agua no pasó la orilla.',
+          back > 0.01 ? `La quebrada crecida ahogó la descarga de aguas lluvias: la red devolvió ${m3(back)} a la calle por cámaras y sumideros de la carrera sur.` : 'La red de aguas lluvias siguió descargando a la quebrada sin devolver agua a la calle.',
+          probe(a, 'casa-retiro') >= 0.001 ? `Junto a la casa del retiro el agua llegó a ${fmtDepth(probe(a, 'casa-retiro'))}.` : 'Junto a la casa del retiro no llegó agua de la quebrada con esta creciente.',
+        ],
+        rows: [],
+        caveat: 'Creciente hipotética (hidrograma triangular): no es un caudal medido ni un pronóstico de inundación.',
+      };
+    },
+    explain: 'Cada cauce tiene una capacidad: el caudal que cabe hasta la orilla. Cuando llega más, el agua se sale y ocupa el retiro de la quebrada; por eso el retiro se deja sin construir. Además, la descarga del alcantarillado de aguas lluvias queda bajo el agua: la red no puede vaciarse e incluso entra agua de la quebrada, que sale por los sumideros más bajos.',
+    terms: ['creciente', 'capacidad-hidraulica', 'retiro-de-quebrada', 'caudal-pico', 'sobrecarga'],
   },
 ];
 

@@ -120,3 +120,5 @@ Las capas vectoriales entregan hasta 2 000 registros por consulta; el pipeline p
 Para el valle, la misma consulta con `bbox=4698974,2239446,4726835,2263390` y `size=1115,958`.
 
 El DEM es del municipio de Medellín. Fuera de él (Bello, Itagüí, Envigado y los demás municipios del valle), el relieve seguiría siendo el de la tabla de referencia, fundido en el borde, y así se rotularía.
+
+**Alcantarillado en escenarios de datos reales.** Los dos sectores didácticos tienen una red separada trazada con criterios de EPM, pero esa red es inventada para enseñar. Por eso el pipeline **no** genera una red para un sector real: un escenario importado usa la red esquemática, salvo que alguien agregue en el campo `sewer` una red levantada (catastro de redes de EPM), con su procedencia. El formato del escenario acepta esa red: nodos con cota de batea, tramos con diámetro, material y bateas, sumideros con su caja y aportes de aguas residuales. La aplicación la valida al compilar: rechaza tramos que unan los dos sistemas y bateas por debajo del fondo de su nodo.

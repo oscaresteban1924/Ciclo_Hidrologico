@@ -18,9 +18,11 @@ import { useStore } from '../../state/store';
 import { downloadText } from '../../lib/download';
 import report from '../content/test-report.json';
 import { RainBudget } from './RainBudget';
+import { Range } from './Range';
+import { CreekTool, SewerTeacher, SewerTool } from './SewerPanel';
 import { TRACER_COLORS, TRACER_TRAIL_MOVING } from '../render/tracerColors';
 
-export type ToolId = 'lluvia' | 'superficies' | 'jardin' | 'deposito' | 'sumideros' | 'trazadores' | 'medir';
+export type ToolId = 'lluvia' | 'superficies' | 'jardin' | 'deposito' | 'sumideros' | 'quebrada' | 'trazadores' | 'medir';
 export type TabId = 'misiones' | 'herramientas' | 'comparar' | 'palabras' | 'docente';
 
 export interface MissionUi {
@@ -61,6 +63,13 @@ export const TOOL_LIST: { id: ToolId; label: string; hint: string }[] = [
   { id: 'medir', label: 'Medir', hint: 'Profundidad en el tiempo.' },
 ];
 
+/** Herramientas del sector: con red separada, «Sumideros» pasa a «Alcantarillado»; con quebrada, «Creciente». */
+export function toolsFor(sc: Scenario | null): { id: ToolId; label: string; hint: string }[] {
+  const list = TOOL_LIST.map((t) => (t.id === 'sumideros' && sc?.sewer ? { ...t, label: 'Alcantarillado', hint: 'Sumideros, cámaras y redes separadas.' } : t));
+  if (sc?.creek) list.splice(list.findIndex((t) => t.id === 'sumideros') + 1, 0, { id: 'quebrada', label: 'Creciente', hint: 'La quebrada crece y se desborda.' });
+  return list;
+}
+
 const coverName = (c: CoverId) => COVERS[c].name;
 
 function Pending({ api }: { api: LabApi }) {
@@ -83,7 +92,7 @@ export function ToolsTab({ api }: { api: LabApi }) {
   return (
     <div className="city-tools">
       <div className="tool-grid" role="radiogroup" aria-label="Herramientas">
-        {TOOL_LIST.map((t) => (
+        {toolsFor(sc).map((t) => (
           <button key={t.id} type="button" role="radio" aria-checked={api.tool === t.id} className={`tool-card${api.tool === t.id ? ' is-on' : ''}`} onClick={() => api.setTool(t.id)}>
             <strong>{t.label}</strong>
             <span>{t.hint}</span>
@@ -96,6 +105,7 @@ export function ToolsTab({ api }: { api: LabApi }) {
       {api.tool === 'jardin' && <GardenTool api={api} />}
       {api.tool === 'deposito' && <TankTool api={api} />}
       {api.tool === 'sumideros' && <DrainTool api={api} />}
+      {api.tool === 'quebrada' && sc.creek && <CreekTool ctrl={ctrl} sc={sc} />}
       {api.tool === 'trazadores' && <TracerTool api={api} />}
       {api.tool === 'medir' && <MeasureTool api={api} />}
       <button type="button" className="link" onClick={() => api.setSaved((s) => ({ ...s, coach: false }))}>
@@ -104,19 +114,6 @@ export function ToolsTab({ api }: { api: LabApi }) {
       <p className="city-small">
         Los cambios se hacen en <strong>B, tu barrio</strong>. {ctrl.compare ? 'Estás comparando A y B.' : 'En la pestaña «Comparar» puedes correr A y B con la misma lluvia.'}
       </p>
-    </div>
-  );
-}
-
-function Range({ label, value, min, max, step, unit, onChange, help }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void; help?: string }) {
-  const id = `r-${label.replace(/\s/g, '')}`;
-  return (
-    <div className="city-range">
-      <label htmlFor={id}>
-        {label} <output htmlFor={id}>{`${fmtNum(value, step < 1 ? 1 : 0)} ${unit}`}</output>
-      </label>
-      <input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      {help && <p className="city-small">{help}</p>}
     </div>
   );
 }
@@ -300,9 +297,15 @@ function DrainTool({ api }: { api: LabApi }) {
   const { ctrl, sc } = api;
   const sim = ctrl.displayed();
   return (
+    <>
+    {sc!.sewer && <SewerTool ctrl={ctrl} sc={sc!} />}
     <section className="tool-body" aria-label="Sumideros">
       <h3>Gestionar sumideros</h3>
-      <p className="city-small">Sumideros hipotéticos de 0,6 × 0,9 m: no son infraestructura levantada de Medellín. Captan según el agua disponible sobre la rejilla, su obstrucción y su capacidad.</p>
+      {sc!.sewer ? (
+        <p className="city-small">Sumideros hipotéticos (no son infraestructura levantada de Medellín), ubicados con los criterios de EPM: en los puntos bajos y antes de los cruces peatonales. Captan según el agua junto al bordillo, su tipo y su obstrucción, mientras su caja no esté llena; si la red entra en carga, el sumidero devuelve agua a la calle.</p>
+      ) : (
+        <p className="city-small">Sumideros hipotéticos de 0,6 × 0,9 m: no son infraestructura levantada de Medellín. Captan según el agua disponible sobre la rejilla, su obstrucción y su capacidad.</p>
+      )}
       {sc!.drains.map((d, di) => {
         const v = ctrl.ivB.drains[d.id] ?? d.obstruction;
         const now = sim && sim.lastDt > 0 ? sim.lastDrain[di] / sim.lastDt : 0;
@@ -314,21 +317,35 @@ function DrainTool({ api }: { api: LabApi }) {
                 Restaurar (limpiar la rejilla)
               </button>
             )}
-            {sim && (
+            {sim && !sim.sewer && (
               <p className="city-small">
                 Capta ahora {lps(now)} · total {m3(sim.drainTotal[di])} · máximo {lps(sim.drainPeak[di])} (capacidad {fmtNum(d.capacityLps, 0)} L/s).
               </p>
             )}
+            {sim && sim.sewer && (() => {
+              const k = sim.sewer.s.inlets[di]?.node ?? -1;
+              const back = k >= 0 ? sim.sewer.overflowTotal[k] : 0;
+              const backNow = k >= 0 && sim.lastDt > 0 ? sim.sewer.lastOverflow[k] / sim.lastDt : 0;
+              return (
+                <p className="city-small">
+                  {{ rejilla: 'Rejilla en la cuneta', ventana: `Ventana en el bordillo de ${fmtNum(d.windowLengthM ?? 1.5, 1)} m`, mixto: `Mixto: rejilla y ventana de ${fmtNum(d.windowLengthM ?? 1.5, 1)} m` }[d.type ?? 'rejilla']}. Capta ahora {lps(now)} · total {m3(sim.drainTotal[di])} · máximo {lps(sim.drainPeak[di])}.
+                  {back > 0 && <strong> Devolvió {m3(back)} a la calle{backNow > 2e-4 ? ` (ahora ${lps(backNow)})` : ''}.</strong>}
+                </p>
+              );
+            })()}
             <button type="button" className="link" onClick={() => ctrl.focus(d.at[0], d.at[1])}>
               Ver en la maqueta
             </button>
           </div>
         );
       })}
-      <button type="button" className="btn-ghost small" onClick={() => ctrl.setCut(!ctrl.cutOn())}>
-        {ctrl.cutOn() ? 'Ocultar lo que hay bajo la calle' : 'Ver bajo la calle (tuberías esquemáticas)'}
-      </button>
+      {!sc!.sewer && (
+        <button type="button" className="btn-ghost small" onClick={() => ctrl.setCut(!ctrl.cutOn())}>
+          {ctrl.cutOn() ? 'Ocultar lo que hay bajo la calle' : 'Ver bajo la calle (tuberías esquemáticas)'}
+        </button>
+      )}
     </section>
+    </>
   );
 }
 
@@ -820,7 +837,7 @@ function MissionDone({ api, id, outcome }: { api: LabApi; id: string; outcome: s
 
 // ------------------------------------------------------------------ palabras clave
 
-const WORDS = ['escorrentia', 'infiltracion', 'caudal', 'rugosidad', 'almacenamiento-superficial', 'sumidero', 'lamina-de-agua', 'balance-hidrico', 'pavimento-permeable', 'jardin-de-lluvia'];
+const WORDS = ['escorrentia', 'infiltracion', 'caudal', 'rugosidad', 'almacenamiento-superficial', 'sumidero', 'lamina-de-agua', 'balance-hidrico', 'pavimento-permeable', 'jardin-de-lluvia', 'sistema-separado', 'alcantarillado-sanitario', 'camara-de-inspeccion', 'conexion-errada', 'sobrecarga', 'creciente', 'capacidad-hidraulica', 'retiro-de-quebrada'];
 const STEP_FOR: Record<string, string> = { escorrentia: 'escorrentia', infiltracion: 'infiltracion', 'almacenamiento-superficial': 'almacenamiento', caudal: 'escorrentia' };
 
 export function WordsTab() {
@@ -928,11 +945,24 @@ export function TeacherTab({ api }: { api: LabApi }) {
               <tr><th scope="row">Almacenado en depósitos</th><td>{m3(b.devices)}</td></tr>
               <tr><th scope="row">Drenado (aceptado por la red)</th><td>{m3(b.drained)}</td></tr>
               <tr><th scope="row">Salida por bordes</th><td>{m3(b.boundaryOut)}</td></tr>
+              {b.sewer && (
+                <>
+                  <tr><th scope="row">Red: aguas residuales y aportes de aguas arriba</th><td>{m3(b.sewageIn)}</td></tr>
+                  <tr><th scope="row">Red: salida por los colectores</th><td>{m3(b.netOut)}</td></tr>
+                  <tr><th scope="row">Red: agua guardada en tuberías y cámaras</th><td>{m3(b.network)}</td></tr>
+                  <tr><th scope="row">Residuo de la red</th><td>{b.netResidual.toExponential(2)} m³</td></tr>
+                </>
+              )}
               <tr><th scope="row">Residuo numérico</th><td>{b.residual.toExponential(2)} m³ ({b.precipitation > 0 ? `${(Math.abs(b.residual / b.precipitation) * 100).toExponential(1)} % de P` : '—'})</td></tr>
               <tr><th scope="row">Corrección de negativos por redondeo</th><td>{b.clipped.toExponential(2)} m³</td></tr>
             </tbody>
           </table>
           <p className="city-small">Residuo = P + entrada + devuelto − (ΔS + infiltrado + depósitos + drenado + salida). Se muestra tal como resulta, sin ajustes. Lluvia de techos: {m3(b.roofToSurface)} a bajantes, {m3(b.roofToTank)} a depósitos, {m3(b.tankOverflow)} de rebose.</p>
+        </Sec>
+      )}
+      {sc?.sewer && sim && (
+        <Sec title="Alcantarillado: criterios de la norma de EPM revisados">
+          <SewerTeacher sc={sc} c={sim.c} />
         </Sec>
       )}
       <Sec title="Modelo y supuestos">
@@ -942,8 +972,18 @@ export function TeacherTab({ api }: { api: LabApi }) {
           <li>Limitador de positividad: ninguna celda entrega más agua de la que tiene. Profundidades &lt; 0,1 mm no fluyen (actúa como retención superficial mínima).</li>
           <li>Edificios: celdas sólidas que bloquean el flujo. La lluvia de techo va a su bajante (o depósito) en el mismo paso, sin almacenamiento en el techo.</li>
           <li>Infiltración: capacidad constante limitada por el agua disponible y por un almacenamiento máximo por cobertura (sin redistribución en el suelo durante el evento).</li>
-          <li>Sumideros: vertedero/orificio (HEC-22, C = 1,66 y 0,67), con profundidad junto al bordillo reconstruida con una pendiente transversal de cuneta del 2 % (hipotética), limitados por capacidad (40 L/s), obstrucción y agua disponible.</li>
-          <li>Red de drenaje esquemática: colector con capacidad total de 250 L/s; no se resuelve la hidráulica de tuberías ni se simula sobrecarga. Interfaz lista para conectar SWMM.</li>
+          {sc?.sewer ? (
+            <>
+              <li>Sumideros por tipo (EPM GD-AS002, 8.5): rejilla en la cuneta como vertedero/orificio (HEC-22, C = 1,66 y 0,67); ventana en el bordillo Q = k·L·√g·y^1,5 en pendiente (k = 0,20 a 0,23) o Q = 1,65·L·y^1,5 en punto bajo; mixto = suma. La profundidad junto al bordillo se reconstruye con la pendiente transversal de la cuneta (2 %, hipotética). Captan mientras su caja no esté llena.</li>
+              <li>Red separada (drenaje dual 1D–2D): tuberías circulares con la aproximación inercial local y fricción de Manning semi-implícita; cámaras y cajas con su área en planta más la mitad del espejo de las tuberías; sobrecarga a presión; el agua por encima de la tapa sale a la calle. Descarga a la quebrada con el nivel de la quebrada (remanso); descarga libre al colector fuera del sector.</li>
+            </>
+          ) : (
+            <>
+              <li>Sumideros: vertedero/orificio (HEC-22, C = 1,66 y 0,67), con profundidad junto al bordillo reconstruida con una pendiente transversal de cuneta del 2 % (hipotética), limitados por capacidad (40 L/s), obstrucción y agua disponible.</li>
+              <li>Red de drenaje esquemática: colector con capacidad total de 250 L/s; no se resuelve la hidráulica de tuberías ni se simula sobrecarga. Interfaz lista para conectar SWMM.</li>
+            </>
+          )}
+          {sc?.creek && <li>Creciente: hidrograma triangular (subida tp, bajada 1,67·tp; SCS) que entra por la quebrada sobre un caudal base; su volumen entra completo. La capacidad de la sección de control se calcula con la regla de caras del modelo (Manning limitado por Froude ≤ {NUMERICS.froudeMax}) hasta la orilla más baja.</li>}
           <li>Salidas: condición de profundidad normal con la pendiente declarada, acotada por el caudal crítico. Demás bordes cerrados.</li>
           <li>Unidades: R [m/s] = mm/h ÷ 3 600 000. Volúmenes en m³, caudales en L/s.</li>
           <li>Partículas de lluvia y cabinas del cable son decorativas y no alteran el volumen. Las gotas trazadoras se mueven con la velocidad calculada.</li>

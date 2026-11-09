@@ -1,71 +1,71 @@
 {
   "Calle de prueba 1280x720": {
-    "fps": 2.22238684346989,
-    "simMsPerFrame": 3.7799121356585865,
-    "achieved": 17.035720043909567,
+    "fps": 2.6864869705382,
+    "simMsPerFrame": 3.801476676713431,
+    "achieved": 16.907816665038716,
     "requested": 30,
-    "t": 117.54135758696283,
+    "t": 117.50425347701952,
     "cells": 4480,
     "dx": 1,
     "render": {
-      "geometries": 168,
+      "geometries": 171,
       "textures": 13,
-      "calls": 141,
-      "triangles": 180145
+      "calls": 165,
+      "triangles": 180892
     },
     "caps": {
       "webgl2": true
     }
   },
   "Ladera con quebrada 1280x720": {
-    "fps": 2,
-    "simMsPerFrame": 12.297991795475916,
-    "achieved": 15.117868663100715,
+    "fps": 1.904943327935998,
+    "simMsPerFrame": 13.815114116505105,
+    "achieved": 13.896018772830832,
     "requested": 30,
-    "t": 107.58480055408988,
+    "t": 92.63780914907673,
     "cells": 12288,
     "dx": 1,
     "render": {
-      "geometries": 188,
+      "geometries": 195,
       "textures": 13,
-      "calls": 167,
-      "triangles": 267667
+      "calls": 227,
+      "triangles": 268759
     },
     "caps": {
       "webgl2": true
     }
   },
   "Calle de prueba 390x844": {
-    "fps": 3.934297236156196,
-    "simMsPerFrame": 3.02557814526021,
-    "achieved": 12.48446757218875,
+    "fps": 3.58230342109976,
+    "simMsPerFrame": 4.064943538364988,
+    "achieved": 26.687207571544654,
     "requested": 30,
-    "t": 86.55481367798458,
+    "t": 132.09900875838892,
     "cells": 4480,
     "dx": 1,
     "render": {
-      "geometries": 186,
-      "textures": 13,
-      "calls": 135,
-      "triangles": 169290
+      "geometries": 170,
+      "textures": 14,
+      "calls": 159,
+      "triangles": 170052
     },
     "caps": {
       "webgl2": true
     }
   },
   "Ladera con quebrada 390x844": {
-    "fps": 2.903038513644277,
-    "simMsPerFrame": 12.82638488617781,
-    "achieved": 20.97052235530867,
+    "fps": 2.812675792237009,
+    "simMsPerFrame": 18.13042038028392,
+    "achieved": 20.227954017333442,
     "requested": 30,
-    "t": 123.02147234518283,
+    "t": 123.38445111952878,
     "cells": 12288,
     "dx": 1,
     "render": {
-      "geometries": 185,
+      "geometries": 192,
       "textures": 13,
-      "calls": 163,
-      "triangles": 260974
+      "calls": 223,
+      "triangles": 262236
     },
     "caps": {
       "webgl2": true

@@ -39,13 +39,13 @@ Antes de aplicarlo, un **limitador de positividad** escala los caudales que sale
 - Los pasos se cortan **solo** en los cambios del hietograma y en los instantes de registro (cada 10 s simulados), nunca en los cuadros de la animación. Por eso una corrida es reproducible bit a bit, sin importar el ritmo de dibujo ni las pausas (prueba 9).
 
 **Orden de cada paso.**
-1. Lluvia y lluvia de techos.
-2. Entrada externa.
+1. Lluvia y lluvia de techos (con conexiones erradas activas, la de esos techos va al alcantarillado de aguas residuales).
+2. Entrada externa y creciente de la quebrada; aportes a la red (aguas residuales, aguas arriba).
 3. Momento y salidas.
 4. Limitador.
 5. Continuidad.
 6. Infiltración.
-7. Sumideros y descarga de depósitos.
+7. Sumideros y red de alcantarillado (sección 6.3), o red esquemática en escenarios sin red.
 8. Balance.
 
 ## 2. Términos hidrológicos
@@ -58,8 +58,9 @@ Antes de aplicarlo, un **limitador de positividad** escala los caudales que sale
 | Almacenamiento superficial | Es el agua sobre la superficie (charcos, bajos, jardines). Además, las láminas de menos de 0,1 mm no fluyen y funcionan como una retención mínima. |
 | Jardín de lluvia | Se forma una depresión de 0,15 m bajo la cuneta más baja, se abre el bordillo y se usa la cobertura «jardín de lluvia» (`fc` 50 mm/h, `S_max` 0,15 m). Se miden el agua que entra y el agua que rebosa. |
 | Depósito | Recibe la lluvia del techo conectado. Tiene capacidad fija. Lo que sobra rebosa a la bajante. Su destino puede ser «entregar despacio a la red» (caudal fijo) o «retener». |
-| Sumidero | Usa las ecuaciones de vertedero y orificio de la guía HEC-22: `Q = min(1,66·P·d^1,5; 0,67·A·√(2g·d); Q_cap)`. `P` y `A` se reducen según la obstrucción. La profundidad junto al bordillo `d` se reconstruye a partir de la profundidad media de la celda con la pendiente transversal de la cuneta (2 %, valor hipotético), suponiendo una lámina triangular o trapezoidal. La captación nunca supera el agua disponible en la celda (prueba 3). |
-| Red de drenaje | Red esquemática con un colector de 250 L/s de capacidad total. No resuelve la hidráulica de tuberías y no devuelve agua a la calle: no se finge sobrecarga. La interfaz `DrainNetworkAdapter` deja preparada la conexión con SWMM, que podría aceptar y devolver agua. |
+| Sumidero | Por tipo (EPM GD-AS002, numeral 8.5). **Rejilla en la cuneta**: vertedero y orificio de la guía HEC-22, `Q = min(1,66·P·d^1,5; 0,67·A·√(2g·d))`. **Ventana en el bordillo**: en pendiente `Q = k·L·√g·d^1,5`, con `k` = 0,20, 0,22 y 0,23 para 2, 4 y 8 % de pendiente longitudinal; en punto bajo `Q = 1,65·L·d^1,5`, y como orificio cuando la lámina supera la altura de la ventana. **Mixto**: rejilla más ventana. `P`, `A` y `L` se reducen según la obstrucción. La profundidad junto al bordillo `d` se reconstruye a partir de la profundidad media de la celda con la pendiente transversal de la cuneta (2 %, valor hipotético), suponiendo una lámina triangular o trapezoidal. La captación nunca supera el agua disponible en la celda (prueba 3) y se detiene si la caja del sumidero está llena (sección 6.3). Prueba S3. |
+| Red de drenaje | En los dos sectores: **red separada** de aguas lluvias y de aguas residuales, calculada (sección 6.3). En escenarios importados sin red: red esquemática con un colector de 250 L/s de capacidad total, que no resuelve la hidráulica de tuberías ni devuelve agua a la calle. |
+| Creciente | Hidrograma triangular del SCS (sube en `tp`, baja en 1,67·`tp`) sobre un caudal base, repartido en las celdas de la entrada de la quebrada. El volumen de cada paso es la integral exacta del hidrograma (prueba S6). Sección 6.4. |
 | Salidas | Caras de borde con condición de profundidad normal, `q = min(h^(5/3)·√S/n; √g·h^1,5)`, con la pendiente `S` declarada en el escenario. Los demás bordes son cerrados. |
 | Entrada externa | Caudal constante, repartido en las celdas del borde indicado. Se registra como término propio. |
 
@@ -68,10 +69,20 @@ Antes de aplicarlo, un **limitador de positividad** escala los caudales que sale
 El volumen de control es **todo el dominio del sector, incluidos los techos**. Términos acumulados [m³]:
 
 ```
-P   precipitación (suelo + techos)        Qin  entrada externa        Ret  devuelto por la red (0 aquí)
-ΔS  cambio del agua en superficie         I    infiltrado              Dev  guardado en depósitos
-D   aceptado por la red                   B    salida por los bordes
+P   precipitación (suelo + techos)        Qin  entrada externa y creciente     Ret  devuelto por la red a la calle o a la quebrada
+ΔS  cambio del agua en superficie         I    infiltrado                       Dev  guardado en depósitos
+D   entró a la red (sumideros, conexiones erradas, depósitos, remanso de la quebrada)
+B   salida por los bordes
 residuo = P + Qin + Ret − (ΔS + I + Dev + D + B)
+```
+
+La red tiene su propio balance:
+
+```
+E   aportes externos a la red (aguas residuales de las casas y de aguas arriba, infiltración,
+    escorrentía y conexiones erradas de aguas arriba)
+V   agua guardada en tuberías y cámaras     O   salida por los colectores fuera del sector
+residuo de la red = D + E − (V + O + Ret)
 ```
 
 El residuo se muestra tal como sale, sin ajustarlo. En las pruebas queda entre 10⁻¹⁶ y 10⁻¹² de P (ver `PRUEBAS.md`). El panel docente muestra cada término en vivo.
@@ -124,6 +135,9 @@ Los efectos leen el estado calculado en cada cuadro (`src/city/render/fxData.ts`
 | **Remolino del sumidero** | Caudal captado por ese sumidero en el último paso. Un sumidero obstruido por completo no muestra remolino. | Dibujo del remolino. |
 | **Escurrimiento de salida** | Caudal que sale por cada cara de salida del borde del sector: el que el balance cuenta como «Salió del sector» (V5). | Una lámina que sigue unos 7 m por la calle vecina y se desvanece. Fuera del sector no se calcula nada: la lámina solo señala dónde y cuánto sale. |
 | **Recorrido de las gotas trazadoras** | Posiciones calculadas por el modelo (RK2 con la velocidad de las caras), guardadas cada 0,35 m recorridos desde donde se soltó cada gota, y su destino (sumidero, suelo, salida o depósito). Si un tramo recto entre dos puntos rozaría la esquina de un edificio, se guarda un punto intermedio por la celda libre: el dibujo nunca corta por dentro de un edificio (prueba V6). Distancia recorrida y tiempo de viaje de cada gota; el panel muestra el promedio por destino. | Estilo de ruta: franja de color con borde blanco y sombra suave, con ancho en metros y un mínimo en pantalla. Azul mientras la gota se mueve; al llegar, el color del destino (los de «¿Adónde fue la lluvia?», en el mismo orden). En cada tanda, una gota guía tiene una ruta más gruesa con flechas que avanzan hacia ella y una etiqueta con lo recorrido; las demás, más finas, muestran cómo se abre el grupo. Marcas de destino con ícono, agrupadas y con el número de gotas. Anillo punteado donde se soltó la tanda. Lo que queda detrás de un edificio se ve tenue. Si la gota cae desde un techo, la ruta baja junto a la pared, como por la bajante; en el modelo, ese paso es inmediato. |
+| **Redes bajo la calle** | Lámina en cada tubería y nivel en cada cámara y caja, de los niveles calculados de la red. Una tubería en carga se dibuja en rojo. | Tamaño y aspecto de pozos y tubos (a escala real, con un mínimo visible), colores por sistema y acometidas. |
+| **Rebose de cámaras y sumideros** | Volumen que la red devolvió a la calle en el último paso: la columna de agua crece con la raíz del caudal y la tapa se levanta. | Forma de la columna. |
+| **Mira de la quebrada** | Nivel del agua calculado en la sección de control; la banda roja marca la cota de cauce lleno. | El poste y sus marcas. |
 | **Depósito** | Nivel = volumen almacenado ÷ capacidad. El rebose aparece cuando está lleno, con el caudal que entra menos el que se entrega a la red. | El dibujo esquemático del tanque, que no ocupa celdas del cálculo. |
 
 Además, siguen siendo **decorativos**:
@@ -183,6 +197,82 @@ La primera escena del módulo sirve para **orientarse**. No interviene en ningú
 | Puntos de referencia | Aeropuerto Olaya Herrera, estadio, Edificio Coltejer, Biblioteca España, Parque Arví, municipios vecinos | Posiciones aproximadas |
 
 **Escala.** Relieve y edificios exagerados ×1,5, como lo dice el encabezado de la escena. La misma tabla, **sin exagerar**, es el entorno de cada sector (sección 6.1). **Qué no es.** No es cartografía oficial ni un modelo digital de elevación: los trazados, las cotas y los límites entre zonas son aproximados, los edificios se colocan al azar dentro de cada zona y las posiciones de los sectores de laboratorio son ilustrativas. Si se dispone de un DEM y de capas oficiales, se pueden reemplazar como se explica en `DATOS_REALES.md`, sección 7.
+
+### 6.3 Red de alcantarillado separada (drenaje dual)
+
+Los dos sectores tienen dos redes que no se tocan (`src/city/sim/sewer.ts`):
+- **aguas lluvias**: sumidero → caja → conducto → cámaras → descarga a la quebrada (ladera) o al colector de aguas abajo (calle);
+- **aguas residuales**: acometidas de las casas → cámaras → colector hacia el interceptor del río. Nunca descarga a la quebrada.
+
+**Es una red didáctica.** Se trazó con criterios de la norma de diseño de EPM (*Normas de Diseño de Sistemas de Alcantarillado*, GD-AS002), pero no es la red de EPM ni un diseño de ingeniería. El trazado (`src/city/scenarios/sewerDesign.ts`) calcula las bateas de aguas arriba hacia aguas abajo y la prueba S4 revisa cada criterio:
+
+| Criterio | Numeral de GD-AS002 | Cómo se aplica |
+|---|---|---|
+| Sistema separado | 2.3.1 | Ningún tramo une los dos sistemas; la compilación del escenario lo rechaza. |
+| Ubicación en la vía | 3.4.2 | Aguas lluvias al norte y al oriente; aguas residuales al sur y al occidente, a un cuarto del ancho de la calzada desde el bordillo. |
+| Separación vertical en cruces | 3.4.3 | ≥ 0,5 m libres. La red de aguas residuales va más profunda (2,35 m sobre la corona). |
+| Diámetro mínimo | 6.2.7 y 5.2.8 | ≥ 215 mm en aguas lluvias (se usan 300 a 525 mm); ≥ 170 mm en aguas residuales (se usan 200 mm). |
+| Recubrimiento | 6.2.14 y 5.2.15 | ≥ 1,2 m sobre la corona en cámaras y cajas. |
+| Velocidad máxima | 6.2.9 y 5.2.10 | ≤ 5 m/s en concreto y ≤ 10 m/s en PVC. Se diseñó a ≤ 4 m/s, el umbral sobre el cual la norma pide un análisis detallado. |
+| Lámina y velocidad mínima con el caudal de diseño | 6.2.13, 6.2.8 y 5.2.14 | Aguas lluvias: ≤ 85 % del diámetro y ≥ 0,75 m/s. Aguas residuales: ≤ 70 %. |
+| Cámaras de inspección | 8.3.1, 8.3.2 y 8.3.5 | En arranques, uniones y cambios de dirección. Máximo 4 tuberías y deflexión < 90° entre la entrada dominante y la salida (los giros se hacen con dos cámaras). Distancia ≤ 80 m con sumideros y ≤ 120 m sin ellos. Diámetro interno 1,2 m; tapa de 0,6 m. |
+| Cámaras de caída | 8.4.1 | Donde la batea de entrada supera en más de 0,7 m a la de salida. Hay una en la ladera, en el arranque del colector de la calle. |
+| Sumideros | 8.5.1 a 8.5.3 | Ubicados en puntos bajos (mixtos) y antes de los cruces peatonales. Rejillas en pendientes fuertes; la ventana pierde capacidad por encima de ≈ 3 %. Conductos de ≥ 250 mm, pendiente ≥ 2 % y longitud ≤ 15 m, hasta una cámara. |
+
+**Caudales de diseño** (para el trazado, no para la simulación; `src/city/sim/sewerCheck.ts`):
+- **Aguas lluvias.** Método racional `Q = C·i·A` con `C = 0,85·I + 0,15` (EPM 6.3). Se usa una intensidad de diseño **supuesta** de 100 mm/h: no es la curva IDF de EPM, que la norma pide para un periodo de retorno de 5 años en áreas menores de 10 ha. El área de cada sumidero se obtiene siguiendo la pendiente de la malla (D8), con los techos por su bajante.
+- **Aguas residuales.** 3 personas por piso, dotación neta **supuesta** de 130 L/hab·día (la norma pide la demanda que entregue EPM), retorno 0,85 (5.2.3.1), mayoración 1,4 (el mínimo de 5.2.6), infiltración de 0,2 L/s·ha (5.2.3.6) y un mínimo de 1,5 L/s por tramo (5.2.7).
+- **Escorrentía de aguas arriba.** El colector de aguas lluvias recibe la de 1,2 ha (calle) o 0,5 ha (ladera) de calles de arriba, con `C = 0,8` y sin retardo. Llega aguas residuales del barrio de arriba (2 L/s en la calle y 1,5 L/s en la ladera).
+
+**Hidráulica de la red.**
+- **Tuberías** circulares, con la aproximación inercial local y fricción de Manning semiimplícita. `n` = 0,013 en concreto y 0,010 en PVC.
+  ```
+  S  = (H_arriba − H_abajo) / L
+  Q⁺ = (Q + g·A·dt·S) / (1 + g·dt·n²·|Q| / (A·R^(4/3)))
+  ```
+  `A` y `R` son los de la sección circular con la lámina en el extremo más alto. Llena, la tubería trabaja **a presión** con el área completa: está **en carga**.
+- **Nodos.** Cámaras, cámaras de caída y cajas de sumidero guardan el agua. Su área es la del pozo más la mitad del espejo de agua de las tuberías que llegan; con eso se arma una tabla volumen–nivel.
+- **Rebose.** Cuando el nivel de un nodo pasa la tapa (la rasante de su celda), el exceso sale a esa celda de la calle. En una caja de sumidero es el sumidero que **devuelve agua**.
+- **Captación.** Un sumidero capta solo si su caja no está llena: así la red en carga no «traga» agua que de inmediato devuelve.
+- **Descargas.** La libre (colector fuera del sector) entrega todo lo que llega. La descarga a la quebrada tiene el nivel del agua en su celda del cauce: si la quebrada sube por encima de la batea de salida, la descarga queda **ahogada** (remanso), la red no puede vaciarse y, si la quebrada está más alta que la red, entra agua de la quebrada.
+- **Paso de tiempo.** La red avanza en sub-pasos dentro de cada paso de la superficie, limitados por la onda en cada tubería (`0,7·L/(√(g·A/T) + |V|)`) y por la oscilación nodo–tubería. Un limitador de positividad impide que un nodo entregue más agua de la que tiene.
+- **Conexiones erradas** (intervención hipotética). Cuatro techos del sector (calle) o la hilera de casas del sur de la calle (ladera), más 8 000 m² (calle) o 3 500 m² (ladera) de techos aguas arriba, entregan su lluvia al alcantarillado de aguas residuales. Ese alcantarillado se llena, entra en carga y rebosa a la calle (prueba S5, misión «Conexiones erradas»).
+
+**Lo que no hace.**
+- No calcula pérdidas locales en las cámaras (numeral 8.3.6) ni la disipación en las caídas.
+- La escorrentía de aguas arriba llega sin retardo.
+- No hay tubería de acueducto ni otras redes.
+- El rebose de aguas residuales se suma al agua de la calle sin seguir su calidad.
+
+### 6.4 Creciente de la quebrada y capacidad de la sección
+
+**El cauce.** La ladera tiene una quebrada en el fondo de su propio valle: las dos márgenes suben 3,5 % hacia afuera. El cauce mide 1,8 m de profundidad, con 3 m de fondo y orillas hasta 4,5 m del eje, y su retiro es una zona verde. Antes, el lado sur bajaba en dirección contraria a la quebrada y el agua desbordada se iba lejos del cauce; se corrigió para que la quebrada sea el punto más bajo.
+
+**La sección de control** (x = 94 m, en el rellano, frente a la casa del retiro) se analiza en una columna de celdas del cálculo:
+- **fondo:** la celda más baja;
+- **orillas:** las primeras celdas fuera del cauce encajado;
+- **cota de cauce lleno:** la orilla más baja;
+- **capacidad:** la suma, celda por celda, del caudal unitario con la misma regla de las caras del modelo, `q = min(h^(5/3)·√S/n; 1,5·h·√(g·h))`, con la pendiente local del fondo.
+
+Resultado: **51 m³/s**, a 1,96 m del fondo con 1,7 % de pendiente. La prueba C1 lo contrasta con el modelo en una subida lenta, casi permanente:
+- con el 80 % de la capacidad no pasa agua por fuera del cauce y el nivel queda bajo la orilla;
+- con el 125 % sí pasa agua por fuera y el nivel supera la orilla.
+
+**Lo que se mide en la sección,** del estado calculado:
+- el caudal que la cruza dentro del cauce y por fuera (desborde);
+- el nivel en el talweg.
+
+El panel dibuja la sección transversal en vivo y el hidrograma, con la línea de capacidad.
+
+**Interacción con la red.** Con el doble de la capacidad, la quebrada sube por encima de la descarga de aguas lluvias. Entonces:
+- la red queda en carga hasta la carrera sur;
+- entra agua de la quebrada a la red;
+- sale agua por la cámara LL-S1 y por el sumidero de la carrera sur (prueba S6).
+
+**Lo que no es.**
+- No es un caudal medido ni un pronóstico.
+- La creciente no trae sedimentos ni troncos, que en las avenidas torrenciales reales cambian el cauce.
+- El límite de Froude del modelo (sección 9) subestima la capacidad en tramos muy empinados (10 %). En la sección de control, con 1,7 % de pendiente, el límite no actúa: la capacidad es la misma con o sin él.
 
 ## 7. Tiempo, pausa y reproducibilidad
 

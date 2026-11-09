@@ -18,6 +18,7 @@ export function LineChart({
   yUnit,
   height = 150,
   marker,
+  refY,
 }: {
   title: string;
   series: Series[];
@@ -26,6 +27,8 @@ export function LineChart({
   height?: number;
   /** Línea vertical opcional (p. ej., fin de la lluvia) [min]. */
   marker?: { x: number; label: string };
+  /** Línea horizontal de referencia opcional (p. ej., capacidad del cauce), en unidades de y. */
+  refY?: { y: number; label: string };
 }) {
   const id = useId();
   const W = 340, H = height, L = 46, R = 14, T = 12, B = 26;
@@ -36,8 +39,9 @@ export function LineChart({
       if (x > xm) xm = x;
       if (y > ym) ym = y;
     }
+    if (refY && refY.y > ym) ym = refY.y;
     return { xMax: xm, yMax: ym > 0 ? ym * 1.12 : 1 };
-  }, [series]);
+  }, [series, refY]);
   const sx = (x: number) => L + (x / xMax) * (W - L - R);
   const sy = (y: number) => T + (1 - y / yMax) * (H - T - B);
   const ticksY = [0, yMax / 2, yMax];
@@ -101,6 +105,14 @@ export function LineChart({
             {Math.round(v)} min
           </text>
         ))}
+        {refY && (
+          <g>
+            <line x1={L} x2={W - R} y1={sy(refY.y)} y2={sy(refY.y)} className="marker" strokeDasharray="5 4" />
+            <text x={L + 4} y={sy(refY.y) - 4} className="tick">
+              {refY.label}
+            </text>
+          </g>
+        )}
         {marker && marker.x <= xMax && (
           <g>
             <line x1={sx(marker.x)} x2={sx(marker.x)} y1={T} y2={H - B} className="marker" />

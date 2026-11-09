@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-09T16:21:13.574Z",
+  "generatedAt": "2026-11-09T17:42:08.808Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
-  "passed": 23,
-  "total": 23,
+  "passed": 31,
+  "total": 31,
   "results": [
     {
       "id": "1",
@@ -77,7 +77,7 @@
       "kind": "obligatoria",
       "name": "Reiniciar reproduce exactamente la corrida",
       "tolerance": "igualdad bit a bit de profundidades, series, balance y trazadores, aunque cambie el ritmo de los cuadros",
-      "measured": "profundidades idénticas: true; series: true; balance: true; trazadores: true; pasos: 1235",
+      "measured": "profundidades idénticas: true; series: true; balance: true; trazadores: true; pasos: 1451",
       "pass": true
     },
     {
@@ -85,7 +85,7 @@
       "kind": "obligatoria",
       "name": "La comparación mantiene las mismas condiciones externas",
       "tolerance": "lluvia, tiempo, dominio, bordes, estado inicial, umbral y semilla idénticos; mismos instantes de registro; precipitación igual con |ΔP|/P ≤ 1·10⁻¹² (redondeo de punto flotante)",
-      "measured": "Misma lluvia (hietograma y distribución espacial): sí; Mismo tiempo simulado: sí; Mismo dominio y resolución: sí; Mismos bordes y salidas: sí; Misma entrada externa: sí; Mismo estado inicial (suelo y agua): sí; Mismo umbral de profundidad: sí; Misma semilla: sí; instantes idénticos: true (211); precipitación A 89.600000 m³, B 89.600000 m³, |ΔP|/P = 3.8e-15; importación válida: true; intensidad fuera de rango rechazada: true",
+      "measured": "Misma lluvia (hietograma y distribución espacial): sí; Mismo tiempo simulado: sí; Mismo dominio y resolución: sí; Mismos bordes y salidas: sí; Misma entrada externa: sí; Mismo estado inicial (suelo y agua): sí; Mismo umbral de profundidad: sí; Misma semilla: sí; instantes idénticos: true (211); precipitación A 89.600000 m³, B 89.600000 m³, |ΔP|/P = 1.4e-15; importación válida: true; intensidad fuera de rango rechazada: true",
       "pass": true,
       "note": "Corrección de diseño: la primera versión exigía igualdad exacta de la precipitación acumulada. Como cada corrida elige sus propios pasos de tiempo según su estado, la suma de los mismos milímetros en particiones distintas difiere solo por redondeo (≈1·10⁻¹⁵). Las condiciones de entrada sí son idénticas bit a bit."
     },
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 51.21, drenado 33.61, infiltrado 3.51, esquina 1.05 cm, pico 43.6 L/s, área ≥ 5 cm 8 m², 2439 pasos, 204 ms | dx 1 m: P 89.60 m³, salida 52.41, drenado 33.42, infiltrado 3.45, esquina 0.76 cm, pico 44.5 L/s, área ≥ 5 cm 0 m², 3352 pasos, 681 ms | dx 0.5 m: P 89.60 m³, salida 52.86, drenado 32.98, infiltrado 3.45, esquina 1.39 cm, pico 44.9 L/s, área ≥ 5 cm 0 m², 6851 pasos, 5691 ms → Δsalida 1 m vs 0,5 m = 0.9 %, Δesquina = 0.63 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 279 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 1312 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 15864 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -120,7 +120,7 @@
       "kind": "verificacion",
       "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (Calle de prueba, 150 mm/h, 30 min)",
       "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
-      "measured": "pasos 4382; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = -1.35e-15; profundidad máx. = 0.327 m",
+      "measured": "pasos 4195; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = -8.46e-16; profundidad máx. = 0.327 m",
       "pass": true
     },
     {
@@ -128,7 +128,7 @@
       "kind": "verificacion",
       "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (Ladera con quebrada, 150 mm/h, 30 min)",
       "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
-      "measured": "pasos 5463; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = -3.45e-15; profundidad máx. = 0.483 m",
+      "measured": "pasos 5931; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = -4.69e-15; profundidad máx. = 0.445 m",
       "pass": true
     },
     {
@@ -144,7 +144,7 @@
       "kind": "verificacion",
       "name": "El flujo dibujado coincide con el calculado",
       "tolerance": "cada flecha usa exactamente la velocidad del modelo en su celda",
-      "measured": "125 flechas a los 10 min; diferencias = 0",
+      "measured": "121 flechas a los 10 min; diferencias = 0",
       "pass": true
     },
     {
@@ -152,7 +152,7 @@
       "kind": "verificacion",
       "name": "El recorrido dibujado de las gotas sigue la trayectoria calculada",
       "tolerance": "ningún tramo entre puntos guardados atraviesa un edificio; separación máxima < 2 m (un punto cada 0,35 m recorridos); el resumen de viajes cuenta todas las gotas",
-      "measured": "72 gotas, 6521 tramos: cruces de edificios = 0; separación máxima 0.58 m; resumen: 72 gotas",
+      "measured": "72 gotas, 3649 tramos: cruces de edificios = 0; separación máxima 0.65 m; resumen: 72 gotas",
       "pass": true
     },
     {
@@ -184,7 +184,72 @@
       "kind": "verificacion",
       "name": "Los efectos de lluvia y agua leen el estado calculado",
       "tolerance": "profundidad y velocidad del campo idénticas a las del modelo (32 bits); chorros y cascadas con error relativo < 10⁻⁹ frente al balance; llenado del depósito exacto",
-      "measured": "2242 celdas mojadas: diferencias de profundidad 0, de velocidad 0, huella fuera de [0,1] 0; bajantes 26.556 L/s frente a 26.556 L/s del motor (error 7.8e-14); salida en el paso 28.0601 L frente a 28.0601 L (error 9.5e-14); depósito 29.2 % (error 0.0e+0)",
+      "measured": "2199 celdas mojadas: diferencias de profundidad 0, de velocidad 0, huella fuera de [0,1] 0; bajantes 26.556 L/s frente a 26.556 L/s del motor (error 5.8e-14); salida en el paso 27.3809 L frente a 27.3809 L (error 2.3e-14); depósito 29.2 % (error 0.0e+0)",
+      "pass": true
+    },
+    {
+      "id": "S1",
+      "kind": "obligatoria",
+      "name": "Tubería en flujo permanente: sale lo que entra y la lámina se acerca a la normal de Manning",
+      "tolerance": "caudal de salida = caudal de entrada (error < 0,1 %); lámina en la cámara intermedia dentro de ±15 % de la profundidad normal",
+      "measured": "entra 142.6 L/s, sale 142.6 L/s (error 0.000 %); lámina 20.7 cm frente a normal 22.5 cm (diferencia 8.2 %)",
+      "pass": true,
+      "note": "La aproximación inercial usa la diferencia de niveles entre cámaras, que en un tramo corto incluye la lámina; por eso no es idéntica a Manning con la pendiente del fondo."
+    },
+    {
+      "id": "S2",
+      "kind": "obligatoria",
+      "name": "Sobrecarga: con 3 veces la capacidad la cámara rebosa a la calle y el volumen se conserva",
+      "tolerance": "rebose > 0 solo cuando el nivel supera la tapa; entra = guardado + sale + rebosa (residuo < 10⁻⁹ m³); ningún volumen negativo",
+      "measured": "entró 61.54 m³: salió 53.81, rebosó 7.67 (en A), guardado 0.065; residuo -3.6e-13 m³; llenado máximo y/D 5.33",
+      "pass": true
+    },
+    {
+      "id": "S3",
+      "kind": "obligatoria",
+      "name": "Captación de sumideros por tipo: ventana en pendiente y en punto bajo, rejilla y mixto",
+      "tolerance": "ventana en pendiente Q = k·L·√g·y^1,5 con k = 0,20 / 0,22 / 0,23 (2 / 4 / 8 %); en punto bajo Q = 1,65·L·y^1,5; mixto = rejilla + ventana (error < 10⁻¹²)",
+      "measured": "y = 5 cm: ventana en pendiente 10.51 L/s, en punto bajo 27.67 L/s, rejilla 44.54 L/s, mixto 72.21 L/s; k = 0.20 / 0.22 / 0.23",
+      "pass": true
+    },
+    {
+      "id": "S4",
+      "kind": "verificacion",
+      "name": "Las redes didácticas cumplen los criterios de diseño de EPM revisados (GD-AS002)",
+      "tolerance": "todos los criterios cumplen en los dos sectores: sistema separado, diámetros mínimos, conductos de sumidero, recubrimiento, velocidades, lámina, distancia entre cámaras, uniones, deflexión, cámaras de caída, costado de la vía y separación en cruces",
+      "measured": "calle-de-prueba: 15 de 15 (separado 15 tramos, todos dentro de su sistema; diam-lluvias 300 mm; diam-residuales 200 mm; diam-sumidero 250 mm; pendiente mín. 2,0 %; longitud máx. 5,8 m; recubrimiento mínima 1,22 m; vmax máxima 3,53 m/s; ylluvias máxima 74 %; vmin-lluvias mínima 0,82 m/s; yresiduales máxima 14 %; distancia lluvias 26,5 m; residuales 42,0 m; uniones 9 cámaras; máximo 4 tuberías en una; deflexion máxima 0°; caidas 0 caídas mayores de 0,7 m; 0 con cámara de caída; costado 9 de 9 colectores en su costado; cruces 5 cruces; mínima 0,57 m) | ladera-quebrada: 15 de 15 (separado 21 tramos, todos dentro de su sistema; diam-lluvias 300 mm; diam-residuales 200 mm; diam-sumidero 250 mm; pendiente mín. 2,0 %; longitud máx. 5,9 m; recubrimiento mínima 1,22 m; vmax máxima 4,00 m/s; ylluvias máxima 60 %; vmin-lluvias mínima 0,83 m/s; yresiduales máxima 11 %; distancia lluvias 35,5 m; residuales 42,3 m; uniones 13 cámaras; máximo 4 tuberías en una; deflexion máxima 67°; caidas 1 caídas mayores de 0,7 m; 1 con cámara de caída; costado 9 de 9 colectores en su costado; cruces 7 cruces; mínima 0,55 m)",
+      "pass": true
+    },
+    {
+      "id": "S5",
+      "kind": "obligatoria",
+      "name": "Redes separadas: la lluvia no entra al alcantarillado de aguas residuales salvo por conexiones erradas",
+      "tolerance": "sin conexiones erradas: lluvia que entra a residuales = 0 y lo que sale + guarda + rebosa = aguas residuales aportadas (error < 10⁻⁹ m³); con conexiones erradas: entra la lluvia de esos techos",
+      "measured": "100 mm/h, 20 min: aguas residuales aportadas 6.44 m³, salen 6.12, guardadas 0.324, rebose 0.00, lluvia que entra 0 m³ | con conexiones erradas: techos del sector 10.30 m³ y de aguas arriba 266.67 m³; rebose de aguas residuales a la calle 140.43 m³",
+      "pass": true
+    },
+    {
+      "id": "S6",
+      "kind": "obligatoria",
+      "name": "Balance acoplado calle + red con creciente: cierra, el hidrograma entra completo y la quebrada se mete por la descarga",
+      "tolerance": "residuo de superficie y de red < 10⁻⁹ del agua que entró; volumen de la creciente = área del hidrograma (error < 10⁻⁹); con 2 veces la capacidad del cauce, la descarga queda ahogada y entra agua de la quebrada a la red",
+      "measured": "entró 50045 m³ (creciente 49798.8 m³ frente a 49798.8 m³ del hidrograma, error 6.3e-15); residuo superficie 3.1e-10 m³, red -1.1e-12 m³; de la quebrada a la red 74.4 m³; rebose de aguas lluvias 108.6 m³ (sumidero de la carrera sur 44.8 m³)",
+      "pass": true
+    },
+    {
+      "id": "C1",
+      "kind": "verificacion",
+      "name": "La capacidad a cauce lleno de la sección de control es coherente con el modelo",
+      "tolerance": "con 80 % de la capacidad (subida lenta, casi permanente) no pasa agua por fuera del cauce (< 1 % del caudal) y el nivel queda bajo la orilla; con 125 % sí pasa agua por fuera y el nivel supera la orilla",
+      "measured": "capacidad 51.3 m³/s (Manning sin límite de Froude 51.3 m³/s), pendiente 1.69 %, orilla 1.96 m sobre el fondo | 80 %: por fuera 0.00 m³/s, nivel 1.69 m | 125 %: por fuera 0.24 m³/s, nivel 2.17 m",
+      "pass": true
+    },
+    {
+      "id": "S7",
+      "kind": "obligatoria",
+      "name": "Geometría de la sección circular (área y radio hidráulico a medio tubo y lleno)",
+      "tolerance": "a medio tubo A = π·D²/8 y R = D/4; lleno A = π·D²/4 (error < 10⁻¹²)",
+      "measured": "D = 0,6 m: A½ = 0.141372 m², R½ = 0.150000 m, A lleno = 0.282743 m²",
       "pass": true
     },
     {
@@ -192,71 +257,71 @@
       "kind": "revision",
       "name": "Sensibilidad al límite de Froude (ladera, 10 % de pendiente)",
       "tolerance": "informativa: se documenta, no se exige",
-      "measured": "Fr ≤ 1: salida 145.4 m³, drenado 58.3 m³, esquina 1.10 cm, caras limitadas 45.5 % | Fr ≤ 1.5: salida 149.0 m³, drenado 55.1 m³, esquina 0.90 cm, caras limitadas 25.4 % | Fr ≤ ∞: salida 152.4 m³, drenado 51.8 m³, esquina 0.66 cm, caras limitadas 0.0 %",
+      "measured": "Fr ≤ 1: salida 289.8 m³, drenado 72.8 m³, esquina 0.73 cm, caras limitadas 46.8 % | Fr ≤ 1.5: salida 290.1 m³, drenado 69.1 m³, esquina 0.61 cm, caras limitadas 26.5 % | Fr ≤ ∞: salida 290.3 m³, drenado 67.8 m³, esquina 0.45 cm, caras limitadas 0.0 %",
       "pass": true
     }
   ],
   "sensitivity": [
     {
       "dx": 2,
-      "P": 89.59999999999995,
-      "B": 51.21049247232174,
-      "D": 33.61326613389487,
-      "I": 3.5134464571902044,
-      "esq": 0.010464340034076024,
-      "peak": 0.043608137150090445,
+      "P": 89.59999999999985,
+      "B": 35.23333463414983,
+      "D": 49.66940890534993,
+      "I": 3.5133455639683757,
+      "esq": 0.00022107072354239713,
+      "peak": 0.030078864200680046,
       "area": 8,
-      "res": 7.105427357601002e-14,
-      "steps": 2439,
-      "ms": 204.19450800000004
+      "res": -2.5579538487363607e-13,
+      "steps": 2326,
+      "ms": 279.0194940000001
     },
     {
       "dx": 1,
-      "P": 89.60000000000014,
-      "B": 52.40553283145585,
-      "D": 33.424082702137305,
-      "I": 3.445802543490021,
-      "esq": 0.007589421781174545,
-      "peak": 0.0444894900448574,
+      "P": 89.59999999999971,
+      "B": 39.29936088682639,
+      "D": 46.54284888419453,
+      "I": 3.4456777274287687,
+      "esq": 0.0015800957999575688,
+      "peak": 0.033319390178724005,
       "area": 0,
-      "res": -1.4210854715202004e-13,
-      "steps": 3352,
-      "ms": 680.8817219999996
+      "res": -6.110667527536862e-13,
+      "steps": 3072,
+      "ms": 1312.007825999999
     },
     {
       "dx": 0.5,
-      "P": 89.60000000000007,
-      "B": 52.863004945725756,
-      "D": 32.97917826013469,
-      "I": 3.4462076519851736,
-      "esq": 0.013898551985899484,
-      "peak": 0.044862093596940156,
+      "P": 89.59999999999987,
+      "B": 42.35904911398888,
+      "D": 43.491357281284884,
+      "I": 3.446169789981672,
+      "esq": 0.004748131722432766,
+      "peak": 0.03596657385481592,
       "area": 0,
-      "res": -7.105427357601002e-14,
-      "steps": 6851,
-      "ms": 5690.609159
+      "res": -7.247535904753022e-13,
+      "steps": 6227,
+      "ms": 15863.734196999998
     }
   ],
   "froude": [
     {
       "fr": 1,
-      "B": 145.40224523099835,
-      "D": 58.302690160366396,
-      "esq": 0.010997071617162964,
-      "lim": 0.4552559811766924
+      "B": 289.80361957710323,
+      "D": 72.84243347207067,
+      "esq": 0.007250120758420121,
+      "lim": 0.468334463532081
     },
     {
       "fr": 1.5,
-      "B": 148.95348069945035,
-      "D": 55.067781365403285,
-      "esq": 0.008965971176479858,
-      "lim": 0.254466661684322
+      "B": 290.1361471604013,
+      "D": 69.05006886513986,
+      "esq": 0.006082429051921344,
+      "lim": 0.264982528708267
     },
     {
       "fr": 1000000000,
-      "B": 152.36178089073687,
-      "D": 51.80897247381281,
-      "esq": 0.00664894753951794,
+      "B": 290.32178931858635,
+      "D": 67.81844444364376,
+      "esq": 0.004454093477185135,
       "lim": 0
     }
   ]

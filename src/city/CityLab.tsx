@@ -11,6 +11,8 @@ import { budgetItems, type Mission } from './content/missions';
 import { DEPTH_STOPS, VALLEY_EXAGGERATION, cssDepthGradient, fmtDepth, fmtNum, fmtTime } from './render/palette';
 import { CompareTab, MissionsTab, TeacherTab, ToolsTab, WordsTab, type LabApi, type MissionUi, type TabId, type ToolId } from './ui/Panels';
 import { RainBudget } from './ui/RainBudget';
+import { compile } from './sim/compile';
+import { SEWER_COLORS } from './render/sewerColors';
 import { Icon } from '../components/ui';
 import { useStore } from '../state/store';
 import './city.css';
@@ -178,7 +180,10 @@ export default function CityLab() {
       if (m.change.kind === 'auto') m.change.apply(B);
       if (m.change.kind === 'presupuesto') applyBudget(sc, B, sel);
       const dx = c.shared && sc.resolutions.includes(c.shared.dx) ? c.shared.dx : sc.defaultResolution;
-      c.update({ shared: { ...sc.defaults, dx, rain: { ...sc.defaults.rain, ...m.rain }, simMinutes: m.simMinutes }, A, B });
+      // creciente de la misión: fracción de la capacidad de la sección de control, calculada con el escenario
+      const cap = m.creek && sc.creek ? compile(sc, { ...sc.defaults, dx }, A).creek?.capacity ?? 0 : 0;
+      const creek = m.creek && cap > 0 ? { peakM3s: Math.round(m.creek.fraction * cap), timeToPeakMin: m.creek.timeToPeakMin, startMin: m.creek.startMin } : null;
+      c.update({ shared: { ...sc.defaults, dx, rain: { ...sc.defaults.rain, ...m.rain }, simMinutes: m.simMinutes, creek }, A, B });
       c.setCompare(m.change.kind !== 'ninguno');
       c.start();
       dispatch({ type: 'pause', value: false });
@@ -428,7 +433,9 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
         )}
         {ctrl.cutOn() && (
           <p className="city-ov banner" role="status">
-            Bajo la calle: tuberías esquemáticas. Su hidráulica no se calcula; su brillo indica el agua que captan los sumideros.
+            {sim?.sewer
+              ? 'Bajo la calle: red didáctica con criterios de EPM. El agua dentro de tuberías y cámaras es la calculada.'
+              : 'Bajo la calle: tuberías esquemáticas. Su hidráulica no se calcula; su brillo indica el agua que captan los sumideros.'}
           </p>
         )}
         {view === 'resultados' && (
@@ -462,7 +469,7 @@ function ViewBar({ api }: { api: LabApi }) {
       </div>
       <div className="vb-group" role="group" aria-label="Capas">
         {btn('Flechas', ctrl.arrowsOn(), () => ctrl.setArrows(!ctrl.arrowsOn()), 'Flechas de dirección del flujo')}
-        {btn('Bajo la calle', ctrl.cutOn(), () => ctrl.setCut(!ctrl.cutOn()), 'Ver bajo la calle: tuberías esquemáticas')}
+        {btn('Bajo la calle', ctrl.cutOn(), () => ctrl.setCut(!ctrl.cutOn()), ctrl.displayed()?.sewer ? 'Ver bajo la calle: redes de aguas lluvias y de aguas residuales' : 'Ver bajo la calle: tuberías esquemáticas')}
         {api.renderer === 'webgl' && btn('Agua ×5', ctrl.amplify() > 1, () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5), 'Dibujar el agua cinco veces más gruesa (solo el dibujo)')}
         {api.renderer === 'webgl' && v === 'realista' && btn('Agua en azul', ctrl.waterBlue(), () => ctrl.setWaterBlue(!ctrl.waterBlue()), 'Colorear el agua en azul según su profundidad, en vez de su color natural')}
       </div>
@@ -541,6 +548,28 @@ function Legend({ api }: { api: LabApi }) {
         ))}
       </div>
       <small>{ctrl.amplify() > 1 ? `Dibujo ×${ctrl.amplify()} (los valores no cambian)` : 'Profundidad a escala real'} · flechas y vetas: velocidad calculada</small>
+      {ctrl.cutOn() && sim.sewer && (
+        <ul className="mat-legend sewer-legend" aria-label="Bajo la calle">
+          <li>
+            <span className="swatch" style={{ background: SEWER_COLORS.lluvias.shell }} aria-hidden="true" />
+            Aguas lluvias (agua: celeste)
+          </li>
+          <li>
+            <span className="swatch" style={{ background: SEWER_COLORS.residuales.shell }} aria-hidden="true" />
+            Aguas residuales (agua: ocre)
+          </li>
+          <li>
+            <span className="swatch" style={{ background: SEWER_COLORS.carga }} aria-hidden="true" />
+            Tubería en carga (llena, a presión)
+          </li>
+          {sim.c.sewer!.erradas.length > 0 && (
+            <li>
+              <span className="swatch" style={{ background: SEWER_COLORS.errada }} aria-hidden="true" />
+              Conexión errada
+            </li>
+          )}
+        </ul>
+      )}
     </div>
   );
 }

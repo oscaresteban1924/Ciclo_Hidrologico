@@ -108,13 +108,15 @@ En el laboratorio, los estudiantes pueden:
 - cambiar superficies;
 - construir jardines de lluvia y depósitos;
 - obstruir o restaurar sumideros;
+- ver bajo la calle las **dos redes separadas** de alcantarillado: aguas lluvias y aguas residuales. Son didácticas y se trazaron con criterios de la norma de diseño de EPM. Muestran las cámaras de inspección y de caída, la tubería en carga y el rebose, y su perfil con el nivel del agua calculado. Incluyen la intervención «conexiones erradas»;
+- lanzar una **creciente** por la quebrada de la ladera y ver en vivo la sección transversal, el hidrograma y el desborde hacia el retiro;
 - seguir el agua con gotas trazadoras y medir la profundidad en el tiempo;
 - comparar A y B con exactamente la misma lluvia.
 
 Además hay:
 - una barra en vivo «¿Adónde fue la lluvia?», que muestra qué parte del agua sigue sobre el suelo, cuál salió, cuál entró al suelo, cuál tomaron los sumideros y cuál guardan los depósitos;
 - una guía de primeros pasos;
-- seis misiones (pregunta, predicción, cambio y explicación);
+- ocho misiones (pregunta, predicción, cambio y explicación);
 - un panel docente con supuestos, balance de agua, fuentes y pruebas.
 
 Escenarios incluidos:

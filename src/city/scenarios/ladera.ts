@@ -3,9 +3,10 @@
 // Reúne rasgos típicos: calle empinada que baja hacia el valle, carrera a lo largo de la ladera, casas de
 // ladrillo de 2 a 5 pisos, cancha en terraza, colegio, retiro verde de quebrada y quebrada que baja al río.
 
-import type { BuildingSpec, Polygon, Scenario, SurfacePatch } from '../sim/scenario';
+import type { BuildingSpec, DrainSpec, Polygon, Pt, Scenario, SewerSpec, SurfacePatch } from '../sim/scenario';
 import { ENGINE } from '../sim/constants';
 import { prng, rasterFrom, rect } from './primitives';
+import { designNetwork, surfaceOf, type DesignNode, type DesignPipe } from './sewerDesign';
 
 const W = 128;
 const H = 96;
@@ -13,15 +14,22 @@ const H = 96;
 /** Eje de la quebrada (meandro suave). */
 export const yq = (x: number): number => 16 + 3 * Math.sin(x / 18);
 
-/** Ladera: 10 % hacia el este (hacia el valle), rellano en la intersección y 3,5 % hacia la quebrada; cauce encajado 2,2 m. Cotas relativas. */
+/** Cauce: 1,8 m de profundidad, fondo de 3 m y orillas que suben hasta 4,5 m del eje. */
+export const CHANNEL = { depth: 1.8, bedHalf: 1.5, bankHalf: 4.5 } as const;
+
 /** Descenso acumulado hacia el este: 10 %, con un rellano de 2 % en la intersección (x 80–100). */
 const drop = (x: number) => 0.1 * Math.min(x, 80) + 0.02 * Math.min(Math.max(x - 80, 0), 20) + 0.1 * Math.max(x - 100, 0);
 
+/**
+ * Ladera: 10 % hacia el este (hacia el valle), con rellano en la intersección. La quebrada corre por el
+ * fondo de su propio valle: las dos márgenes suben 3,5 % hacia afuera del cauce. Cotas relativas.
+ */
 export function laderaGround(x: number, y: number): number {
-  let z = 44 - drop(x) + 0.035 * (y - 16);
-  const d = Math.abs(y - yq(x));
-  if (d < 2) z -= 2.2;
-  else if (d < 6) z -= 2.2 * (1 - (d - 2) / 4);
+  const yc = yq(x);
+  let z = 44 - drop(x) + 0.035 * (yc - 16) + 0.035 * Math.abs(y - yc);
+  const d = Math.abs(y - yc);
+  if (d < CHANNEL.bedHalf) z -= CHANNEL.depth;
+  else if (d < CHANNEL.bankHalf) z -= CHANNEL.depth * (1 - (d - CHANNEL.bedHalf) / (CHANNEL.bankHalf - CHANNEL.bedHalf));
   return z;
 }
 
@@ -112,9 +120,8 @@ export function laderaScenario(): Scenario {
     { id: 'anden-ks-e', polygon: rect(91, 27, 93, 56), cover: 'anden', dz: 0.15, crossSlope: { axis: 'x', at: 91, slope: 0.02 }, kind: 'hipotetico' },
   ];
 
-  const yOut = yq(W);
   const yIn = yq(0);
-  return {
+  const sc: Scenario = {
     format: 'medellin-lluvia/escenario',
     version: 1,
     id: 'ladera-quebrada',
@@ -126,10 +133,12 @@ export function laderaScenario(): Scenario {
       badge: 'Demostrativo (no es un lugar real)',
       statement: 'Sector demostrativo inspirado en barrios de ladera de Medellín. No reproduce un lugar real; terreno, edificios, sumideros y tuberías son elementos didácticos o hipotéticos.',
       layers: [
-        { layer: 'Terreno', kind: 'didactico', note: 'Ladera con 10 % hacia el valle (rellano de 2 % en la intersección) y quebrada encajada 2,2 m; cotas relativas.' },
+        { layer: 'Terreno', kind: 'didactico', note: 'Ladera con 10 % hacia el valle (rellano de 2 % en la intersección). La quebrada corre por el fondo de su valle: cauce de 1,8 m de profundidad y 3 m de fondo, con márgenes que suben 3,5 %. Cotas relativas.' },
         { layer: 'Edificios', kind: 'didactico', note: 'Hileras de casas generadas con semilla fija (2–5 pisos, 2,8 m por piso).' },
         { layer: 'Andenes y bordillos', kind: 'hipotetico', note: 'Bordillo de 0,15 m, andén con 2 % hacia la calzada.' },
-        { layer: 'Sumideros y tuberías', kind: 'hipotetico', note: 'Cuatro rejillas de 0,6 × 0,9 m (40 L/s) y tubería esquemática no calculada.' },
+        { layer: 'Sumideros', kind: 'hipotetico', note: 'Ocho sumideros de rejilla, ventana o mixtos ubicados con los criterios de EPM (puntos bajos y antes de los cruces peatonales).' },
+        { layer: 'Alcantarillado', kind: 'hipotetico', note: 'Red separada de aguas lluvias (descarga a la quebrada) y de aguas residuales (sigue hacia el interceptor) trazada con criterios de la norma de diseño de EPM (GD-AS002). Es didáctica: no es la red real ni un diseño de ingeniería.' },
+        { layer: 'Creciente', kind: 'hipotetico', note: 'Hidrograma triangular que entra por la quebrada. No es un caudal medido ni un pronóstico.' },
         { layer: 'Coberturas', kind: 'estimado', note: 'Parámetros estimados de literatura general; no calibrados.' },
       ],
       sources: [],
@@ -144,17 +153,12 @@ export function laderaScenario(): Scenario {
     surfaces,
     bowls: [{ id: 'esquina-baja', cx: 94.5, cy: 58.5, r: 2.6, depth: 0.12, kind: 'didactico', label: 'Esquina baja' }],
     buildings,
-    drains: [
-      { id: 'sum-esquina', name: 'Sumidero de la esquina', at: [94.5, 58.5], widthM: 0.6, lengthM: 0.9, freeSides: 3, openFraction: 0.5, capacityLps: 40, gutterSlope: 0.02, obstruction: 0, kind: 'hipotetico' },
-      { id: 'sum-calle', name: 'Sumidero de la calle (arriba)', at: [48.5, 58.5], widthM: 0.6, lengthM: 0.9, freeSides: 3, openFraction: 0.5, capacityLps: 40, gutterSlope: 0.02, obstruction: 0, kind: 'hipotetico' },
-      { id: 'sum-carrera-n', name: 'Sumidero de la carrera norte', at: [90.5, 80.5], widthM: 0.6, lengthM: 0.9, freeSides: 3, openFraction: 0.5, capacityLps: 40, gutterSlope: 0.02, obstruction: 0, kind: 'hipotetico' },
-      { id: 'sum-carrera-s', name: 'Sumidero de la carrera sur', at: [90.5, 31.5], widthM: 0.6, lengthM: 0.9, freeSides: 3, openFraction: 0.5, capacityLps: 40, gutterSlope: 0.02, obstruction: 0, kind: 'hipotetico' },
-    ],
+    drains: LADERA_DRAINS,
     outlets: [
       { id: 'salida-calle', name: 'La calle sigue bajando', edge: 'E', from: 58, to: 65, slope: 0.1, kind: 'didactico' },
-      { id: 'salida-quebrada', name: 'La quebrada sigue hacia el río', edge: 'E', from: yOut - 6, to: yOut + 6, slope: 0.03, kind: 'didactico' },
+      { id: 'salida-quebrada', name: 'La quebrada sigue hacia el río', edge: 'E', from: 0, to: 27, slope: 0.03, kind: 'didactico' },
     ],
-    inflows: [{ id: 'quebrada-arriba', name: 'Agua que trae la quebrada desde arriba', edge: 'W', from: yIn - 2, to: yIn + 2, kind: 'didactico' }],
+    inflows: [{ id: 'quebrada-arriba', name: 'Agua que trae la quebrada desde arriba', edge: 'W', from: yIn - CHANNEL.bankHalf, to: yIn + CHANNEL.bankHalf, kind: 'didactico' }],
     zones: [
       { id: 'parqueadero', name: 'Parqueadero comunal', polygon: rect(96, 38, 126, 47), cover: 'asfalto', options: ['asfalto', 'adoquin_permeable', 'grama'], cost: 40 },
       { id: 'patio', name: 'Patio del colegio', polygon: rect(98, 73, 105.5, 94), cover: 'concreto', options: ['concreto', 'adoquin_permeable', 'grama'], cost: 30 },
@@ -171,6 +175,8 @@ export function laderaScenario(): Scenario {
       { id: 'carrera-sur', name: 'Carrera sur', at: [90.5, 40] },
       { id: 'quebrada', name: 'Quebrada (salida)', at: [125.5, yq(125.5)] },
       { id: 'jardin', name: 'Jardín de la calle', at: [72, 53] },
+      { id: 'seccion', name: 'Quebrada (sección de control)', at: [SEC_X, yq(SEC_X)] },
+      { id: 'casa-retiro', name: 'Junto a la casa del retiro', at: [100.5, 28.4] },
     ],
     labels: [
       { id: 'calle', text: 'Calle empinada (baja hacia el valle)', at: [26, 61.5], priority: 3 },
@@ -182,14 +188,17 @@ export function laderaScenario(): Scenario {
       { id: 'parqueadero', text: 'Parqueadero comunal', at: [111, 42.5], priority: 1 },
       { id: 'parque', text: 'Parque', at: [20, 36], priority: 1 },
       { id: 'plazoleta', text: 'Plazoleta', at: [66, 36], priority: 1 },
+      { id: 'casa-retiro', text: 'Casa en el retiro', at: [100.5, 32.5], priority: 1 },
     ],
     streetView: { eye: [24, 60.6], look: [104, 59.6] },
-    pipes: [
-      { id: 'tubo-calle', path: [[48.5, 58.5], [48.5, 61.5], [128, 61.5]], kind: 'hipotetico' },
-      { id: 'tubo-esquina', path: [[94.5, 58.5], [94.5, 61.5]], kind: 'hipotetico' },
-      { id: 'tubo-carrera-n', path: [[90.5, 80.5], [87.5, 80.5], [87.5, 61.5]], kind: 'hipotetico' },
-      { id: 'tubo-carrera-s', path: [[90.5, 31.5], [87.5, 31.5], [87.5, 61.5]], kind: 'hipotetico' },
-    ],
+    pipes: [],
+    creek: {
+      name: 'Quebrada',
+      inflowId: 'quebrada-arriba',
+      axis: Array.from({ length: 33 }, (_, k) => [k * 4, yq(k * 4)] as Pt),
+      section: { at: [SEC_X, yq(SEC_X)], halfWidthM: 13, bankHalfWidthM: CHANNEL.bankHalf, name: 'Sección de control' },
+      baseM3s: 0.3,
+    },
     decor: laderaDecor(),
     defaults: {
       scenarioId: 'ladera-quebrada',
@@ -202,6 +211,143 @@ export function laderaScenario(): Scenario {
     },
     engine: { name: ENGINE.name, version: ENGINE.version },
     seed: 20261108,
+  };
+  sc.sewer = laderaSewer(sc);
+  return sc;
+}
+
+/** Abscisa de la sección de control de la quebrada (en el rellano, frente a la casa del retiro). */
+export const SEC_X = 94;
+
+const drain = (id: string, name: string, at: Pt, type: DrainSpec['type'], longSlope: number): DrainSpec => ({
+  id,
+  name,
+  at,
+  widthM: 0.6,
+  lengthM: 0.9,
+  freeSides: 3,
+  openFraction: 0.5,
+  capacityLps: 40,
+  gutterSlope: 0.02,
+  obstruction: 0,
+  kind: 'hipotetico',
+  type,
+  windowLengthM: type === 'rejilla' ? undefined : 1.5,
+  windowHeightM: type === 'rejilla' ? undefined : 0.15,
+  longSlope,
+  node: `SL-${id.replace('sum-', '')}`,
+});
+
+/** En pendientes fuertes, rejillas (la ventana pierde capacidad por encima de ≈ 3 %, EPM 8.5); en el punto bajo, mixto. */
+const LADERA_DRAINS: DrainSpec[] = [
+  drain('sum-esquina', 'Sumidero mixto de la esquina', [94.5, 58.5], 'mixto', 0.005),
+  drain('sum-calle', 'Sumidero de la calle (arriba, sur)', [48.5, 58.2], 'rejilla', 0.1),
+  drain('sum-carrera-n', 'Sumidero de la carrera norte', [90.5, 80.5], 'rejilla', 0.035),
+  drain('sum-carrera-s', 'Sumidero de la carrera sur', [90.5, 31.5], 'rejilla', 0.035),
+  drain('sum-calle-n', 'Sumidero de la calle (arriba, norte)', [48.5, 64.8], 'rejilla', 0.1),
+  drain('sum-cruce-s', 'Sumidero antes del cruce (sur)', [81, 58.2], 'rejilla', 0.02),
+  drain('sum-cruce-n', 'Sumidero de ventana antes del cruce (norte)', [81, 64.8], 'ventana', 0.02),
+  drain('sum-carrera-n2', 'Sumidero antes del cruce de la carrera', [84.2, 68.5], 'rejilla', 0.035),
+];
+
+/**
+ * Red separada didáctica (EPM GD-AS002). Aguas lluvias al norte de la calle y al oriente de la carrera; baja
+ * por la carrera sur y descarga a la quebrada. Aguas residuales al sur y al occidente; siguen calle abajo y
+ * por un colector paralelo a la quebrada hacia el interceptor (nunca a la quebrada).
+ */
+function laderaSewer(sc: Scenario): SewerSpec {
+  const surface = surfaceOf(sc);
+  const box = (d: DrainSpec): DesignNode => ({ id: d.node!, name: `Caja del ${d.name.toLowerCase()}`, at: d.at, kind: 'caja-sumidero' });
+  const conn = (d: DrainSpec, to: string): DesignPipe => ({ id: `c-${d.id}`, from: d.node!, to, diameterM: 0.25, material: 'PVC', role: 'conexion-sumidero' });
+  const D = Object.fromEntries(LADERA_DRAINS.map((d) => [d.id, d]));
+  const xo = 89.25;
+  const yOutf = yq(xo) + 1.3;
+  const storm = designNetwork(
+    [
+      { id: 'LL-1', name: 'Cámara LL-1 (arranque en la calle)', at: [48.5, 63.25], kind: 'camara' },
+      { id: 'LL-2', name: 'Cámara LL-2 (antes del cruce)', at: [84, 63.25], kind: 'camara' },
+      { id: 'LL-N1', name: 'Cámara LL-N1 (carrera norte)', at: [xo, 80.5], kind: 'camara' },
+      { id: 'LL-N0', name: 'Cámara LL-N0 (carrera norte, cruce)', at: [xo, 68.5], kind: 'camara' },
+      { id: 'LL-3', name: 'Cámara LL-3 (intersección)', at: [xo, 61], kind: 'camara' },
+      { id: 'LL-S1', name: 'Cámara LL-S1 (carrera sur)', at: [xo, 31.5], kind: 'camara' },
+      { id: 'LL-D', name: 'Descarga de aguas lluvias a la quebrada', at: [xo, yOutf], kind: 'descarga', outfall: 'quebrada', fixedInvertM: Math.round((laderaGround(xo, yq(xo)) + 0.5) * 1000) / 1000 },
+      ...LADERA_DRAINS.map(box),
+    ],
+    [
+      conn(D['sum-calle'], 'LL-1'),
+      conn(D['sum-calle-n'], 'LL-1'),
+      conn(D['sum-cruce-s'], 'LL-2'),
+      conn(D['sum-cruce-n'], 'LL-2'),
+      conn(D['sum-carrera-n'], 'LL-N1'),
+      conn(D['sum-carrera-n2'], 'LL-N0'),
+      conn(D['sum-esquina'], 'LL-3'),
+      conn(D['sum-carrera-s'], 'LL-S1'),
+      { id: 'LL-1>LL-2', from: 'LL-1', to: 'LL-2', diameterM: 0.4, material: 'concreto', role: 'colector' },
+      { id: 'LL-2>LL-3', from: 'LL-2', to: 'LL-3', diameterM: 0.45, material: 'concreto', role: 'colector' },
+      { id: 'LL-N1>LL-N0', from: 'LL-N1', to: 'LL-N0', diameterM: 0.3, material: 'concreto', role: 'colector' },
+      { id: 'LL-N0>LL-3', from: 'LL-N0', to: 'LL-3', diameterM: 0.3, material: 'concreto', role: 'colector' },
+      { id: 'LL-3>LL-S1', from: 'LL-3', to: 'LL-S1', diameterM: 0.45, material: 'concreto', role: 'colector' },
+      { id: 'LL-S1>LL-D', from: 'LL-S1', to: 'LL-D', diameterM: 0.45, material: 'concreto', role: 'colector' },
+    ],
+    { system: 'lluvias', surface, cover: 1.25, coverInlet: 1.22, minSlope: 0.01, minSlopeInlet: 0.02, vMax: { concreto: 4, PVC: 4 } },
+  );
+  const xs = 85.75, ys = 59.75;
+  const sanitary = designNetwork(
+    [
+      { id: 'AR-0', name: 'Cámara AR-0 (llegan las aguas residuales de arriba)', at: [2, ys], kind: 'camara' },
+      { id: 'AR-1', name: 'Cámara AR-1 (calle)', at: [44, ys], kind: 'camara' },
+      { id: 'AR-N', name: 'Cámara AR-N (carrera norte)', at: [xs, 94], kind: 'camara' },
+      { id: 'AR-2', name: 'Cámara AR-2 (intersección)', at: [xs, ys], kind: 'camara' },
+      { id: 'AR-D', name: 'Sigue al colector de aguas residuales (hacia el interceptor del río)', at: [128, ys], kind: 'descarga', outfall: 'colector' },
+      { id: 'AR-S2', name: 'Cámara AR-S2 (carrera sur)', at: [xs, 50], kind: 'camara' },
+      { id: 'AR-S1', name: 'Cámara AR-S1 (final de la carrera sur)', at: [xs, 28], kind: 'camara' },
+      { id: 'AR-S0', name: 'Cámara AR-S0 (giro hacia el colector de la quebrada)', at: [xs + 2, 26], kind: 'camara' },
+      { id: 'AR-Q', name: 'Sigue por el colector paralelo a la quebrada (hacia el interceptor)', at: [128, 26], kind: 'descarga', outfall: 'colector' },
+    ],
+    [
+      { id: 'AR-0>AR-1', from: 'AR-0', to: 'AR-1', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-1>AR-2', from: 'AR-1', to: 'AR-2', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-N>AR-2', from: 'AR-N', to: 'AR-2', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-2>AR-D', from: 'AR-2', to: 'AR-D', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-S2>AR-S1', from: 'AR-S2', to: 'AR-S1', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-S1>AR-S0', from: 'AR-S1', to: 'AR-S0', diameterM: 0.2, material: 'PVC', role: 'colector' },
+      { id: 'AR-S0>AR-Q', from: 'AR-S0', to: 'AR-Q', diameterM: 0.2, material: 'PVC', role: 'colector' },
+    ],
+    { system: 'residuales', surface, cover: 2.35, minSlope: 0.01, vMax: { concreto: 4, PVC: 4 } },
+  );
+  const buildingNode: Record<string, string> = {};
+  for (const b of sc.buildings) {
+    const cx = b.polygon.reduce((a, p) => a + p[0], 0) / b.polygon.length;
+    const cy = b.polygon.reduce((a, p) => a + p[1], 0) / b.polygon.length;
+    if (b.id.startsWith('kn-')) buildingNode[b.id] = 'AR-N';
+    else if (b.id.startsWith('ks-')) buildingNode[b.id] = 'AR-S2';
+    else if (b.id === 'casa-retiro') buildingNode[b.id] = 'AR-S1';
+    else if (cx > xs) buildingNode[b.id] = 'AR-2';
+    else buildingNode[b.id] = cx < 44 && cy > 45 ? 'AR-0' : 'AR-1';
+  }
+  return {
+    standard: 'Normas de Diseño de Sistemas de Alcantarillado de EPM (GD-AS002): criterios aplicados a un trazado didáctico',
+    designIntensityMmH: 100,
+    nodes: [...storm.nodes, ...sanitary.nodes],
+    pipes: [...storm.pipes, ...sanitary.pipes],
+    sanitary: {
+      dotacionLpd: 130,
+      returnCoef: 0.85,
+      peakFactor: 1.4,
+      personsPerFloor: 3,
+      infiltrationLpsHa: 0.2,
+      buildingNode,
+      upstream: [
+        { node: 'AR-0', lps: 1.5, name: 'Aguas residuales del barrio de arriba' },
+        { node: 'AR-N', lps: 0.3, name: 'Aguas residuales de la carrera norte' },
+      ],
+    },
+    upstreamRunoff: [{ node: 'LL-1', areaM2: 5000, coef: 0.8, name: 'Escorrentía de las calles de arriba que llega por el colector' }],
+    streets: [
+      { axis: 'x', center: 61.5, halfWidth: 3.5, from: 0, to: W, name: 'Calle' },
+      { axis: 'y', center: 87.5, halfWidth: 3.5, from: 24, to: H, name: 'Carrera' },
+    ],
+    erradas: { buildingIds: sc.buildings.filter((b) => b.id.startsWith('cs-')).map((b) => b.id), upstreamRoofM2: 3500, upstreamNode: 'AR-0' },
   };
 }
 
