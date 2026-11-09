@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "name": "Consulta acotada y paginada (páginas de 4 por maxRecordCount)",
+      "pass": true,
+      "detail": "3 consultas"
+    },
+    {
+      "name": "No se pidió el elemento fuera de la caja",
+      "pass": true,
+      "detail": "10 edificios"
+    },
+    {
+      "name": "Advertencia por CRS descrito como UTM pero declarado EPSG:9377",
+      "pass": true,
+      "detail": "registrada en pipelineLog"
+    },
+    {
+      "name": "Geometría inválida reparada",
+      "pass": true,
+      "detail": "make_valid"
+    },
+    {
+      "name": "Astilla descartada",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Multipolígono separado en partes",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "Recorte a la caja",
+      "pass": true,
+      "detail": "máx x local = 120.00 m"
+    },
+    {
+      "name": "Alturas: agl real, n_pisos estimado y sin dato marcados",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "CRS de salida EPSG:9377 y centro en Medellín",
+      "pass": true,
+      "detail": "[-75.5775, 6.2455]"
+    },
+    {
+      "name": "Hashes de cada página registrados",
+      "pass": true,
+      "detail": "4 archivos"
+    },
+    {
+      "name": "Sin sumideros inventados",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "name": "La aplicación valida, compila y simula el escenario",
+      "pass": true,
+      "detail": "OK: escenario válido, compilado y simulado"
+    }
+  ]
+}

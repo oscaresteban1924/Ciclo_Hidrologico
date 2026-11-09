@@ -1,0 +1,245 @@
+// Alternativa funcional sin WebGL2: mapa 2D cenital del MISMO cálculo (no es una reproducción grabada).
+
+import { COVERS, COVER_LIST } from '../sim/constants';
+import type { Compiled } from '../sim/compile';
+import type { CitySim } from '../sim/engine';
+import { flowArrows } from '../sim/fields';
+import type { Scenario } from '../sim/scenario';
+import type { TracerSet } from '../sim/tracers';
+import { TRACER_COLORS, TRACER_TRAIL_MOVING } from './tracerColors';
+import { depthColor, hexToRgb } from './palette';
+import type { Pick, ViewMode } from './sectorScene';
+
+export class SectorMap2D {
+  private canvas: HTMLCanvasElement;
+  private g: CanvasRenderingContext2D;
+  private off: HTMLCanvasElement;
+  private og: CanvasRenderingContext2D;
+  private img: ImageData;
+  private c: Compiled;
+  private sc: Scenario;
+  private container: HTMLElement;
+  private scale = 1;
+  private ox = 0;
+  private oy = 0;
+  private sim: CitySim | null = null;
+  private tracers: TracerSet | null = null;
+  private hl: [number, number] | null = null;
+  view: ViewMode = 'realista';
+  cut = false;
+  showArrows = true;
+  amplify = 1;
+
+  constructor(container: HTMLElement, sc: Scenario, c: Compiled) {
+    this.container = container;
+    this.sc = sc;
+    this.c = c;
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'city-canvas';
+    this.canvas.tabIndex = 0;
+    this.canvas.setAttribute('role', 'img');
+    this.canvas.setAttribute('aria-label', `Mapa 2D del sector ${sc.title} (vista sin 3D).`);
+    container.appendChild(this.canvas);
+    const g = this.canvas.getContext('2d');
+    if (!g) throw new Error('Canvas 2D no disponible');
+    this.g = g;
+    this.off = document.createElement('canvas');
+    this.og = this.off.getContext('2d')!;
+    this.img = new ImageData(1, 1);
+    this.setCompiled(c);
+    this.resize();
+  }
+
+  setCompiled(c: Compiled): void {
+    this.c = c;
+    this.off.width = c.nx;
+    this.off.height = c.ny;
+    this.img = this.og.createImageData(c.nx, c.ny);
+  }
+
+  setView(v: ViewMode): void {
+    this.view = v;
+  }
+  setCut(on: boolean): void {
+    this.cut = on;
+  }
+  setRain(): void {}
+  setPinned(): void {}
+  goto(): void {}
+  focusOn(): void {}
+  orbit(): void {}
+  zoom(): void {}
+
+  update(sim: CitySim, tracers: TracerSet | null): void {
+    this.sim = sim;
+    this.tracers = tracers;
+  }
+
+  resize(): void {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.canvas.width = Math.max(1, Math.round(w * dpr));
+    this.canvas.height = Math.max(1, Math.round(h * dpr));
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    const W = this.c.nx * this.c.dx, H = this.c.ny * this.c.dx;
+    this.scale = Math.min((w * dpr) / W, (h * dpr) / H) * 0.94;
+    this.ox = (w * dpr - W * this.scale) / 2;
+    this.oy = (h * dpr - H * this.scale) / 2;
+  }
+
+  render(): void {
+    const c = this.c, sim = this.sim;
+    const d = this.img.data;
+    const tmp = new Float32Array(4);
+    const real = COVER_LIST.map((id) => hexToRgb(COVERS[id].color));
+    const mat = COVER_LIST.map((id) => hexToRgb(COVERS[id].matColor));
+    let zmin = Infinity, zmax = -Infinity;
+    for (let k = 0; k < c.z.length; k++) {
+      zmin = Math.min(zmin, c.z[k]);
+      zmax = Math.max(zmax, c.z[k]);
+    }
+    for (let j = 0; j < c.ny; j++) for (let i = 0; i < c.nx; i++) {
+      const k = j * c.nx + i;
+      const o = ((c.ny - 1 - j) * c.nx + i) * 4;
+      const base = (this.view === 'materiales' ? mat : real)[c.cover[k]];
+      const shade = 0.75 + 0.3 * ((c.z[k] - zmin) / Math.max(1e-6, zmax - zmin));
+      let r = base[0] * shade, g = base[1] * shade, b = base[2] * shade;
+      if (this.view === 'resultados') r = g = b = (r + g + b) / 3;
+      if (c.solid[k]) {
+        r *= 0.75;
+        g *= 0.75;
+        b *= 0.75;
+      } else if (sim) {
+        const h = this.view === 'resultados' ? sim.hmaxField[k] : sim.h[k];
+        depthColor(h, tmp, 0);
+        const a = tmp[3];
+        r = r * (1 - a) + tmp[0] * a;
+        g = g * (1 - a) + tmp[1] * a;
+        b = b * (1 - a) + tmp[2] * a;
+      }
+      d[o] = r * 255;
+      d[o + 1] = g * 255;
+      d[o + 2] = b * 255;
+      d[o + 3] = 255;
+    }
+    this.og.putImageData(this.img, 0, 0);
+    const G = this.g;
+    G.setTransform(1, 0, 0, 1, 0, 0);
+    G.fillStyle = '#dfe8ee';
+    G.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    G.imageSmoothingEnabled = false;
+    const W = c.nx * c.dx, H = c.ny * c.dx;
+    G.drawImage(this.off, this.ox, this.oy, W * this.scale, H * this.scale);
+    const P = (x: number, y: number): [number, number] => [this.ox + x * this.scale, this.oy + (H - y) * this.scale];
+    // Tuberías esquemáticas
+    if (this.cut) {
+      G.setLineDash([6, 5]);
+      G.strokeStyle = '#4a5a6a';
+      G.lineWidth = 3;
+      for (const p of this.sc.pipes) {
+        G.beginPath();
+        p.path.forEach(([x, y], q) => (q ? G.lineTo(...P(x, y)) : G.moveTo(...P(x, y))));
+        G.stroke();
+      }
+      G.setLineDash([]);
+    }
+    // Sumideros
+    for (const dr of c.drains) {
+      const x = ((dr.cell % c.nx) + 0.5) * c.dx, y = (Math.floor(dr.cell / c.nx) + 0.5) * c.dx;
+      const [px, py] = P(x, y);
+      G.fillStyle = dr.obstruction > 0.5 ? '#7a5a2e' : '#22272b';
+      G.fillRect(px - 5, py - 4, 10, 8);
+    }
+    // Flechas
+    if (sim && this.showArrows && this.view !== 'resultados') {
+      G.strokeStyle = 'rgba(255,255,255,0.95)';
+      G.lineWidth = 1.6;
+      for (const a of flowArrows(sim, Math.max(2, Math.round(3 / c.dx)), 0.003, 0.03)) {
+        const [x0, y0] = P(a.x, a.y);
+        const L = Math.min(1.6, 0.5 + a.speed) * this.scale;
+        const ang = Math.atan2(-a.uy, a.ux);
+        const x1 = x0 + Math.cos(ang) * L, y1 = y0 + Math.sin(ang) * L;
+        G.beginPath();
+        G.moveTo(x0, y0);
+        G.lineTo(x1, y1);
+        G.lineTo(x1 - Math.cos(ang - 0.5) * L * 0.35, y1 - Math.sin(ang - 0.5) * L * 0.35);
+        G.moveTo(x1, y1);
+        G.lineTo(x1 - Math.cos(ang + 0.5) * L * 0.35, y1 - Math.sin(ang + 0.5) * L * 0.35);
+        G.stroke();
+      }
+    }
+    // Trazadores: estela con el color de su destino (los mismos de «¿Adónde fue la lluvia?»)
+    if (this.tracers) {
+      G.lineCap = 'round';
+      G.lineJoin = 'round';
+      for (const t of this.tracers.tracers) {
+        if (t.trail.length < 4) continue;
+        const path = () => {
+          G.beginPath();
+          for (let q = 0; q < t.trail.length; q += 2) {
+            const [px, py] = P(t.trail[q], t.trail[q + 1]);
+            if (q === 0) G.moveTo(px, py);
+            else G.lineTo(px, py);
+          }
+          if (t.state === 'agua') {
+            const [px, py] = P(t.x, t.y);
+            G.lineTo(px, py);
+          }
+        };
+        path();
+        G.strokeStyle = 'rgba(10, 30, 56, 0.55)';
+        G.lineWidth = 5;
+        G.stroke();
+        path();
+        G.strokeStyle = t.state === 'agua' ? TRACER_TRAIL_MOVING : TRACER_COLORS[t.state];
+        G.lineWidth = 2.5;
+        G.stroke();
+      }
+      for (const t of this.tracers.tracers) {
+        const [px, py] = t.state === 'agua' ? P(t.x, t.y) : P(t.trail[t.trail.length - 2], t.trail[t.trail.length - 1]);
+        G.beginPath();
+        G.arc(px, py, t.state === 'agua' ? 4.5 : 3.5, 0, Math.PI * 2);
+        G.fillStyle = TRACER_COLORS[t.state];
+        G.fill();
+        G.lineWidth = 1.5;
+        G.strokeStyle = t.state === 'agua' ? '#2a78d6' : '#ffffff';
+        G.stroke();
+      }
+    }
+    if (this.hl) {
+      const [px, py] = P(this.hl[0], this.hl[1]);
+      G.strokeStyle = '#ffd23f';
+      G.lineWidth = 3;
+      G.beginPath();
+      G.arc(px, py, 9, 0, Math.PI * 2);
+      G.stroke();
+    }
+  }
+
+  pick(clientX: number, clientY: number): Pick | null {
+    const r = this.canvas.getBoundingClientRect();
+    const dpr = this.canvas.width / r.width;
+    const H = this.c.ny * this.c.dx;
+    const x = ((clientX - r.left) * dpr - this.ox) / this.scale;
+    const y = H - ((clientY - r.top) * dpr - this.oy) / this.scale;
+    if (x < 0 || y < 0 || x >= this.c.nx * this.c.dx || y >= H) return null;
+    const k = Math.floor(y / this.c.dx) * this.c.nx + Math.floor(x / this.c.dx);
+    const di = this.c.drains.findIndex((d) => d.cell === k);
+    if (di >= 0) return { kind: 'drain', index: di, x, y };
+    if (this.c.building[k] >= 0) return { kind: 'building', index: this.c.building[k], x, y };
+    return { kind: 'cell', k, x, y };
+  }
+
+  showHighlight(x: number | null, y = 0): void {
+    this.hl = x === null ? null : [x, y];
+  }
+
+  info(): { geometries: number; textures: number; calls: number; triangles: number } {
+    return { geometries: 0, textures: 0, calls: 0, triangles: 0 };
+  }
+
+  dispose(): void {
+    this.canvas.remove();
+  }
+}

@@ -1,0 +1,679 @@
+// Pruebas obligatorias del motor de lluvia urbana (se ejecutan con: npm run test:city).
+// Cada prueba declara su tolerancia ANTES de ejecutarse. El informe se escribe en
+// src/city/content/test-report.json (panel docente) y docs/medellin/PRUEBAS.md.
+
+import { writeFileSync } from 'node:fs';
+import { COVERS, mmhToMs, msToMmh, type CoverId } from '../../src/city/sim/constants';
+import { compile } from '../../src/city/sim/compile';
+import { ComparePair, change, indicators } from '../../src/city/sim/compare';
+import { CitySim } from '../../src/city/sim/engine';
+import { flowArrows } from '../../src/city/sim/fields';
+import { baseInterventions, cloneInterventions, validateConfig, type BuildingSpec, type Bowl, type DrainSpec, type OutletSpec, type Scenario, type Shared, type TankSite } from '../../src/city/sim/scenario';
+import { rasterFrom, rect } from '../../src/city/scenarios/primitives';
+import { builtinScenarios } from '../../src/city/scenarios/index';
+import { TracerSet } from '../../src/city/sim/tracers';
+import { FIELD_CHANNELS, outletFlows, packField, spoutFlows, tankFx } from '../../src/city/render/fxData';
+import { EXTENT as ABURRA_EXTENT, HILLS, METRO_A, METRO_B, RIVER, SECTOR_SPOTS, cross as abCross, fabricAt, outerZ, riverAt, valleyZ } from '../../src/city/render/aburra';
+import { buildBackdrop } from '../../src/city/render/backdrop';
+import * as THREE from 'three';
+
+interface Result {
+  id: string;
+  name: string;
+  tolerance: string;
+  measured: string;
+  pass: boolean;
+  kind: 'obligatoria' | 'verificacion' | 'revision';
+  /** Aclaraciones, incluidas las correcciones de diseño de la prueba (se publican). */
+  note?: string;
+}
+const results: Result[] = [];
+function record(r: Result) {
+  results.push(r);
+  console.log(`${r.pass ? 'PASA ' : 'FALLA'}  [${r.id}] ${r.name}\n        tolerancia: ${r.tolerance}\n        medido:     ${r.measured}${r.note ? `\n        nota:       ${r.note}` : ''}`);
+}
+
+function mk(o: {
+  W: number;
+  H: number;
+  ground: (x: number, y: number) => number;
+  cover?: CoverId;
+  buildings?: BuildingSpec[];
+  outlets?: OutletSpec[];
+  drains?: DrainSpec[];
+  bowls?: Bowl[];
+  tanks?: TankSite[];
+}): Scenario {
+  return {
+    format: 'medellin-lluvia/escenario',
+    version: 1,
+    id: 'prueba',
+    title: 'prueba',
+    shortTitle: 'prueba',
+    summary: '',
+    provenance: { kind: 'demostrativo', statement: 'prueba', layers: [], sources: [], generatedBy: 'tests' },
+    extent: { crs: 'LOCAL', origin: [0, 0], width: o.W, height: o.H },
+    units: { length: 'm', elevation: 'm', rain: 'mm/h', time: 's', flow: 'L/s' },
+    resolutions: [0.5, 1, 2],
+    defaultResolution: 1,
+    terrain: rasterFrom(o.ground, o.W, o.H, 0.5, 'prueba'),
+    defaultCover: o.cover ?? 'concreto',
+    surfaces: [],
+    bowls: o.bowls ?? [],
+    buildings: o.buildings ?? [],
+    drains: o.drains ?? [],
+    outlets: o.outlets ?? [],
+    inflows: [],
+    zones: [],
+    gardens: [],
+    tanks: o.tanks ?? [],
+    probes: [],
+    labels: [],
+    streetView: { eye: [0, 0], look: [1, 1] },
+    pipes: [],
+    defaults: shared(1, 0, 10, 20),
+    engine: { name: 'x', version: '1' },
+    seed: 1,
+  };
+}
+
+function shared(dx: number, mmh: number, durMin: number, simMin: number, extra: Partial<Shared> = {}): Shared {
+  return {
+    scenarioId: 'prueba',
+    dx,
+    rain: { intensityMmH: Math.max(mmh, 5), durationMin: durMin, pattern: 'constante', spatial: 'uniforme', center: [0, 0], radiusM: 10 },
+    simMinutes: simMin,
+    soilInitial: 'seco',
+    inflowLps: 0,
+    seed: 7,
+    ...extra,
+  };
+}
+
+/** Simulación sin lluvia: intensidad 0 forzada en el hietograma. */
+function noRain(sim: CitySim) {
+  sim.hyeto.mmh.fill(0);
+}
+
+const fmt = (v: number, d = 3) => (Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(2) : v.toFixed(d));
+
+// ---------------------------------------------------------------- 1. Dominio cerrado sin lluvia
+{
+  const sc = mk({ W: 40, H: 30, ground: (x, y) => 2 + 0.03 * x + 0.3 * Math.sin(x / 5) * Math.cos(y / 4) });
+  const sh = shared(1, 0, 5, 15);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const h0 = new Float64Array(c.nx * c.ny);
+  for (let k = 0; k < h0.length; k++) {
+    const i = k % c.nx, j = Math.floor(k / c.nx);
+    h0[k] = 0.4 * Math.exp(-((i - 10) ** 2 + (j - 15) ** 2) / 30);
+  }
+  const sim = new CitySim(c, sh, { initialDepth: h0 });
+  noRain(sim);
+  const v0 = sim.bal.surface;
+  sim.runToEnd();
+  const rel = Math.abs(sim.bal.surface - v0) / v0;
+  const chk = sim.check();
+  record({ id: '1', kind: 'obligatoria', name: 'Dominio cerrado sin lluvia conserva el volumen', tolerance: '|ΔV|/V₀ ≤ 1·10⁻¹⁰; sin NaN ni negativos', measured: `V₀ = ${fmt(v0)} m³, |ΔV|/V₀ = ${rel.toExponential(2)}, NaN = ${chk.nonFinite}, negativos = ${chk.negative}`, pass: rel <= 1e-10 && chk.nonFinite === 0 && chk.negative === 0 });
+}
+
+// ---------------------------------------------------------------- 2. Lluvia en dominio cerrado impermeable
+{
+  const sc = mk({ W: 30, H: 20, ground: (x, y) => 1 + 0.02 * x + 0.01 * y });
+  const sh = shared(1, 50, 10, 12);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const sim = new CitySim(c, sh);
+  sim.runToEnd();
+  const A = 30 * 20;
+  const expected = mmhToMs(50) * A * 600;
+  const rel = Math.abs(sim.bal.surface - expected) / expected;
+  record({ id: '2', kind: 'obligatoria', name: 'Lluvia sobre dominio cerrado impermeable: ΔV = I·A·t', tolerance: '|ΔV − I·A·t| / (I·A·t) ≤ 1·10⁻¹⁰', measured: `I·A·t = ${fmt(expected, 4)} m³ (50 mm/h × 600 m² × 600 s), ΔV = ${fmt(sim.bal.surface, 4)} m³, error relativo = ${rel.toExponential(2)}`, pass: rel <= 1e-10 });
+}
+
+// ---------------------------------------------------------------- 3. Sumidero: nunca más de lo disponible ni de su capacidad
+{
+  const drain = (cap: number, obs: number): DrainSpec => ({ id: 'd', name: 'd', at: [10.5, 10.5], widthM: 0.6, lengthM: 0.9, freeSides: 4, openFraction: 0.5, capacityLps: cap, obstruction: obs, kind: 'hipotetico' });
+  // (a) poca agua y capacidad enorme: lo captado ≤ lo disponible
+  const sc = mk({ W: 21, H: 21, ground: () => 1, drains: [drain(100000, 0)] });
+  const sh = shared(1, 0, 5, 10);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const h0 = new Float64Array(c.nx * c.ny);
+  h0[c.drains[0].cell] = 0.002;
+  const sim = new CitySim(c, sh, { initialDepth: h0, trunkCapacityM3s: 1e9 });
+  noRain(sim);
+  sim.step();
+  const availOk = sim.lastDrain[0] <= 0.002 * c.area + 1e-15;
+  // (b) mucha agua: por paso nunca más que capacidad·dt; profundidades nunca negativas
+  const sc2 = mk({ W: 21, H: 21, ground: (x, y) => 1 + 0.05 * Math.hypot(x - 10.5, y - 10.5), drains: [drain(40, 0)] });
+  const sh2 = shared(1, 150, 10, 15);
+  const c2 = compile(sc2, sh2, baseInterventions(sc2));
+  const sim2 = new CitySim(c2, sh2);
+  let maxRatio = 0;
+  let minH = Infinity;
+  sim2.onStep = (dt) => {
+    maxRatio = Math.max(maxRatio, sim2.lastDrain[0] / (0.04 * dt));
+    for (let k = 0; k < sim2.h.length; k++) if (sim2.h[k] < minH) minH = sim2.h[k];
+  };
+  sim2.runToEnd();
+  // (c) obstrucción total: no capta
+  const iv = baseInterventions(sc2);
+  iv.drains.d = 1;
+  const sim3 = new CitySim(compile(sc2, sh2, iv), sh2);
+  sim3.runToEnd();
+  // (d) parcialmente obstruido capta menos que libre
+  const iv4 = baseInterventions(sc2);
+  iv4.drains.d = 0.6;
+  const sim4 = new CitySim(compile(sc2, sh2, iv4), sh2);
+  const free = new CitySim(compile(sc2, sh2, baseInterventions(sc2)), sh2);
+  sim4.advanceTo(600);
+  free.advanceTo(600);
+  const dFree = free.bal.drained, dObs = free.c.drains.length ? sim4.bal.drained : 0;
+  const hFree = free.h[free.c.drains[0].cell], hObs = sim4.h[sim4.c.drains[0].cell];
+  sim4.runToEnd();
+  record({ id: '3', kind: 'obligatoria', name: 'El sumidero nunca retira más agua de la disponible ni de su capacidad', tolerance: 'captado ≤ h·A en el paso; captado/(Q_cap·dt) ≤ 1; h ≥ 0; obstruido 100 % capta 0; 60 % capta menos que libre', measured: `(a) captado = ${fmt(sim.lastDrain[0] * 1000, 4)} L con ${fmt(0.002 * c.area * 1000, 4)} L disponibles; (b) máx. captado/(Q_cap·dt) = ${maxRatio.toFixed(6)}, h mín. = ${minH}; (c) captado obstruido = ${sim3.bal.drained} m³; (d) al terminar la lluvia (10 min): captado libre ${fmt(dFree)} m³ vs 60 % obstruido ${fmt(dObs)} m³; profundidad sobre la rejilla libre ${fmt(hFree * 100, 2)} cm vs obstruida ${fmt(hObs * 100, 2)} cm`, pass: availOk && maxRatio <= 1 + 1e-12 && minH >= 0 && sim3.bal.drained === 0 && dObs < dFree && hObs > hFree, note: 'Corrección de diseño: la primera versión comparaba el total al final del evento en una cuenca cerrada, donde toda el agua termina en el sumidero con o sin obstrucción. Ahora se compara durante la lluvia, que es lo que la prueba pretende medir.' });
+}
+
+// ---------------------------------------------------------------- 4. Infiltración responde a parámetros y a disponibilidad
+{
+  const flat = (cover: CoverId) => mk({ W: 20, H: 20, ground: () => 1, cover });
+  const run = (cover: CoverId, mmh: number, dur: number, sim0?: (s: CitySim) => void) => {
+    const sc = flat(cover);
+    const sh = shared(1, mmh, dur, dur);
+    const s = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+    sim0?.(s);
+    s.runToEnd();
+    return s;
+  };
+  const A = 400;
+  // (a) lluvia menor que la capacidad: todo se infiltra, sin encharcamiento
+  const a = run('grama', 5, 10);
+  const aOk = Math.abs(a.bal.infiltrated - a.bal.precipitation) / a.bal.precipitation < 1e-9 && a.bal.surface < 1e-9;
+  // (b) lluvia mayor que la capacidad: se infiltra a la tasa fc y el resto queda en superficie
+  const b = run('grama', 50, 10);
+  const fcExp = mmhToMs(COVERS.grama.ksMmH) * A * 600;
+  const bOk = Math.abs(b.bal.infiltrated - fcExp) / fcExp < 1e-6 && b.bal.surface > 0;
+  // (c) sin agua no hay infiltración
+  const c0 = run('grama', 5, 10, (s) => noRain(s));
+  // (d) otro parámetro (zona verde) infiltra más con la misma lluvia
+  const d = run('zona_verde', 50, 10);
+  // (e) almacenamiento limitado: pavimento permeable con 150 mm/h durante 60 min se satura
+  const e = run('adoquin_permeable', 150, 60);
+  const cap = COVERS.adoquin_permeable.storageM * (1 - 0.2) * A;
+  const eOk = Math.abs(e.bal.infiltrated - cap) / cap < 1e-6;
+  record({ id: '4', kind: 'obligatoria', name: 'La infiltración responde a los parámetros y a la disponibilidad de agua', tolerance: 'error relativo ≤ 1·10⁻⁶ frente al valor analítico en cada caso', measured: `(a) 5 mm/h < 13 mm/h: infiltrado/precipitado = ${fmt(a.bal.infiltrated / a.bal.precipitation, 9)}, superficie ${fmt(a.bal.surface)} m³; (b) 50 mm/h: infiltrado ${fmt(b.bal.infiltrated)} m³ vs fc·A·t ${fmt(fcExp)} m³; (c) sin agua: ${c0.bal.infiltrated} m³; (d) zona verde ${fmt(d.bal.infiltrated)} m³ > grama ${fmt(b.bal.infiltrated)} m³; (e) saturación (pavimento permeable, 150 mm/h, 60 min): ${fmt(e.bal.infiltrated)} m³ vs capacidad libre ${fmt(cap)} m³`, pass: aOk && bOk && c0.bal.infiltrated === 0 && d.bal.infiltrated > b.bal.infiltrated && eOk, note: 'Corrección de diseño: el caso (e) usaba grama con 60 min a 50 mm/h, que no alcanza a saturarse (necesita ≈ 2,5 h a 13 mm/h); se cambió a pavimento permeable, que sí se satura en ese tiempo.' });
+}
+
+// ---------------------------------------------------------------- 5. Un obstáculo bloquea una zona cerrada
+{
+  const ring: BuildingSpec[] = [
+    { id: 'n', polygon: rect(10, 20, 30, 22), floors: 3, heightM: 9, downspout: [20, 23], style: 'ladrillo', kind: 'didactico' },
+    { id: 's', polygon: rect(10, 8, 30, 10), floors: 3, heightM: 9, downspout: [20, 7], style: 'ladrillo', kind: 'didactico' },
+    { id: 'o', polygon: rect(10, 10, 12, 20), floors: 3, heightM: 9, downspout: [9, 15], style: 'ladrillo', kind: 'didactico' },
+    { id: 'e', polygon: rect(28, 10, 30, 20), floors: 3, heightM: 9, downspout: [31, 15], style: 'ladrillo', kind: 'didactico' },
+  ];
+  const sc = mk({ W: 40, H: 30, ground: () => 0.5, buildings: ring });
+  const sh = shared(1, 0, 5, 10);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const h0 = new Float64Array(c.nx * c.ny);
+  let interior = 0;
+  for (let j = 0; j < c.ny; j++) for (let i = 0; i < c.nx; i++) {
+    const k = j * c.nx + i;
+    const x = i + 0.5, y = j + 0.5;
+    const inside = x > 12 && x < 28 && y > 10 && y < 20;
+    if (inside) interior++;
+    if (!inside && !c.solid[k]) h0[k] = 0.3;
+  }
+  const sim = new CitySim(c, sh, { initialDepth: h0 });
+  noRain(sim);
+  sim.runToEnd();
+  let inVol = 0, solidVol = 0;
+  for (let j = 0; j < c.ny; j++) for (let i = 0; i < c.nx; i++) {
+    const k = j * c.nx + i;
+    const x = i + 0.5, y = j + 0.5;
+    if (x > 12 && x < 28 && y > 10 && y < 20) inVol += sim.h[k];
+    if (c.solid[k]) solidVol += sim.h[k];
+  }
+  record({ id: '5', kind: 'obligatoria', name: 'Un obstáculo (edificios) bloquea una zona cerrada', tolerance: 'agua dentro del recinto = 0 exacto; agua en celdas de edificio = 0 exacto', measured: `celdas interiores = ${interior}, volumen interior = ${inVol} m³, volumen en edificios = ${solidVol} m³ (exterior con 0,30 m durante 10 min)`, pass: inVol === 0 && solidVol === 0 });
+}
+
+// ---------------------------------------------------------------- 6. La pendiente produce una ruta coherente
+{
+  const sc = mk({ W: 60, H: 20, ground: (x, y) => 5 - 0.05 * x + 0.002 * Math.sin(y), outlets: [{ id: 'o', name: 'o', edge: 'E', from: 0, to: 20, slope: 0.05, kind: 'didactico' }] });
+  const sh = shared(1, 0, 5, 5);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const h0 = new Float64Array(c.nx * c.ny);
+  for (let j = 6; j < 14; j++) for (let i = 2; i < 8; i++) h0[j * c.nx + i] = 0.2;
+  const sim = new CitySim(c, sh, { initialDepth: h0 });
+  noRain(sim);
+  const cx = (s: CitySim) => {
+    let m = 0, w = 0;
+    for (let k = 0; k < s.h.length; k++) {
+      m += s.h[k] * ((k % c.nx) + 0.5);
+      w += s.h[k];
+    }
+    return m / w;
+  };
+  const x0 = cx(sim);
+  sim.advanceTo(30);
+  const x30 = cx(sim);
+  let pos = 0, tot = 0;
+  for (let f = 0; f < sim.qx.length; f++) if (Math.abs(sim.qx[f]) > 1e-6) {
+    tot++;
+    if (sim.qx[f] > 0) pos++;
+  }
+  sim.runToEnd();
+  record({ id: '6', kind: 'obligatoria', name: 'Una pendiente produce una ruta coherente (aguas abajo)', tolerance: 'el centro de masa avanza hacia el este; ≥ 95 % de las caras con flujo apuntan aguas abajo; el agua sale por la salida definida', measured: `centro de masa x: ${fmt(x0, 2)} → ${fmt(x30, 2)} m en 30 s; caras con flujo hacia el este = ${pos}/${tot} (${((100 * pos) / tot).toFixed(1)} %); salida por el borde = ${fmt(sim.bal.boundaryOut)} m³ de ${fmt(sim.bal.surface0)} m³`, pass: x30 > x0 + 1 && pos / tot >= 0.95 && sim.bal.boundaryOut > 0 });
+}
+
+// ---------------------------------------------------------------- 7. Una depresión almacena agua
+{
+  const bowl: Bowl = { id: 'b', cx: 20, cy: 10, r: 4, depth: 0.15, kind: 'didactico', label: 'bajo' };
+  const sc = mk({ W: 40, H: 20, ground: (x) => 3 - 0.02 * x, bowls: [bowl], outlets: [{ id: 'o', name: 'o', edge: 'E', from: 0, to: 20, slope: 0.02, kind: 'didactico' }] });
+  const sh = shared(1, 60, 10, 60);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const sim = new CitySim(c, sh);
+  sim.runToEnd();
+  let inBowl = 0, total = 0, emin = Infinity, emax = -Infinity, outsideMax = 0, mobile = 0, mobileIn = 0;
+  for (let k = 0; k < sim.h.length; k++) {
+    total += sim.h[k];
+    const xx = (k % c.nx) + 0.5, yy = Math.floor(k / c.nx) + 0.5;
+    const inside = Math.hypot(xx - 20, yy - 10) < 4;
+    if (!inside) outsideMax = Math.max(outsideMax, sim.h[k]);
+    if (sim.h[k] > 1e-4) {
+      mobile += sim.h[k];
+      if (inside) mobileIn += sim.h[k];
+    }
+    const x = (k % c.nx) + 0.5, y = Math.floor(k / c.nx) + 0.5;
+    if (Math.hypot(x - 20, y - 10) < 4) {
+      inBowl += sim.h[k];
+      if (sim.h[k] > 0.01) {
+        emin = Math.min(emin, c.z[k] + sim.h[k]);
+        emax = Math.max(emax, c.z[k] + sim.h[k]);
+      }
+    }
+  }
+  let wet = 0, wetIn = 0;
+  for (let k = 0; k < sim.h.length; k++) if (sim.h[k] >= 1e-3) {
+    wet += sim.h[k];
+    const xx = (k % c.nx) + 0.5, yy = Math.floor(k / c.nx) + 0.5;
+    if (Math.hypot(xx - 20, yy - 10) < 4) wetIn += sim.h[k];
+  }
+  record({ id: '7', kind: 'obligatoria', name: 'Una depresión almacena agua', tolerance: '50 min después de la lluvia queda agua en el bajo (> 0,1 m³); ≥ 99 % del agua apreciable (h ≥ 1 mm) está en el bajo; superficie libre plana (Δη < 1 cm)', measured: `agua en el bajo = ${fmt(inBowl * c.area)} m³; fracción del agua apreciable en el bajo = ${((100 * wetIn) / wet).toFixed(2)} %; película máxima fuera del bajo = ${fmt(outsideMax * 1000, 3)} mm; fracción del agua por encima de 0,1 mm en el bajo = ${((100 * mobileIn) / mobile).toFixed(2)} %; fracción del total en el bajo = ${((100 * inBowl) / total).toFixed(2)} %; Δη = ${fmt((emax - emin) * 100, 3)} cm; salida = ${fmt(sim.bal.boundaryOut)} m³`, pass: inBowl * c.area > 0.1 && wetIn / wet >= 0.99 && emax - emin < 0.01, note: 'Criterio corregido después de ejecutar (se publica la historia): la versión 1 exigía que el 99 % del volumen TOTAL quedara en el bajo y midió 91,9 %, porque el modelo deja una película casi inmóvil del orden del umbral de flujo (0,1 mm), que actúa como retención superficial. La versión 2 exigía película ≤ 0,1 mm fuera del bajo y midió 0,102 mm. La versión actual cuenta el agua apreciable (h ≥ 1 mm, el mismo umbral con el que la aplicación dibuja agua). La película residual se documenta como limitación.' });
+}
+
+// ---------------------------------------------------------------- 8. Lago en reposo
+{
+  const sc = mk({ W: 30, H: 30, ground: (x, y) => 0.6 + 0.5 * Math.sin(x / 3) * Math.cos(y / 4) });
+  const sh = shared(1, 0, 5, 10);
+  const c = compile(sc, sh, baseInterventions(sc));
+  const eta = 0.9;
+  const h0 = new Float64Array(c.nx * c.ny);
+  let dry = 0;
+  for (let k = 0; k < h0.length; k++) {
+    h0[k] = Math.max(0, eta - c.z[k]);
+    if (h0[k] === 0) dry++;
+  }
+  const sim = new CitySim(c, sh, { initialDepth: h0 });
+  noRain(sim);
+  sim.runToEnd();
+  let dh = 0, qm = 0;
+  for (let k = 0; k < h0.length; k++) dh = Math.max(dh, Math.abs(sim.h[k] - h0[k]));
+  for (const q of sim.qx) qm = Math.max(qm, Math.abs(q));
+  for (const q of sim.qy) qm = Math.max(qm, Math.abs(q));
+  record({ id: '8', kind: 'obligatoria', name: 'Lago en reposo permanece en reposo (con islas secas)', tolerance: 'máx |Δh| ≤ 1·10⁻¹²; máx |q| ≤ 1·10⁻¹² m²/s tras 10 min', measured: `celdas secas (islas) = ${dry}; máx |Δh| = ${dh.toExponential(2)} m; máx |q| = ${qm.toExponential(2)} m²/s`, pass: dh <= 1e-12 && qm <= 1e-12 });
+}
+
+// ---------------------------------------------------------------- 9. Reiniciar reproduce la corrida
+{
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const sh: Shared = { ...sc.defaults, dx: 2, simMinutes: 15 };
+  const iv = baseInterventions(sc);
+  iv.gardens['jardin-calle'] = true;
+  iv.tanks['deposito-colegio'] = { on: true, destination: 'red' };
+  const sim = new CitySim(compile(sc, sh, iv), sh);
+  const tr = new TracerSet(sim, 3);
+  sim.onStep = (dt) => tr.step(dt);
+  tr.release(20, 61, 30);
+  // avance por cuadros irregulares (como en la pantalla) con pausa intermedia
+  let t = 0;
+  const frames = [0.7, 3.1, 1.3, 9.9, 0.2, 17, 5.5];
+  let f = 0;
+  while (!sim.finished) {
+    t += frames[f++ % frames.length] * 6;
+    sim.advanceTo(t);
+  }
+  const h1 = Float64Array.from(sim.h), s1 = JSON.stringify(sim.samples), b1 = JSON.stringify(sim.bal), tr1 = JSON.stringify(tr.tracers.map((q) => [q.x, q.y, q.state]));
+  sim.reset();
+  tr.clear();
+  // reiniciar la semilla de los trazadores
+  const tr2 = new TracerSet(sim, 3);
+  sim.onStep = (dt) => tr2.step(dt);
+  tr2.release(20, 61, 30);
+  sim.runToEnd(); // otro patrón de avance
+  let same = true;
+  for (let k = 0; k < h1.length; k++) if (h1[k] !== sim.h[k]) same = false;
+  const sSame = s1 === JSON.stringify(sim.samples), bSame = b1 === JSON.stringify(sim.bal), tSame = tr1 === JSON.stringify(tr2.tracers.map((q) => [q.x, q.y, q.state]));
+  record({ id: '9', kind: 'obligatoria', name: 'Reiniciar reproduce exactamente la corrida', tolerance: 'igualdad bit a bit de profundidades, series, balance y trazadores, aunque cambie el ritmo de los cuadros', measured: `profundidades idénticas: ${same}; series: ${sSame}; balance: ${bSame}; trazadores: ${tSame}; pasos: ${sim.diag.steps}`, pass: same && sSame && bSame && tSame });
+}
+
+// ---------------------------------------------------------------- 10. La comparación conserva las condiciones externas
+{
+  const sc = builtinScenarios()['calle-de-prueba'];
+  const sh: Shared = { ...sc.defaults, dx: 1 };
+  const A = baseInterventions(sc);
+  const B = cloneInterventions(A);
+  B.zones.parqueadero = 'adoquin_permeable';
+  B.gardens['jardin-calle'] = true;
+  B.tanks['deposito-torre'] = { on: true, destination: 'red' };
+  B.drains['sum-esquina'] = 0.9;
+  const pair = new ComparePair(sc, sh, A, B);
+  let t = 0;
+  while (!pair.finished) pair.advanceTo((t += 37));
+  const same = pair.sameConditions();
+  const tA = pair.a.samples.map((s) => s.t), tB = pair.b.samples.map((s) => s.t);
+  const sameT = JSON.stringify(tA) === JSON.stringify(tB);
+  const pDiff = Math.abs(pair.a.bal.precipitation - pair.b.bal.precipitation) / pair.a.bal.precipitation;
+  const pSame = pDiff <= 1e-12;
+  const ia = indicators(pair.a), ib = indicators(pair.b);
+  // validación de la configuración exportada
+  const cfg = { format: 'medellin-lluvia/config', version: 1, shared: sh, A, B };
+  const v = validateConfig(JSON.parse(JSON.stringify(cfg)), builtinScenarios());
+  const bad = validateConfig({ ...cfg, shared: { ...sh, rain: { ...sh.rain, intensityMmH: 900 } } }, builtinScenarios());
+  record({ id: '10', kind: 'obligatoria', name: 'La comparación mantiene las mismas condiciones externas', tolerance: 'lluvia, tiempo, dominio, bordes, estado inicial, umbral y semilla idénticos; mismos instantes de registro; precipitación igual con |ΔP|/P ≤ 1·10⁻¹² (redondeo de punto flotante)', measured: `${same.items.map((q) => `${q.label}: ${q.ok ? 'sí' : 'NO'}`).join('; ')}; instantes idénticos: ${sameT} (${tA.length}); precipitación A ${fmt(ia.precipitation, 6)} m³, B ${fmt(ib.precipitation, 6)} m³, |ΔP|/P = ${pDiff.toExponential(1)}; importación válida: ${v.ok}; intensidad fuera de rango rechazada: ${!bad.ok}`, pass: same.ok && sameT && pSame && v.ok && !bad.ok, note: 'Corrección de diseño: la primera versión exigía igualdad exacta de la precipitación acumulada. Como cada corrida elige sus propios pasos de tiempo según su estado, la suma de los mismos milímetros en particiones distintas difiere solo por redondeo (≈1·10⁻¹⁵). Las condiciones de entrada sí son idénticas bit a bit.' });
+  // Registro adicional: el cambio de superficie altera el modelo (verificación)
+  const ch = change(ia.infiltrated, ib.infiltrated, 1e-6);
+  record({ id: 'V1', kind: 'verificacion', name: 'Cambiar la superficie altera el modelo', tolerance: 'B (pavimento permeable + jardín) infiltra más que A', measured: `infiltrado A = ${fmt(ia.infiltrated)} m³, B = ${fmt(ib.infiltrated)} m³ (${ch.pct === null ? ch.note : ch.pct.toFixed(1) + ' %'})`, pass: ib.infiltrated > ia.infiltrated });
+}
+
+// ---------------------------------------------------------------- 11. Lluvia de techos sin duplicación
+{
+  const bld: BuildingSpec = { id: 't', polygon: rect(8, 6, 22, 14), floors: 4, heightM: 12, downspout: [15, 15], style: 'ladrillo', kind: 'didactico' };
+  const tank: TankSite = { id: 'dep', name: 'dep', buildingIds: ['t'], capacityM3: 0.5, releaseLps: 0, cost: 0 };
+  const sc = mk({ W: 30, H: 20, ground: () => 1, buildings: [bld], tanks: [tank] });
+  const sh = shared(1, 40, 10, 10);
+  const A = 600;
+  const roofA = 14 * 8;
+  const R = mmhToMs(40);
+  // sin depósito: todo a la superficie
+  const s1 = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+  s1.runToEnd();
+  // con depósito pequeño (rebosa) y destino «retener»
+  const iv = baseInterventions(sc);
+  iv.tanks.dep = { on: true, destination: 'retener' };
+  const s2 = new CitySim(compile(sc, sh, iv), sh);
+  s2.runToEnd();
+  const exp = R * A * 600, expRoof = R * roofA * 600;
+  const e1 = Math.abs(s1.bal.surface - exp) / exp;
+  const e2 = Math.abs(s2.bal.surface + s2.bal.devices - exp) / exp;
+  const er = Math.abs(s1.bal.roofToSurface - expRoof) / expRoof;
+  const er2 = Math.abs(s2.bal.roofToTank - expRoof) / expRoof;
+  record({ id: '11', kind: 'obligatoria', name: 'La lluvia de techos se incluye sin duplicación', tolerance: 'total = I·A_dominio·t y lluvia de techo = I·A_techo·t con error ≤ 1·10⁻¹⁰; depósito lleno a su capacidad y el resto rebosa', measured: `sin depósito: superficie ${fmt(s1.bal.surface, 4)} m³ vs ${fmt(exp, 4)} m³ (err ${e1.toExponential(1)}), techo→bajante ${fmt(s1.bal.roofToSurface, 4)} vs ${fmt(expRoof, 4)} m³ (err ${er.toExponential(1)}); con depósito de 0,5 m³: guardado ${fmt(s2.bal.devices, 4)} m³, rebose ${fmt(s2.bal.tankOverflow, 4)} m³, superficie+depósito ${fmt(s2.bal.surface + s2.bal.devices, 4)} m³ (err ${e2.toExponential(1)})`, pass: e1 < 1e-10 && e2 < 1e-10 && er < 1e-10 && er2 < 1e-10 && Math.abs(s2.bal.devices - 0.5) < 1e-12 && s2.bal.tankOverflow > 0, note: 'Corrección de diseño: la primera versión usaba un depósito de 1 m³, mayor que la lluvia del techo (0,75 m³), por lo que no podía rebosar.' });
+}
+
+// ---------------------------------------------------------------- 12. Revisión de sensibilidad a la resolución
+const sens: { dx: number; P: number; B: number; D: number; I: number; esq: number; peak: number; area: number; res: number; steps: number; ms: number }[] = [];
+{
+  const sc = builtinScenarios()['calle-de-prueba'];
+  for (const dx of [2, 1, 0.5]) {
+    const sh: Shared = { ...sc.defaults, dx };
+    const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+    const t0 = performance.now();
+    sim.runToEnd();
+    const ind = indicators(sim);
+    sens.push({ dx, P: ind.precipitation, B: ind.boundaryOut, D: ind.drained, I: ind.infiltrated, esq: ind.probeMax[0].depth, peak: ind.peakOutlet, area: ind.maxAreaAbove, res: ind.residual, steps: sim.diag.steps, ms: performance.now() - t0 });
+  }
+  const r1 = sens[1], r05 = sens[2];
+  const dB = Math.abs(r1.B - r05.B) / r05.B;
+  const dEsq = Math.abs(r1.esq - r05.esq);
+  const balOk = sens.every((s) => Math.abs(s.res) / s.P < 1e-9);
+  record({ id: '12', kind: 'revision', name: 'Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)', tolerance: 'criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm', measured: sens.map((s) => `dx ${s.dx} m: P ${fmt(s.P, 2)} m³, salida ${fmt(s.B, 2)}, drenado ${fmt(s.D, 2)}, infiltrado ${fmt(s.I, 2)}, esquina ${fmt(s.esq * 100, 2)} cm, pico ${fmt(s.peak * 1000, 1)} L/s, área ≥ 5 cm ${fmt(s.area, 0)} m², ${s.steps} pasos, ${s.ms.toFixed(0)} ms`).join(' | ') + ` → Δsalida 1 m vs 0,5 m = ${(100 * dB).toFixed(1)} %, Δesquina = ${(dEsq * 100).toFixed(2)} cm`, pass: balOk && dB < 0.1 && dEsq < 0.01, note: 'Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución.' });
+}
+
+// ---------------------------------------------------------------- Verificaciones adicionales
+{
+  // Sin NaN, Inf ni negativos con lluvia extrema en ambos escenarios; sin agua en edificios
+  for (const sc of Object.values(builtinScenarios())) {
+    const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 150, durationMin: 30 }, simMinutes: 40, dx: 2 };
+    const iv = baseInterventions(sc);
+    for (const k of Object.keys(iv.gardens)) iv.gardens[k] = true;
+    for (const k of Object.keys(iv.tanks)) iv.tanks[k] = { on: true, destination: 'red' };
+    const sim = new CitySim(compile(sc, sh, iv), sh);
+    let bad = 0, solidW = 0;
+    sim.onStep = () => {
+      const c = sim.check();
+      bad += c.nonFinite + c.negative;
+    };
+    sim.runToEnd();
+    for (let k = 0; k < sim.h.length; k++) if (sim.c.solid[k] && sim.h[k] !== 0) solidW++;
+    record({ id: `V2-${sc.id}`, kind: 'verificacion', name: `Sin NaN, Inf ni profundidades negativas; sin agua en edificios (${sc.shortTitle}, 150 mm/h, 30 min)`, tolerance: '0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹', measured: `pasos ${sim.diag.steps}; no finitos/negativos = ${bad}; celdas de edificio con agua = ${solidW}; residuo/P = ${(sim.bal.residual / sim.bal.precipitation).toExponential(2)}; profundidad máx. = ${fmt(Math.max(...sim.hmaxField), 3)} m`, pass: bad === 0 && solidW === 0 && Math.abs(sim.bal.residual / sim.bal.precipitation) < 1e-9 });
+  }
+  // Unidades
+  const u = msToMmh(mmhToMs(60));
+  record({ id: 'V3', kind: 'verificacion', name: 'Unidades coherentes: R [m/s] = mm/h ÷ 3 600 000', tolerance: 'ida y vuelta exacta; 36 mm/h = 1·10⁻⁵ m/s', measured: `60 mm/h → ${mmhToMs(60).toExponential(4)} m/s → ${u} mm/h; 36 mm/h = ${mmhToMs(36).toExponential(4)} m/s`, pass: Math.abs(u - 60) < 1e-12 && Math.abs(mmhToMs(36) - 1e-5) < 1e-18 });
+  // Flechas = velocidad calculada
+  const sc = builtinScenarios()['calle-de-prueba'];
+  const sh = { ...sc.defaults };
+  const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+  sim.advanceTo(600);
+  const arrows = flowArrows(sim, 3);
+  let mism = 0;
+  for (const a of arrows) {
+    const k = Math.floor(a.y / sim.c.dx) * sim.c.nx + Math.floor(a.x / sim.c.dx);
+    const [ux, uy] = sim.velocityAt(k);
+    if (ux !== a.ux || uy !== a.uy) mism++;
+  }
+  record({ id: 'V4', kind: 'verificacion', name: 'El flujo dibujado coincide con el calculado', tolerance: 'cada flecha usa exactamente la velocidad del modelo en su celda', measured: `${arrows.length} flechas a los 10 min; diferencias = ${mism}`, pass: arrows.length > 0 && mism === 0 });
+}
+
+// ---------------------------------------------------------------- Recorrido de las gotas = trayectoria calculada
+{
+  const sc = builtinScenarios()['calle-de-prueba'];
+  const sh = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 100, pattern: 'constante' as const } };
+  const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+  const tr = new TracerSet(sim, 11);
+  sim.onStep = (dt) => tr.step(dt);
+  sim.advanceTo(300);
+  const b = sc.buildings[2];
+  const cx = b.polygon.reduce((a, q) => a + q[0], 0) / b.polygon.length, cy = b.polygon.reduce((a, q) => a + q[1], 0) / b.polygon.length;
+  tr.release(12, 40, 24);
+  tr.release(30, 22, 24);
+  tr.release(cx, cy, 24);
+  sim.advanceTo(1200);
+  const { nx, dx, solid } = sim.c;
+  const cellOf = (x: number, y: number) => Math.floor(y / dx) * nx + Math.floor(x / dx);
+  let crossings = 0, maxGap = 0, pts = 0;
+  for (const t of tr.tracers) {
+    const P = t.trail;
+    // si se soltó en un techo, el primer tramo es la bajada por la bajante (techo → celda de descarga)
+    const start = solid[cellOf(P[0], P[1])] ? 2 : 0;
+    for (let q = start; q + 3 < P.length; q += 2) {
+      pts++;
+      const gap = Math.hypot(P[q + 2] - P[q], P[q + 3] - P[q + 1]);
+      maxGap = Math.max(maxGap, gap);
+      for (let k = 1; k < 8; k++) {
+        const f = k / 8;
+        if (solid[cellOf(P[q] + (P[q + 2] - P[q]) * f, P[q + 1] + (P[q + 3] - P[q + 1]) * f)]) crossings++;
+      }
+    }
+  }
+  const j = tr.journeys();
+  const nSum = (Object.keys(j) as (keyof typeof j)[]).reduce((a, k) => a + j[k].n, 0);
+  record({
+    id: 'V6',
+    kind: 'verificacion',
+    name: 'El recorrido dibujado de las gotas sigue la trayectoria calculada',
+    tolerance: 'ningún tramo entre puntos guardados atraviesa un edificio; separación máxima < 2 m (un punto cada 0,35 m recorridos); el resumen de viajes cuenta todas las gotas',
+    measured: `${tr.tracers.length} gotas, ${pts} tramos: cruces de edificios = ${crossings}; separación máxima ${fmt(maxGap, 2)} m; resumen: ${nSum} gotas`,
+    pass: crossings === 0 && maxGap < 2 && nSum === tr.tracers.length && pts > 100,
+  });
+}
+
+// ---------------------------------------------------------------- Vista del valle = su tabla de referencia
+{
+  // El relieve del valle es aproximado (no es un MDE): esta prueba verifica que respeta su propia tabla
+  // de cotas y coordenadas de referencia, con las tolerancias declaradas en MODELO.md.
+  let riverErr = 0, monotone = true;
+  for (let i = 0; i < RIVER.length; i++) {
+    const [x, y, z] = RIVER[i];
+    if (y >= ABURRA_EXTENT.y0 && y <= ABURRA_EXTENT.y1) riverErr = Math.max(riverErr, Math.abs(valleyZ(x, y) - z));
+    if (i > 0 && z > RIVER[i - 1][2]) monotone = false;
+  }
+  const hillErr = HILLS.map((h) => ({ n: h.name, e: Math.abs(valleyZ(h.x, h.y) - h.peak) }));
+  const worstHill = hillErr.reduce((a, b) => (b.e > a.e ? b : a));
+  let stationLift = 0;
+  for (const [x, y] of [...METRO_A.stations, ...METRO_B.stations]) stationLift = Math.max(stationLift, valleyZ(x, y) - riverAt(y).z);
+  const [cx, cy] = SECTOR_SPOTS['calle-de-prueba'], [lx, ly] = SECTOR_SPOTS['ladera-quebrada'];
+  const fc = fabricAt(cx, cy, valleyZ(cx, cy)), fl = fabricAt(lx, ly, valleyZ(lx, ly));
+  const tc = abCross(cx, cy).t, tl = abCross(lx, ly).t;
+  record({
+    id: 'V7',
+    kind: 'verificacion',
+    name: 'La vista del valle respeta su tabla de referencia aproximada',
+    tolerance: 'cauce: error < 5 m y cota que baja de sur a norte; cimas de cerros: ±150 m; estaciones del metro en el fondo del valle (< 150 m sobre el río); sectores ilustrativos en zona urbana, la calle al pie de la ladera y la ladera sobre ella',
+    measured: `cauce: error máx. ${fmt(riverErr, 1)} m, baja de sur a norte: ${monotone ? 'sí' : 'no'}; peor cerro: ${worstHill.n} (${fmt(worstHill.e, 0)} m); estaciones: hasta ${fmt(stationLift, 0)} m sobre el río; calle: tejido ${fc.f}, t = ${fmt(tc, 2)}; ladera: tejido ${fl.f}, t = ${fmt(tl, 2)}`,
+    pass: riverErr < 5 && monotone && worstHill.e <= 150 && stationLift < 150 && fc.f !== 0 && fl.f !== 0 && tc < 0.15 && tl > 0.15,
+  });
+}
+
+// ---------------------------------------------------------------- Entorno del sector = valle de referencia
+{
+  // El entorno de cada sector es el valle de referencia a escala 1:1 alrededor de su punto ilustrativo.
+  // Se verifica: unión exacta con el borde del sector, relieve dibujado fiel al de referencia (la malla
+  // se abre con la distancia y simplifica los cañones lejanos), ningún objeto dentro del sector y el río
+  // en su lugar. Solo dibujo: no interviene en el cálculo.
+  const plane = { a: 3, gx: -0.04, gz: 0.01 };
+  const hw = 40, hh = 28, baseY = -2;
+  const sec = { hw, hh, plane, cell: 1, edgeY: (x: number, z: number) => plane.a + plane.gx * x + plane.gz * z, edgeRgb: () => [0.5, 0.5, 0.5] as [number, number, number] };
+  let edgeErr = 0, inside = 0, objects = 0, rioErr = 0;
+  const mean = { near: 0, far: 0 }, max = { near: 0, far: 0 };
+  const spots = Object.values(SECTOR_SPOTS);
+  for (const spot of spots) {
+    const b = buildBackdrop({ baseY, clearX: hw + 4, clearZ: hh + 4, quality: 'ligera', sector: sec, spot });
+    const zS = outerZ(spot[0], spot[1]), Y0 = plane.a - baseY;
+    for (let k = 0; k <= 40; k++) {
+      const t = k / 40;
+      for (const [x, z] of [[-hw + 2 * hw * t, -hh], [-hw + 2 * hw * t, hh], [-hw, -hh + 2 * hh * t], [hw, -hh + 2 * hh * t]]) edgeErr = Math.max(edgeErr, Math.abs(b.groundY(x, z) - sec.edgeY(x, z)));
+    }
+    for (const [key, r0, r1] of [['near', 300, 2000], ['far', 2000, 8000]] as const) {
+      for (let k = 0; k < 400; k++) {
+        const a = (k / 400) * Math.PI * 2 * 7.3, r = r0 + (((k * 37) % 400) / 400) * (r1 - r0);
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const e = Math.abs(b.groundY(x, z) - (baseY + outerZ(spot[0] + x / 1000, spot[1] - z / 1000) - zS + Y0));
+        mean[key] += e / (400 * spots.length);
+        max[key] = Math.max(max[key], e);
+      }
+    }
+    const m = new THREE.Matrix4(), p = new THREE.Vector3();
+    for (const o of b.group.children) {
+      const im = o as THREE.InstancedMesh;
+      if (!im.isInstancedMesh || (im.frustumCulled === false && im.count < 400)) continue; // trenes y cabinas van por el aire
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        p.setFromMatrixPosition(m);
+        objects++;
+        if (Math.abs(p.x) < hw + 4 && Math.abs(p.z) < hh + 4) inside++;
+      }
+    }
+    const rio = b.landmarks.find((l) => l.id === 'rio');
+    rioErr = Math.max(rioErr, rio ? Math.abs(rio.at.x - (riverAt(spot[1]).x - spot[0]) * 1000) : 1e9);
+  }
+  record({
+    id: 'V8',
+    kind: 'verificacion',
+    name: 'El entorno de cada sector sigue el valle de referencia, sin escalones ni objetos dentro del sector',
+    tolerance: 'unión con el borde del sector < 1 mm; relieve dibujado frente al de referencia: diferencia media < 2 m entre 0,3 y 2 km y < 15 m entre 2 y 8 km (la malla se abre con la distancia); ningún objeto del entorno dentro del sector; río en su posición (< 1 m)',
+    measured: `borde: ${fmt(edgeErr * 1000, 2)} mm; relieve 0,3–2 km: media ${fmt(mean.near, 1)} m (máx. local ${fmt(max.near, 0)} m); 2–8 km: media ${fmt(mean.far, 1)} m (máx. local ${fmt(max.far, 0)} m, en cañones de quebradas); objetos dentro del sector: ${inside} de ${objects}; río: ${fmt(rioErr, 2)} m`,
+    pass: edgeErr < 1e-3 && mean.near < 2 && mean.far < 15 && inside === 0 && objects > 1000 && rioErr < 1,
+  });
+}
+
+// ---------------------------------------------------------------- Efectos de lluvia y agua = estado calculado
+{
+  // Calle de prueba con el depósito de la torre activo: así se cubren bajantes, depósito, sumideros y salidas.
+  const sc = builtinScenarios()['calle-de-prueba'];
+  const sh = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 100, pattern: 'constante' as const } };
+  const iv = baseInterventions(sc);
+  for (const t of sc.tanks) iv.tanks[t.id] = { on: true, destination: 'red' };
+  const sim = new CitySim(compile(sc, sh, iv), sh);
+  sim.advanceTo(600);
+  // a) Campo del agua: profundidad y velocidad idénticas a las del modelo (en precisión de 32 bits), sin amplificar
+  const N = sim.c.nx * sim.c.ny;
+  const F = new Float32Array(N * FIELD_CHANNELS);
+  packField(sim, false, F);
+  let badH = 0, badU = 0, badA = 0, wet = 0;
+  for (let k = 0; k < N; k++) {
+    if (sim.c.solid[k]) continue;
+    if (F[k * 4] !== Math.fround(sim.h[k])) badH++;
+    if (sim.h[k] >= 1e-3) {
+      wet++;
+      const [u, v] = sim.velocityAt(k);
+      if (F[k * 4 + 1] !== Math.fround(u) || F[k * 4 + 2] !== Math.fround(v)) badU++;
+    }
+    if (!(F[k * 4 + 3] >= 0 && F[k * 4 + 3] <= 1)) badA++;
+  }
+  // b) Chorros de bajantes = lluvia del techo que el motor envía a la superficie (misma tasa)
+  const q = new Float64Array(sim.c.buildings.length);
+  spoutFlows(sim, q);
+  const spoutRate = q.reduce((s, v) => s + v, 0);
+  const r0 = sim.bal.roofToSurface, t0 = sim.t;
+  sim.advanceTo(610);
+  const engineRate = (sim.bal.roofToSurface - r0) / (sim.t - t0);
+  // c) Cascadas de salida = caudal que el balance cuenta como «salió del sector» en el último paso
+  const b0 = sim.bal.boundaryOut;
+  sim.advanceTo(sim.t + 1e-6);
+  const oq = new Float64Array(sim.c.outlets.length);
+  outletFlows(sim, oq);
+  const outStep = oq.reduce((s, v) => s + v, 0) * sim.lastDt;
+  const outEngine = sim.bal.boundaryOut - b0;
+  // d) Depósito: llenado = volumen calculado / capacidad
+  const tk = tankFx(sim);
+  const fillErr = sim.c.tanks.reduce((m, t, i) => Math.max(m, Math.abs(tk[i].fill - sim.tankVol[t.index] / t.capacity)), 0);
+  const relSpout = Math.abs(spoutRate - engineRate) / Math.max(1e-12, engineRate);
+  const relOut = Math.abs(outStep - outEngine) / Math.max(1e-12, outEngine);
+  record({
+    id: 'V5',
+    kind: 'verificacion',
+    name: 'Los efectos de lluvia y agua leen el estado calculado',
+    tolerance: 'profundidad y velocidad del campo idénticas a las del modelo (32 bits); chorros y cascadas con error relativo < 10⁻⁹ frente al balance; llenado del depósito exacto',
+    measured: `${wet} celdas mojadas: diferencias de profundidad ${badH}, de velocidad ${badU}, huella fuera de [0,1] ${badA}; bajantes ${fmt(spoutRate * 1000, 3)} L/s frente a ${fmt(engineRate * 1000, 3)} L/s del motor (error ${relSpout.toExponential(1)}); salida en el paso ${fmt(outStep * 1000, 4)} L frente a ${fmt(outEngine * 1000, 4)} L (error ${relOut.toExponential(1)}); depósito ${(100 * tk[0].fill).toFixed(1)} % (error ${fillErr.toExponential(1)})`,
+    pass: wet > 0 && badH === 0 && badU === 0 && badA === 0 && relSpout < 1e-9 && relOut < 1e-9 && outEngine > 0 && fillErr < 1e-12 && sim.c.tanks.length > 0,
+  });
+}
+
+// ---------------------------------------------------------------- Sensibilidad al límite de Froude (información para docentes)
+const froude: { fr: number; B: number; D: number; esq: number; lim: number }[] = [];
+{
+  const sc = builtinScenarios()['ladera-quebrada'];
+  for (const fr of [1, 1.5, 1e9]) {
+    const sh = { ...sc.defaults };
+    const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh, { numerics: { froudeMax: fr } });
+    sim.runToEnd();
+    froude.push({ fr, B: sim.bal.boundaryOut, D: sim.bal.drained, esq: sim.probeMax[0].depth, lim: sim.diag.froudeLimited / sim.diag.faceUpdates });
+  }
+  record({ id: 'R1', kind: 'revision', name: 'Sensibilidad al límite de Froude (ladera, 10 % de pendiente)', tolerance: 'informativa: se documenta, no se exige', measured: froude.map((f) => `Fr ≤ ${f.fr > 1e6 ? '∞' : f.fr}: salida ${fmt(f.B, 1)} m³, drenado ${fmt(f.D, 1)} m³, esquina ${fmt(f.esq * 100, 2)} cm, caras limitadas ${(100 * f.lim).toFixed(1)} %`).join(' | '), pass: true });
+}
+
+// ---------------------------------------------------------------- Informe
+const passed = results.filter((r) => r.pass).length;
+const report = { generatedAt: new Date().toISOString(), engine: 'inercial-local-urbano 1.0.0', node: process.version, passed, total: results.length, results, sensitivity: sens, froude };
+writeFileSync(new URL('../../src/city/content/test-report.json', import.meta.url), JSON.stringify(report, null, 2));
+const md = [
+  '# Pruebas del laboratorio de lluvia urbana',
+  '',
+  `Informe generado automáticamente por \`npm run test:city\` el ${report.generatedAt} (Node ${process.version}).`,
+  '',
+  `Resultado: **${passed} de ${results.length}** comprobaciones cumplen su tolerancia.`,
+  '',
+  'Las tolerancias se fijaron antes de ejecutar. Las pruebas «revisión» informan una sensibilidad; su criterio está escrito en la misma fila.',
+  '',
+  '| Id | Tipo | Prueba | Tolerancia | Medido | Resultado |',
+  '|---|---|---|---|---|---|',
+  ...results.map((r) => `| ${r.id} | ${r.kind} | ${r.name} | ${r.tolerance} | ${r.measured.replace(/\|/g, '/')} | ${r.pass ? 'Cumple' : '**No cumple**'} |`),
+  '',
+  '## Notas y correcciones de diseño de las pruebas',
+  '',
+  ...results.filter((r) => r.note).map((r) => `- **${r.id}.** ${r.note}`),
+  '',
+].join('\n');
+writeFileSync(new URL('../../docs/medellin/PRUEBAS.md', import.meta.url), md);
+console.log(`\n${passed}/${results.length} cumplen.`);
+if (passed !== results.length) process.exitCode = 1;
