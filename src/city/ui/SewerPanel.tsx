@@ -15,6 +15,7 @@ import { buildingName } from '../render/floodNames';
 import { LineChart, type Series } from './Chart';
 import { Range } from './Range';
 import { BasinSection, CreekSource, WarningSection } from './BasinPanel';
+import { BridgeSection } from './BridgePanel';
 
 const lps = (v: number) => `${fmtNum(v * 1000, v * 1000 < 10 ? 1 : 0)} L/s`;
 const m3 = (v: number) => `${fmtNum(v, v < 10 ? 2 : 1)} m³`;
@@ -28,7 +29,7 @@ interface ToolProps {
 }
 
 /** Indicador: cifra grande con su rótulo y una línea de contexto. El tono marca el estado (con texto). */
-function Stat({ label, value, sub, tone = 'neutral', accent }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'neutral' | 'ok' | 'warn' | 'danger'; accent?: string }) {
+export function Stat({ label, value, sub, tone = 'neutral', accent }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'neutral' | 'ok' | 'warn' | 'danger'; accent?: string }) {
   return (
     <div className={`stat tone-${tone}`} style={accent ? { borderTopColor: accent } : undefined}>
       <span className="stat-l">{label}</span>
@@ -647,6 +648,7 @@ export function CreekTool({ ctrl, sc }: ToolProps) {
           <p className="city-small">Peligro según profundidad y velocidad calculadas, con las clases H1–H6 de la guía australiana de riesgo de inundación ({HAZARD_SOURCE}). Es una referencia técnica para aprender: no es la zonificación oficial de amenaza de Medellín.</p>
         </>
       )}
+      {sim && sim.bridge && <BridgeSection sim={sim} />}
       {sim && <CulvertSection ctrl={ctrl} sc={sc} sim={sim} />}
       <div className="btn-row">
         <button type="button" className="btn-ghost small" onClick={() => ctrl.focusCreekSection()}>

@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-10T16:15:59.690Z",
+  "generatedAt": "2026-11-10T16:47:32.494Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
-  "passed": 61,
-  "total": 61,
+  "passed": 63,
+  "total": 63,
   "results": [
     {
       "id": "1",
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 35.25, drenado 49.65, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2336 pasos, 223 ms | dx 1 m: P 89.60 m³, salida 39.23, drenado 46.61, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3053 pasos, 1255 ms | dx 0.5 m: P 89.60 m³, salida 42.27, drenado 43.58, infiltrado 3.45, esquina 0.45 cm, pico 35.9 L/s, área ≥ 5 cm 0 m², 6064 pasos, 10812 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.30 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.25, drenado 49.65, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2336 pasos, 251 ms | dx 1 m: P 89.60 m³, salida 39.23, drenado 46.61, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3053 pasos, 1282 ms | dx 0.5 m: P 89.60 m³, salida 42.27, drenado 43.58, infiltrado 3.45, esquina 0.45 cm, pico 35.9 L/s, área ≥ 5 cm 0 m², 6064 pasos, 10729 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.30 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -433,7 +433,7 @@
       "kind": "obligatoria",
       "name": "Lluvia larga: tormenta de 10 años y 3 h en la ladera, con el balance cerrado",
       "tolerance": "lluvia que entra = lámina del hietograma × área (error < 10⁻⁶); residuo del balance < 10⁻⁹ del agua que entró; sin valores no finitos; la configuración con 3 °C se acepta y una de 7 años y 90 min se rechaza",
-      "measured": "58.4 mm en 3 h; lluvia 717.1 m³ frente a 717.1 m³; residuo/entrada 1.6e-14; infiltrado 105 m³, drenado 211 m³, salida 806 m³; 30992 pasos en 11.3 s; 3 °C aceptada; 7 años/90 min rechazada (2 errores)",
+      "measured": "58.4 mm en 3 h; lluvia 717.1 m³ frente a 717.1 m³; residuo/entrada 1.6e-14; infiltrado 105 m³, drenado 211 m³, salida 806 m³; 30992 pasos en 11.0 s; 3 °C aceptada; 7 años/90 min rechazada (2 errores)",
       "pass": true
     },
     {
@@ -457,7 +457,7 @@
       "kind": "obligatoria",
       "name": "Sedimento: balance cerrado; el lote en obra pierde mucho más tierra que el parque; la creciente con lodo deja lodo en el barrio",
       "tolerance": "residuo del balance de sedimento < 10⁻⁹ de lo que entró en las tres corridas, sin masas negativas ni no finitas; el agua sigue cerrando (< 10⁻⁹ m³ por m³); con el lote en obra la tierra arrancada es más de 10 veces la del parque y aparece lodo sobre el suelo; la creciente con 20 % de lodo deja lodo (≥ 1 kg/m²) en más de 100 m² y mete lodo a los sumideros",
-      "measured": "parque: arrancada 66.5 kg, lodo en 20 m², residuo 7.9e-15 | lote en obra: arrancada 3.1 t, lodo en 248 m², a sumideros 36.8 kg, salió 483.2 kg, residuo 2.3e-15 | creciente con lodo: entró 63959.2 t, depositado 223.7 t, lodo en 3704 m², a sumideros 177.2 t, residuo 5.6e-15; masas negativas 0",
+      "measured": "parque: arrancada 66.5 kg, lodo en 20 m², residuo 7.9e-15 | lote en obra: arrancada 3.1 t, lodo en 248 m², a sumideros 36.8 kg, salió 483.2 kg, residuo 2.3e-15 | creciente con lodo: entró 63959.2 t, depositado 223.7 t, lodo en 3736 m², a sumideros 177.4 t, residuo 7.0e-16; masas negativas 0",
       "pass": true
     },
     {
@@ -483,6 +483,22 @@
       "name": "«Agua ×5» engrosa las láminas delgadas sin levantar el agua honda",
       "tolerance": "una lámina de 1 cm se dibuja al menos ×4,5; a ninguna profundidad se agregan más de (5 − 1) × 4 cm = 16 cm; el dibujo crece con la profundidad; con la misma superficie libre en el lecho de una quebrada (2 m) y en su orilla (30 cm), las superficies dibujadas difieren menos de 1 cm",
       "measured": "1 cm → ×4.92; 5 m → +16.0 cm; creciente: sí; lecho y orilla con la misma superficie: diferencia dibujada 9.79e-6 cm (multiplicando la profundidad, como antes: 6.8 m)",
+      "pass": true
+    },
+    {
+      "id": "G1",
+      "kind": "obligatoria",
+      "name": "Puente peatonal: arrastre, flotación y resistencia de los apoyos iguales al cálculo a mano",
+      "tolerance": "C_D(0) = 2,15 y C_D(0,6) = 1,403 (ejemplo de FHWA-HRT-09-028, ±0,0005); peso, flotación con el tablero sumergido (concreto y aire atrapado), empuje en flujo uniforme y resistencia por fricción (μ = 0,6) iguales a sus fórmulas (error < 10⁻⁹ kN); la mezcla con 30 % de sedimento en volumen pesa 1 495 kg/m³ (±1)",
+      "measured": "C_D: 2.1500 / 1.4031 / 2.1468 (h* = 0 / 0,6 / 3); peso 118.31 kN (a mano 118.31); flotación 76.91 kN (76.91); empuje a 4 m/s con h* = 1: 48.61 kN (48.61); resistencia por apoyo sumergido 76.26 kN (76.26); utilización 0.650; mezcla 1495.0 kg/m³",
+      "pass": true
+    },
+    {
+      "id": "G2",
+      "kind": "obligatoria",
+      "name": "Puente peatonal en la creciente: gálibo, empuje y colapso con la avenida de lodo",
+      "tolerance": "con 60 % de la capacidad del cauce queda más de 0,5 m de gálibo y no hay empuje; con 250 % y 350 % (agua) no queda gálibo, el empuje máximo crece con el caudal y el puente resiste (uso < 100 %); con la avenida torrencial (350 %, 30 % de lodo) el puente colapsa por deslizamiento y su tablero frena el agua en todas las celdas donde cae (Manning de al menos 0,1); el balance cierra en las cuatro corridas (< 10⁻⁹)",
+      "measured": "60 %: gálibo mínimo 1.00 m, empuje 0.0 kN | 250 %: gálibo -0.66 m, empuje máx 87.3 kN, uso máx 65 %, libre | 350 %: empuje máx 123.4 kN, uso máx 81 %, libre | avenida con lodo: empuje máx 135.7 kN, uso máx 105 %, colapsado en el segundo 230 (deslizamiento), celdas con escombros 52 de 52; residuos 1.4e-15 / 4.8e-16 / 1.2e-15 / 2.9e-15",
       "pass": true
     },
     {
@@ -514,7 +530,7 @@
       "area": 8,
       "res": -1.1368683772161603e-13,
       "steps": 2336,
-      "ms": 223.4289689999987
+      "ms": 250.583482
     },
     {
       "dx": 1,
@@ -527,7 +543,7 @@
       "area": 0,
       "res": -4.263256414560601e-14,
       "steps": 3053,
-      "ms": 1255.2800650000008
+      "ms": 1281.5506400000013
     },
     {
       "dx": 0.5,
@@ -540,7 +556,7 @@
       "area": 0,
       "res": 3.268496584496461e-13,
       "steps": 6064,
-      "ms": 10812.209396
+      "ms": 10729.157076000001
     }
   ],
   "froude": [

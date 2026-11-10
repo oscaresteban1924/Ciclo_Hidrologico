@@ -6,6 +6,7 @@ import type { ExposedObject, InflowSpec, Interventions, Polygon, Pt, Scenario, S
 import { buildNodeTable, fullFlow, windowK, type CompiledSewer, type SInlet, type SNode, type SPipe } from './sewer';
 import { barrelR, inletRating, qInlet, type CulvertGeom, type InletRating } from './culvert';
 import type { BasinCover, BasinSpec } from './basin';
+import { BRIDGE_DEFAULTS, type BridgeSpec } from './bridge';
 
 export interface CompiledBuilding {
   id: string;
@@ -125,6 +126,8 @@ export interface Compiled {
   erradaNode: Int32Array;
   /** Quebrada con creciente (si el escenario la trae). */
   creek: CompiledCreek | null;
+  /** Puente peatonal sobre la quebrada (análisis didáctico de fuerzas; ver bridge.ts), si el escenario lo trae. */
+  bridge: CompiledBridge | null;
   /** Vehículos expuestos (no participan en el flujo; el motor calcula si el agua los mueve). */
   exposed: ExposedObject[];
   /** Coberturas bajo vías. */
@@ -157,6 +160,26 @@ export interface CompiledCulvert {
 }
 
 /** Sección de control de la quebrada (columna de celdas a lo largo de y en la abscisa x). */
+export interface CompiledBridge {
+  /** Columna de celdas del vano, filas que cubre el vano y eje de la quebrada en el puente (modelo). */
+  i: number;
+  j0: number;
+  j1: number;
+  x: number;
+  yc: number;
+  y0: number;
+  y1: number;
+  /** Cota de la cara superior del tablero y del fondo de las vigas [m]. */
+  deck: number;
+  soffit: number;
+  /** Sentido del cauce en el puente (vector unitario del modelo). */
+  tx: number;
+  ty: number;
+  spec: BridgeSpec;
+  /** Celdas donde queda el tablero si colapsa (aguas abajo, de orilla a orilla). */
+  debrisCells: number[];
+}
+
 export interface CompiledCreek {
   /** Celdas por donde entra la creciente. */
   cells: number[];
@@ -936,6 +959,49 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     creek = { cells, baseM3s: ck.baseM3s, flow, sign, cosT, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name, basin: ck.basin, basinCover: iv.basinCover ?? 'mixta' };
   }
 
+  // Puente peatonal: geometría en el modelo (la misma que dibuja floodView) y celdas donde caería
+  let bridge: CompiledBridge | null = null;
+  const fb = sc.creek?.footbridge;
+  if (sc.creek && fb) {
+    const ax = sc.creek.axis;
+    let yc = ax[0][1], tx = 1, ty = 0;
+    for (let q = 1; q < ax.length; q++) if (fb.x <= ax[q][0]) {
+      const f = (fb.x - ax[q - 1][0]) / Math.max(1e-9, ax[q][0] - ax[q - 1][0]);
+      yc = ax[q - 1][1] + f * (ax[q][1] - ax[q - 1][1]);
+      const L = Math.hypot(ax[q][0] - ax[q - 1][0], ax[q][1] - ax[q - 1][1]) || 1;
+      tx = (ax[q][0] - ax[q - 1][0]) / L;
+      ty = (ax[q][1] - ax[q - 1][1]) / L;
+      break;
+    }
+    const bi = Math.min(nx - 1, Math.max(0, Math.floor(fb.x / dx)));
+    const zAt = (y: number) => z[Math.min(ny - 1, Math.max(0, Math.floor(y / dx))) * nx + bi];
+    const bank = Math.min(zAt(yc - sc.creek.section.bankHalfWidthM), zAt(yc + sc.creek.section.bankHalfWidthM));
+    const deck = bank + fb.deckAboveBankM;
+    const y0 = yc - fb.halfLengthM, y1 = yc + fb.halfLengthM;
+    const debrisCells: number[] = [];
+    for (let y = y0 + 1; y <= y1 - 1; y += dx * 0.5)
+      for (let d = 2; d <= 4.5; d += dx * 0.5) {
+        const xx = fb.x + tx * d, yy = y + ty * d;
+        const k = Math.min(ny - 1, Math.max(0, Math.floor(yy / dx))) * nx + Math.min(nx - 1, Math.max(0, Math.floor(xx / dx)));
+        if (!solid[k] && !debrisCells.includes(k)) debrisCells.push(k);
+      }
+    bridge = {
+      i: bi,
+      j0: Math.max(0, Math.floor(y0 / dx)),
+      j1: Math.min(ny - 1, Math.floor(y1 / dx)),
+      x: fb.x,
+      yc,
+      y0,
+      y1,
+      deck,
+      soffit: deck - fb.beamM,
+      tx,
+      ty,
+      spec: { ...BRIDGE_DEFAULTS, spanM: 2 * fb.halfLengthM, widthM: fb.widthM, beamM: fb.beamM },
+      debrisCells,
+    };
+  }
+
   // Coberturas: grupos de celdas a la entrada y a la salida, bateas, tabla de control de entrada
   const culverts: CompiledCulvert[] = [];
   for (const cs of sc.culverts ?? []) {
@@ -1029,6 +1095,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     sewer,
     erradaNode,
     creek,
+    bridge,
     exposed: (sc.exposed ?? []).map((o) => ({ ...o, at: [o.at[0], o.at[1]] as Pt })),
     culverts,
     hash: (h >>> 0).toString(16).padStart(8, '0'),

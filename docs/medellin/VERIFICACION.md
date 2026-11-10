@@ -426,6 +426,26 @@ El video (WebM, hasta 60 s) se descarga con un rótulo en cada cuadro: sector, l
 
 `npm run test:city`: **61 de 61** (nuevas F1, A1, E1 y E2; F1 se reescribió después con las referencias de Grant 1997 y Ferguson 2007, ver la sección siguiente). `npm run test:quality`: 13 de 13. La versión de un solo archivo funciona sin conexión y sin peticiones externas (`tools/verificacion/single_city.py`).
 
+## 4 sexdecies. Puente peatonal: gálibo, fuerzas y colapso (ejecutada)
+
+**Pedido.** «Agrega el análisis y colapso del puente: si la creciente aumenta, no queda gálibo y se ejercen fuerzas cortantes en el puente que producen su posible colapso.»
+
+**Hecho.** Cada paso calcula el gálibo, el empuje del agua sobre el tablero, la flotación y el cortante en cada apoyo, y los compara con la resistencia al deslizamiento:
+- Empuje: envolvente C_D de FHWA-HRT-09-028.
+- Flotación: incluye el aire atrapado (HDS-7).
+- Resistencia: cortante por fricción de ACI 318.
+- El lodo calculado aumenta la densidad del agua.
+
+El colapso ocurre si el uso pasa de 100 % durante 2 s. El tablero queda en el cauce y frena el agua.
+
+En la maqueta, el rótulo del puente pasa de «gálibo: … m» a «sin gálibo · empuje … kN · …% de lo que resiste». Al colapsar dice «colapsó» y el tablero se desliza aguas abajo, sin animación con movimiento reducido. El panel «Creciente» muestra las cuentas del momento y la curva del uso en el tiempo.
+
+Pruebas:
+- **G1:** las fórmulas coinciden con el cálculo a mano con error menor que 10⁻⁹ kN. Además, C_D(0,6) = 1,403, el valor del ejemplo de la FHWA.
+- **G2:** el puente resiste el 250 % y el 350 % de agua (65 % y 81 % de uso). Con la avenida de lodo colapsa por deslizamiento hacia el segundo 230.
+
+Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la creciente y tras el colapso; consola limpia).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

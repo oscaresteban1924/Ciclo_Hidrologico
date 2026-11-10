@@ -467,6 +467,30 @@ Nada de esta sección cambia el cálculo; todo sigue al cálculo o es ilustrativ
 - **Cine** (`src/city/render/cinema.ts`). Cinco tomas que se repiten: sobre el barrio, en la calle, donde más agua hay (la celda con mayor profundidad calculada en ese momento, fuera de las construcciones), subiendo (grúa vertical desde la calle) y el valle. La cámara de calle va a 1,6 m del suelo y la grúa sube en vertical, de modo que ninguna toma atraviesa casas ni terreno (prueba E2). Se detiene en cuanto la persona mueve la cámara o usa un botón de cámara. No se ofrece con movimiento reducido.
 - **Video** (`src/city/recorder.ts`). Si el navegador puede grabar (MediaRecorder y `captureStream`), el botón rojo graba hasta 60 s de la maqueta, con el sonido si está encendido. Cada cuadro lleva un rótulo fijo: sector, lluvia elegida, intensidad calculada en ese momento, tiempo simulado, toma del cine, la amplificación de la profundidad si está activa y la aclaración «cálculo hecho en el navegador, no es un pronóstico oficial · rayos y truenos ilustrativos». El video se descarga en el equipo (WebM o MP4, según el navegador); no se sube a ningún lado. Las etiquetas HTML de la maqueta no salen en el video; el rótulo las reemplaza.
 
+### 6.14 Puente peatonal bajo la creciente: gálibo, fuerzas y colapso
+
+`src/city/sim/bridge.ts`, `CitySim.stepBridge` y `src/city/ui/BridgePanel.tsx`. El análisis es didáctico, con supuestos declarados. No es la evaluación estructural de un puente real.
+
+**Puente (supuesto).** Tablero de concreto de 14 m de vano y 1,6 m de ancho. Lleva una losa de 16 cm sobre dos vigas de 22 cm de ancho, con 35 cm de canto total y barandas de 0,3 kN/m. Se apoya en dos estribos con 2 pasadores de 12,7 mm cada uno (f_y = 420 MPa). Su peso es 118 kN. El fondo de las vigas queda 0,55 m sobre la orilla.
+
+**Cada paso de cálculo**, con el nivel, la velocidad en el sentido del cauce y la concentración de lodo de cada celda bajo el vano:
+- **Gálibo:** fondo de las vigas menos el nivel del agua. Mientras queda gálibo, el agua no empuja el tablero.
+- **Empuje horizontal:** por metro de puente, `F/L = C_D·½ρv²·s`, con `s` el canto. `C_D` sale de la envolvente superior de Kerenyi, Sofu y Guo (2009, FHWA-HRT-09-028) para la relación de inundación `h* = (nivel − fondo de viga)/s`: `C_D = 2,7·e^(−2h*²) − 2,7·e^(−0,75h*²) + 2,15`. Vale 2,15 cuando el agua toca la viga y cuando la cubre, y 1,40 con h* = 0,6. Se suma celda por celda a lo largo del vano.
+- **Densidad:** `ρ = 1000 + C·(1 − 1000/2650)`, con la concentración de sedimento C calculada. Con 30 % de lodo en volumen da 1 495 kg/m³.
+- **Flotación:** peso del agua desalojada por las vigas, la losa y el aire atrapado entre las vigas (FHWA HDS-7, 2012, cap. 7). Con el tablero cubierto son 77 kN de los 118 kN de peso.
+- **Resistencia de cada apoyo al deslizamiento** (cortante por fricción, ACI 318): `V_n = μ·(A_vf·f_y + N)`, con μ = 0,6 (concreto contra concreto endurecido sin rugosidad intencional) y N la mitad del peso menos la flotación. Es una capacidad nominal, sin factores de seguridad. En seco son 99 kN por apoyo; con el tablero cubierto, 76 kN.
+- **Uso:** el mayor entre cortante sobre resistencia y flotación sobre peso. Si pasa de 100 % durante 2 s simulados seguidos, el puente colapsa. El modo es deslizamiento, o flotación si el agua lo levanta.
+
+**Después del colapso.** El tablero queda atravesado en el cauce, 2 a 4,5 m aguas abajo. En esas 52 celdas la rugosidad sube a Manning 0,1 por los escombros. El agua lo nota y el balance no cambia.
+
+**Resultados en la ladera** (prueba G2):
+- Con 60 % de la capacidad del cauce queda 1,0 m de gálibo.
+- Con 250 % el agua cubre la viga y el empuje llega a 87 kN, un 65 % de lo que resisten los apoyos.
+- Con 350 % de agua llega a 123 kN (81 %) y el puente resiste.
+- Con la avenida torrencial (350 % con 30 % de lodo) el empuje llega a 136 kN y la flotación quita peso. El puente se desliza de sus apoyos hacia el minuto 3,8.
+
+**No incluye** el golpe de troncos, la empalizada de ramas contra el puente (aumenta mucho el área que empuja el agua), la sustentación hidrodinámica (puede ser hacia arriba o hacia abajo cerca de h* ≈ 1), la socavación de los estribos ni la flexión de las piezas. Antes de colapsar, el tablero no obstruye el flujo en el cálculo.
+
 ## 7. Tiempo, pausa y reproducibilidad
 
 - El tiempo de simulación es independiente del tiempo de dibujo.
@@ -547,6 +571,9 @@ En calles empinadas, la captación de los sumideros tiene una incertidumbre del 
 - Rawls, W. J., Brakensiek, D. L., & Miller, N. (1983). Green-Ampt infiltration parameters from soils data. *Journal of Hydraulic Engineering*, 109(1), 62–70.
 - FHWA (2009). *Urban Drainage Design Manual*, HEC-22, 3.ª ed.
 - Rossman, L. A., & Huber, W. C. (2016). *Storm Water Management Model Reference Manual, Vol. I – Hydrology*. EPA/600/R-15/162A.
+- ACI 318 (2019). *Building Code Requirements for Structural Concrete*, 22.9 (cortante por fricción).
+- FHWA (2012). *Hydraulic Design of Safe Bridges*, HDS-7 (FHWA-HIF-12-018), cap. 7.
+- Kerenyi, K., Sofu, T., & Guo, J. (2009). *Hydrodynamic Forces on Inundated Bridge Decks*. FHWA-HRT-09-028.
 - Ferguson, R. (2007). Flow resistance equations for gravel- and boulder-bed streams. *Water Resources Research*, 43, W05427.
 - Grant, G. E. (1997). Critical flow constrains flow hydraulics in mobile-bed streams: A new hypothesis. *Water Resources Research*, 33(2), 349–358.
 - W3C (2023). *Web Content Accessibility Guidelines (WCAG) 2.2*, criterio 2.3.1 «Umbral de tres destellos o por debajo».

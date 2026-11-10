@@ -34,6 +34,7 @@ import { buildShots } from '../../src/city/render/cinema';
 import { flowLevel } from '../../src/city/controller';
 import { AMP_SHEET_M, drawDepth } from '../../src/city/render/palette';
 import { yq } from '../../src/city/scenarios/ladera';
+import { DEBRIS_MANNING, bearingCapacity, bridgeForces, buoyancy, dragCoefficient, mixtureDensity, selfWeight } from '../../src/city/sim/bridge';
 
 interface Result {
   id: string;
@@ -1451,6 +1452,57 @@ const froude: { fr: number; B: number; D: number; esq: number; lim: number }[] =
     tolerance: 'una lámina de 1 cm se dibuja al menos ×4,5; a ninguna profundidad se agregan más de (5 − 1) × 4 cm = 16 cm; el dibujo crece con la profundidad; con la misma superficie libre en el lecho de una quebrada (2 m) y en su orilla (30 cm), las superficies dibujadas difieren menos de 1 cm',
     measured: `1 cm → ×${fmt(thin, 2)}; 5 m → +${fmt(extra * 100, 1)} cm; creciente: ${mono ? 'sí' : 'NO'}; lecho y orilla con la misma superficie: diferencia dibujada ${fmt(lvl * 100, 2)} cm (multiplicando la profundidad, como antes: ${fmt(lvlOld, 1)} m)`,
     pass: thin >= 4.5 && extra <= (k5 - 1) * AMP_SHEET_M + 1e-12 && mono && lvl < 0.01,
+  });
+}
+
+// ---------------------------------------------------------------- Puente peatonal bajo la creciente
+{
+  // G1: fórmulas del análisis del puente frente a cálculos a mano
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const c0 = compile(sc, { ...sc.defaults }, baseInterventions(sc));
+  const cb = c0.bridge!, b = cb.spec;
+  const cd0 = dragCoefficient(0), cd06 = dragCoefficient(0.6), cd3 = dragCoefficient(3);
+  const wHand = ((b.widthM * b.slabM + b.beams * b.beamWidthM * (b.beamM - b.slabM)) * 24 + b.railKNm) * b.spanM;
+  const conc = b.beams * b.beamWidthM * (b.beamM - b.slabM) + b.widthM * b.slabM, air = (b.widthM - b.beams * b.beamWidthM) * (b.beamM - b.slabM);
+  const uHand = ((conc + air) * 1000 * 9.81 * b.spanM) / 1000;
+  const avf = b.dowels * Math.PI * Math.pow(b.dowelMm / 2000, 2);
+  const capHand = 0.6 * (avf * b.fyMPa * 1000 + (wHand - uHand) / 2);
+  // flujo uniforme sintético: 14 celdas de 1 m, 4 m/s, agua 0,35 m sobre el fondo de la viga (h* = 1)
+  const cells = Array.from({ length: 14 }, () => ({ level: cb.soffit + b.beamM, depth: 2.5, u: 4 }));
+  const f = bridgeForces(b, cb.soffit, cells, 1);
+  const dragHand = (dragCoefficient(1) * 0.5 * 1000 * 16 * b.beamM * 14) / 1000;
+  const errs = [Math.abs(cd0 - 2.15), Math.abs(cd06 - 1.403) - 5e-4, Math.abs(selfWeight(b) - wHand), Math.abs(buoyancy(b, 5) - uHand), Math.abs(f.drag - dragHand), Math.abs(f.capacity - capHand), Math.abs(bearingCapacity(b, 0) - 0.6 * avf * b.fyMPa * 1000)];
+  const rhoMud = mixtureDensity(0.3 * 2650);
+  record({
+    id: 'G1',
+    kind: 'obligatoria',
+    name: 'Puente peatonal: arrastre, flotación y resistencia de los apoyos iguales al cálculo a mano',
+    tolerance: 'C_D(0) = 2,15 y C_D(0,6) = 1,403 (ejemplo de FHWA-HRT-09-028, ±0,0005); peso, flotación con el tablero sumergido (concreto y aire atrapado), empuje en flujo uniforme y resistencia por fricción (μ = 0,6) iguales a sus fórmulas (error < 10⁻⁹ kN); la mezcla con 30 % de sedimento en volumen pesa 1 495 kg/m³ (±1)',
+    measured: `C_D: ${fmt(cd0, 4)} / ${fmt(cd06, 4)} / ${fmt(cd3, 4)} (h* = 0 / 0,6 / 3); peso ${fmt(selfWeight(b), 2)} kN (a mano ${fmt(wHand, 2)}); flotación ${fmt(buoyancy(b, 5), 2)} kN (${fmt(uHand, 2)}); empuje a 4 m/s con h* = 1: ${fmt(f.drag, 2)} kN (${fmt(dragHand, 2)}); resistencia por apoyo sumergido ${fmt(f.capacity, 2)} kN (${fmt(capHand, 2)}); utilización ${fmt(f.utilization, 3)}; mezcla ${fmt(rhoMud, 1)} kg/m³`,
+    pass: errs[0] < 1e-9 && errs[1] <= 0 && errs.slice(2).every((e) => e < 1e-9) && Math.abs(rhoMud - 1495) <= 1,
+  });
+  // G2: en la ladera, el gálibo se acaba con la creciente, el empuje crece y la avenida con lodo lo hace colapsar
+  const cap = c0.creek!.capacity;
+  const runB = (frac: number, cv: number, ttp: number) => {
+    const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 0, durationMin: 5 }, simMinutes: 20, creek: { source: 'ejemplo', peakM3s: frac * cap, timeToPeakMin: ttp, startMin: 2, sedimentCv: cv } };
+    const c = compile(sc, sh, baseInterventions(sc));
+    const sim = new CitySim(c, sh, {});
+    let lmax = -Infinity;
+    for (let t = 30; t <= 20 * 60; t += 10) {
+      sim.advanceTo(t, 1e9);
+      if (Number.isFinite(sim.bridge!.level)) lmax = Math.max(lmax, sim.bridge!.level);
+    }
+    const nDeb = c.bridge!.debrisCells.filter((k) => (sim as unknown as { nEff: Float64Array }).nEff[k] >= DEBRIS_MANNING).length;
+    return { st: sim.bridge!, clear: c.bridge!.soffit - lmax, res: Math.abs(sim.bal.residual) / sim.bal.inflow, nDeb, nCells: c.bridge!.debrisCells.length };
+  };
+  const r60 = runB(0.6, 0, 6), r250 = runB(2.5, 0, 6), r350 = runB(3.5, 0, 6), rMud = runB(3.5, 0.3, 3);
+  record({
+    id: 'G2',
+    kind: 'obligatoria',
+    name: 'Puente peatonal en la creciente: gálibo, empuje y colapso con la avenida de lodo',
+    tolerance: 'con 60 % de la capacidad del cauce queda más de 0,5 m de gálibo y no hay empuje; con 250 % y 350 % (agua) no queda gálibo, el empuje máximo crece con el caudal y el puente resiste (uso < 100 %); con la avenida torrencial (350 %, 30 % de lodo) el puente colapsa por deslizamiento y su tablero frena el agua en todas las celdas donde cae (Manning de al menos 0,1); el balance cierra en las cuatro corridas (< 10⁻⁹)',
+    measured: `60 %: gálibo mínimo ${fmt(r60.clear, 2)} m, empuje ${fmt(r60.st.dragMax, 1)} kN | 250 %: gálibo ${fmt(r250.clear, 2)} m, empuje máx ${fmt(r250.st.dragMax, 1)} kN, uso máx ${fmt(r250.st.utilMax * 100, 0)} %, ${r250.st.status} | 350 %: empuje máx ${fmt(r350.st.dragMax, 1)} kN, uso máx ${fmt(r350.st.utilMax * 100, 0)} %, ${r350.st.status} | avenida con lodo: empuje máx ${fmt(rMud.st.dragMax, 1)} kN, uso máx ${fmt(rMud.st.utilMax * 100, 0)} %, ${rMud.st.status}${rMud.st.collapsedAt >= 0 ? ` en el segundo ${fmt(rMud.st.collapsedAt, 0)} (${rMud.st.mode})` : ''}, celdas con escombros ${rMud.nDeb} de ${rMud.nCells}; residuos ${[r60, r250, r350, rMud].map((r) => r.res.toExponential(1)).join(' / ')}`,
+    pass: r60.clear > 0.5 && r60.st.dragMax === 0 && r250.clear < 0 && r250.st.dragMax > 0 && r350.st.dragMax > r250.st.dragMax && r250.st.utilMax < 1 && r350.st.utilMax < 1 && r250.st.status !== 'colapsado' && r350.st.status !== 'colapsado' && rMud.st.status === 'colapsado' && rMud.st.mode === 'deslizamiento' && rMud.nDeb === rMud.nCells && [r60, r250, r350, rMud].every((r) => r.res < 1e-9),
   });
 }
 

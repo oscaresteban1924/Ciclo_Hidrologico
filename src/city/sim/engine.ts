@@ -20,6 +20,7 @@ import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from '
 import { AFFECTED_DEPTH_M, HAZARD_WET_M, UNSTABLE_FROM, bulkingFactor, hazardClass, ringsFor } from './hazard';
 import { WARNING, basinHydrograph, type BasinResult } from './basin';
 import { culvertFlow } from './culvert';
+import { COLLAPSE_HOLD_S, DEBRIS_MANNING, bridgeForces, initialBridge, mixtureDensity, type BridgeState } from './bridge';
 
 /**
  * Reparte un volumen (expresado como lámina × área de celda, [m]) en un grupo de celdas llenando primero las
@@ -225,6 +226,8 @@ export interface Sample {
   creek?: { qin: number; qChannel: number; qOutside: number; level: number };
   /** Coberturas: caudal por el cajón y sobre la vía [m³/s], nivel aguas arriba [m] y fracción tapada. */
   culverts?: { q: number; over: number; up: number; obs: number }[];
+  /** Puente peatonal: empuje horizontal [kN], utilización de los apoyos [0–] y gálibo bajo la viga [m]. */
+  bridge?: { drag: number; util: number; clearance: number; collapsed: boolean };
   /** Sedimento: lodo que sale del sector [kg/s] y a la red [kg/s] en el intervalo; suspendido [kg]. */
   sed?: { out: number; drained: number; suspended: number };
 }
@@ -277,6 +280,10 @@ export class CitySim {
   hazMax: Uint8Array;
   /** Vehículos expuestos a la creciente. */
   drift: DriftState[] = [];
+  /** Puente peatonal bajo la creciente (null si el escenario no tiene puente). */
+  bridge: BridgeState | null = null;
+  /** Rugosidad de Manning en uso (la del sector, más la del tablero caído si el puente colapsa). */
+  private nEff!: Float64Array;
   /** Coberturas: caudal por el cajón y sobre la vía en el último paso [m³/s], obstrucción actual, control. */
   culv: { q: number; over: number; up: number; obs: number; control: string; t0: number; vol: number; overVol: number; qMax: number; overMax: number; upMax: number; obsMax: number }[] = [];
   tankVol: Float64Array;
@@ -401,6 +408,8 @@ export class CitySim {
     this.dvMaxField.fill(0);
     this.hazMax.fill(0);
     this.culv = c.culverts.map((cu) => ({ q: 0, over: 0, up: cu.zIn, obs: cu.progressive ? 0 : cu.obstruction, control: 'sin flujo', t0: -1, vol: 0, overVol: 0, qMax: 0, overMax: 0, upMax: cu.zIn, obsMax: cu.progressive ? 0 : cu.obstruction }));
+    this.nEff = Float64Array.from(c.n);
+    this.bridge = c.bridge ? initialBridge(c.bridge.spec) : null;
     this.drift = c.exposed.map((o) => ({ id: o.id, name: o.name, kind: o.kind, color: o.color, x0: o.at[0], y0: o.at[1], x: o.at[0], y: o.at[1], heading: (o.headingDeg * Math.PI) / 180, state: 'quieto', tMoved: -1, dist: 0, hazard: 0 }));
     this.tankVol.fill(0);
     this.lastInf.fill(0);
@@ -582,7 +591,7 @@ export class CitySim {
     const qxo = this.qxOld, qyo = this.qyOld;
     const th = num.theta, th2 = (1 - th) / 2;
     const frMax = num.froudeMax;
-    const nArr = c.n;
+    const nArr = this.nEff;
     let umax = 0;
     let frLim = 0;
     let faces = 0;
@@ -757,6 +766,8 @@ export class CitySim {
 
     // --- 6b) Coberturas: el agua pasa de la entrada a la salida por el cajón (transferencia interna)
     if (c.culverts.length) this.stepCulverts(dt);
+    // --- 6b') Puente peatonal: gálibo, empuje y resistencia de los apoyos con el agua de este paso
+    if (this.bridge && c.bridge) this.stepBridge(dt);
 
     // --- 6c) Sedimento: salpicadura, arranque y depósito con la lámina y los caudales del final del paso
     this.sed.exchange(h, qx, qy, R, c.rainWeight, dt, num.froudeMax);
@@ -1030,6 +1041,36 @@ export class CitySim {
     });
   }
 
+  /** Fuerzas del agua sobre el puente peatonal y su posible colapso (ver bridge.ts). */
+  private stepBridge(dt: number): void {
+    const cb = this.c.bridge!, st = this.bridge!;
+    if (st.status === 'colapsado') return;
+    const { nx, z } = this.c;
+    const cells: { level: number; depth: number; u: number; rho: number }[] = [];
+    for (let j = cb.j0; j <= cb.j1; j++) {
+      const k = j * nx + cb.i;
+      const d = this.h[k];
+      if (d < 0.01) continue;
+      const [u, v] = this.velocityCapped(k);
+      cells.push({ level: z[k] + d, depth: d, u: u * cb.tx + v * cb.ty, rho: mixtureDensity(this.sed.conc(k, d)) });
+    }
+    const f = bridgeForces(cb.spec, cb.soffit, cells, this.c.dx);
+    Object.assign(st, { level: f.level, clearance: f.clearance, velocity: f.velocity, hStar: f.hStar, cd: f.cd, rho: f.rho, drag: f.drag, lift: f.lift, weight: f.weight, shear: f.shear, capacity: f.capacity, utilization: f.utilization });
+    st.status = f.level >= cb.deck ? 'sumergido' : f.level >= cb.soffit ? 'golpea' : 'libre';
+    if (f.drag > st.dragMax) st.dragMax = f.drag;
+    if (f.utilization > st.utilMax) st.utilMax = f.utilization;
+    if (f.utilization >= 1) {
+      st.overT += dt;
+      if (st.overT >= COLLAPSE_HOLD_S) {
+        st.status = 'colapsado';
+        st.collapsedAt = this.t;
+        st.mode = f.lift >= f.weight ? 'flotacion' : 'deslizamiento';
+        // el tablero queda atravesado en el cauce, aguas abajo: frena el agua (rugosidad de escombros)
+        for (const k of cb.debrisCells) if (this.nEff[k] < DEBRIS_MANNING) this.nEff[k] = DEBRIS_MANNING;
+      }
+    } else st.overT = 0;
+  }
+
   /**
    * Velocidad de celda para el peligro y los vehículos [m/s]: la de `velocityAt`, limitada con el número
    * de Froude del cálculo (en el frente de mojado la celda es muy somera y el promedio de caras la exagera).
@@ -1169,6 +1210,7 @@ export class CitySim {
       }
     }
     if (this.culv.length) s.culverts = this.culv.map((u) => ({ q: u.q, over: u.over, up: u.up, obs: u.obs }));
+    if (this.bridge) s.bridge = { drag: this.bridge.drag, util: this.bridge.utilization, clearance: this.bridge.clearance, collapsed: this.bridge.status === 'colapsado' };
     const sb = this.sed.updateBalance();
     s.sed = { out: dtS > 0 ? (sb.out - this.lastSampleSedOut) / dtS : 0, drained: dtS > 0 ? (sb.drained - this.lastSampleSedDr) / dtS : 0, suspended: sb.suspended };
     this.lastSampleSedOut = sb.out;

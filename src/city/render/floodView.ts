@@ -1,6 +1,7 @@
 // Dibujo de la creciente y de sus daños. Cada efecto lee el estado calculado:
-//  · Puente peatonal: el nivel del agua bajo el tablero sale del cálculo; su rótulo dice si el agua pasa
-//    libre, golpea la viga o pasa por encima (en el cálculo el puente no obstruye el flujo: se rotula).
+//  · Puente peatonal: el nivel, la velocidad y las fuerzas salen del cálculo (sim/bridge.ts). El rótulo dice el
+//    gálibo y, sin gálibo, el empuje del agua y qué parte de la resistencia de los apoyos usa. Si colapsa, el
+//    tablero se desliza aguas abajo y queda atravesado en el cauce, donde el cálculo pone sus escombros.
 //  · Vehículos: posición, rumbo y estado vienen del motor (CitySim.drift); aquí solo se les da forma y
 //    flotación visual.
 //  · Marcas en las fachadas: cada cara de muro se mancha desde el suelo hasta la profundidad máxima
@@ -70,6 +71,9 @@ export class FloodView {
   private lastStainT = -1;
   private vehicles: { g: THREE.Group; o: DriftState; bodyH: number }[] = [];
   private bridge: { x: number; y0: number; y1: number; deck: number; soffit: number; i: number; j0: number; j1: number } | null = null;
+  private bridgeSpan: THREE.Group | null = null;
+  private bridgeHome: THREE.Vector3 | null = null;
+  private collapseK = 0;
   /** Coberturas: troncos atascados (ordenados de abajo hacia arriba) y punto del rótulo. */
   private culverts: { logs: THREE.InstancedMesh; items: { x: number; y: number; z: number; dz: number; len: number; rad: number; a: number; tilt: number }[]; at: THREE.Vector3; key: string }[] = [];
   // material flotante
@@ -224,58 +228,73 @@ export class FloodView {
 
   // ------------------------------------------------------------ puente peatonal
   private buildBridge(): void {
-    const ck = this.sc.creek, cr = this.c.creek;
-    const fb = ck?.footbridge;
-    if (!ck || !cr || !fb) return;
+    const fb = this.sc.creek?.footbridge, cb = this.c.bridge;
+    if (!fb || !cb) return;
     const { nx, ny, dx, z } = this.c;
-    // eje de la quebrada en x (interpolado) y cota de la orilla en esa columna
-    const ax = ck.axis;
-    let yc = ax[0][1];
-    for (let q = 1; q < ax.length; q++) if (fb.x <= ax[q][0]) {
-      const f = (fb.x - ax[q - 1][0]) / Math.max(1e-9, ax[q][0] - ax[q - 1][0]);
-      yc = ax[q - 1][1] + f * (ax[q][1] - ax[q - 1][1]);
-      break;
-    }
-    const i = Math.min(nx - 1, Math.max(0, Math.floor(fb.x / dx)));
-    const zAt = (y: number) => z[Math.min(ny - 1, Math.max(0, Math.floor(y / dx))) * nx + i];
-    const bank = Math.min(zAt(yc - ck.section.bankHalfWidthM), zAt(yc + ck.section.bankHalfWidthM));
-    const deck = bank + fb.deckAboveBankM;
-    const soffit = deck - fb.beamM;
-    const y0 = yc - fb.halfLengthM, y1 = yc + fb.halfLengthM;
-    const j0 = Math.max(0, Math.floor(y0 / dx)), j1 = Math.min(ny - 1, Math.floor(y1 / dx));
-    this.bridge = { x: fb.x, y0, y1, deck, soffit, i, j0, j1 };
+    const { deck, soffit, y0, y1, yc } = cb;
+    const zAt = (y: number) => z[Math.min(ny - 1, Math.max(0, Math.floor(y / dx))) * nx + cb.i];
+    this.bridge = { x: cb.x, y0, y1, deck, soffit, i: cb.i, j0: cb.j0, j1: cb.j1 };
     const concrete = this.mat(new THREE.MeshStandardMaterial({ color: '#a7a9a6', roughness: 0.85 }));
     const steel = this.mat(new THREE.MeshStandardMaterial({ color: '#2f6b4f', roughness: 0.5, metalness: 0.4 }));
     const box = this.geo(new THREE.BoxGeometry(1, 1, 1));
     const L = y1 - y0;
-    const add = (m: THREE.Material, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number) => {
+    // el tablero (con vigas y barandas) va en su propio grupo, con el origen en el centro del vano: si el puente
+    // colapsa, el grupo se desplaza aguas abajo y se inclina hasta quedar atravesado en el cauce
+    const span = new THREE.Group();
+    this.w(cb.x, yc, deck, span.position);
+    this.bridgeSpan = span;
+    this.bridgeHome = span.position.clone();
+    const add = (g: THREE.Object3D, m: THREE.Material, cx: number, cy: number, cz: number, sx: number, sy: number, sz: number) => {
       const o = new THREE.Mesh(box, m);
       this.w(cx, cy, cz, o.position);
+      if (g === span) o.position.sub(span.position);
       // escala en el mundo: x (este), y (arriba), z (sur)
       o.scale.set(sx, sz, sy);
       o.castShadow = true;
-      this.group.add(o);
+      g.add(o);
     };
     // tablero y vigas
-    add(concrete, fb.x, yc, deck - 0.08, fb.widthM, L, 0.16);
-    add(concrete, fb.x - fb.widthM / 2 + 0.15, yc, soffit + (fb.beamM - 0.16) / 2, 0.22, L, fb.beamM - 0.16);
-    add(concrete, fb.x + fb.widthM / 2 - 0.15, yc, soffit + (fb.beamM - 0.16) / 2, 0.22, L, fb.beamM - 0.16);
-    // estribos hasta el terreno
+    add(span, concrete, cb.x, yc, deck - 0.08, fb.widthM, L, 0.16);
+    add(span, concrete, cb.x - fb.widthM / 2 + 0.15, yc, soffit + (fb.beamM - 0.16) / 2, 0.22, L, fb.beamM - 0.16);
+    add(span, concrete, cb.x + fb.widthM / 2 - 0.15, yc, soffit + (fb.beamM - 0.16) / 2, 0.22, L, fb.beamM - 0.16);
+    // estribos hasta el terreno (quedan en su sitio si el tablero se va)
     for (const ye of [y0 + 0.4, y1 - 0.4]) {
       const g = zAt(ye);
       const hgt = Math.max(0.3, deck - g);
-      add(concrete, fb.x, ye, g + hgt / 2 - 0.1, fb.widthM + 0.3, 0.8, hgt);
+      add(this.group, concrete, cb.x, ye, g + hgt / 2 - 0.1, fb.widthM + 0.3, 0.8, hgt);
     }
     // barandas: postes y pasamanos
     for (const side of [-1, 1]) {
-      const xr = fb.x + side * (fb.widthM / 2 - 0.05);
-      for (let y = y0 + 0.3; y <= y1 - 0.3 + 1e-6; y += 1.25) add(steel, xr, y, deck + 0.5, 0.05, 0.05, 1);
-      add(steel, xr, yc, deck + 1.0, 0.06, L - 0.4, 0.06);
-      add(steel, xr, yc, deck + 0.55, 0.04, L - 0.4, 0.04);
+      const xr = cb.x + side * (fb.widthM / 2 - 0.05);
+      for (let y = y0 + 0.3; y <= y1 - 0.3 + 1e-6; y += 1.25) add(span, steel, xr, y, deck + 0.5, 0.05, 0.05, 1);
+      add(span, steel, xr, yc, deck + 1.0, 0.06, L - 0.4, 0.06);
+      add(span, steel, xr, yc, deck + 0.55, 0.04, L - 0.4, 0.04);
     }
+    this.group.add(span);
   }
 
-  // ------------------------------------------------------------ coberturas
+  /**
+   * Colapso del puente: el tablero se desliza aguas abajo y queda atravesado e inclinado en el cauce, sobre las
+   * celdas donde el cálculo pone sus escombros. En pausa o con movimiento reducido salta a la posición final.
+   */
+  private updateBridge(sim: CitySim, dtReal: number, reduced: boolean): void {
+    const span = this.bridgeSpan, cb = this.c.bridge, home = this.bridgeHome;
+    if (!span || !cb || !home) return;
+    const fallen = sim.bridge?.status === 'colapsado';
+    const target = fallen ? 1 : 0;
+    if (!fallen) this.collapseK = 0;
+    else if (reduced) this.collapseK = 1;
+    else this.collapseK = Math.min(1, this.collapseK + Math.max(0, dtReal) / 2.5);
+    const k = target === 0 ? 0 : 1 - Math.pow(1 - this.collapseK, 3);
+    // posición final: 3 m aguas abajo, apoyado en el fondo del cauce (un extremo más alto que el otro)
+    const ex = cb.x + cb.tx * 3.2, ey = cb.yc + cb.ty * 3.2;
+    const kk = Math.min(this.c.ny - 1, Math.max(0, Math.floor(ey / this.c.dx))) * this.c.nx + Math.min(this.c.nx - 1, Math.max(0, Math.floor(ex / this.c.dx)));
+    const end = this.w(ex, ey, this.c.z[kk] + 0.9, new THREE.Vector3());
+    span.position.lerpVectors(home, end, k);
+    span.rotation.set(0.18 * k, 0.35 * k, -0.22 * k);
+  }
+
+  // ------------------------------------------------------------ coberturas  // ------------------------------------------------------------ coberturas
   /**
    * Prisma recto de muro entre los puntos A y B del modelo, con espesor t, base zb y corona que va de ztA
    * (en A) a ztB (en B). Sirve para cabezales, tabiques y aletas con la corona inclinada.
@@ -670,21 +689,23 @@ export class FloodView {
   private updateLabels(sim: CitySim): void {
     const out: FloodLabel[] = [];
     const { nx, dx, z } = this.c;
-    const b = this.bridge;
-    if (b) {
-      let level = -Infinity, lmax = -Infinity;
+    const b = this.bridge, bs = sim.bridge;
+    if (b && bs) {
+      let lmax = -Infinity;
       for (let j = b.j0; j <= b.j1; j++) {
         const k = j * nx + b.i;
-        if (sim.h[k] > 0.01) level = Math.max(level, z[k] + sim.h[k]);
         if (sim.hmaxField[k] > 0.01) lmax = Math.max(lmax, z[k] + sim.hmaxField[k]);
       }
+      const level = bs.level;
       let sub: string;
-      if (level >= b.deck + 0.02) sub = `el agua pasa ${fmtNum(level - b.deck, 1)} m sobre el tablero`;
-      else if (level >= b.soffit) sub = 'el agua golpea la viga';
-      else if (Number.isFinite(level)) sub = `libre: ${fmtNum(b.soffit - level, 1)} m bajo la viga`;
+      if (bs.status === 'colapsado') sub = `colapsó: el agua lo empujó con ${fmtNum(bs.dragMax, 0)} kN, más de lo que resisten sus apoyos`;
+      else if (level >= b.soffit) {
+        sub = `${level >= b.deck + 0.02 ? `agua ${fmtNum(level - b.deck, 1)} m sobre el tablero` : 'sin gálibo: el agua golpea la viga'} · empuje ${fmtNum(bs.drag, 0)} kN · ${fmtNum(bs.utilization * 100, 0)} % de lo que resiste`;
+      } else if (Number.isFinite(level)) sub = `gálibo: ${fmtNum(b.soffit - level, 1)} m bajo la viga`;
       else sub = 'libre';
-      if (!(level >= b.soffit) && lmax >= b.soffit) sub += lmax >= b.deck ? ' · ya pasó sobre el tablero' : ' · ya golpeó la viga';
-      out.push({ id: 'fb', text: 'Puente peatonal', sub, priority: 5, kind: level >= b.soffit ? 'dano' : 'aviso', color: level >= b.deck ? HAZARD[5].color : level >= b.soffit ? HAZARD[3].color : undefined, at: this.w(b.x, (b.y0 + b.y1) / 2, b.deck + 1.6) });
+      if (bs.status !== 'colapsado' && !(level >= b.soffit) && lmax >= b.soffit) sub += ` · llegó a ${fmtNum(bs.utilMax * 100, 0)} % de lo que resiste`;
+      const sev = bs.status === 'colapsado' ? 6 : bs.utilization >= 0.7 ? 5 : level >= b.soffit ? 3 : 0;
+      out.push({ id: 'fb', text: bs.status === 'colapsado' ? 'Puente peatonal colapsado' : 'Puente peatonal', sub, priority: 5, kind: sev ? 'dano' : 'aviso', color: sev ? HAZARD[sev].color : undefined, at: this.w(b.x, (b.y0 + b.y1) / 2, b.deck + 1.6) });
     }
     this.c.culverts.forEach((cu, ci) => {
       const st = sim.culv[ci], cv = this.culverts[ci];
@@ -724,6 +745,7 @@ export class FloodView {
     this.updateCulverts(sim);
     this.updateDebris(sim);
     this.updateSpray(sim, Math.min(0.05, dtReal), reduced);
+    this.updateBridge(sim, dtReal, reduced);
     if (this.lastStainT < 0 || Math.abs(sim.t - this.lastStainT) >= 2 || sim.t < this.lastStainT) {
       this.updateStains(sim);
       this.updateLabels(sim);
