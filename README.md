@@ -126,6 +126,7 @@ Además hay:
 Escenarios incluidos:
 - **Calle de prueba**: escenario didáctico de verificación.
 - **Ladera con quebrada**: sector demostrativo inspirado en barrios de ladera de Medellín.
+- **Andalucía · Juan Bobo**, **Blanquizal · La Iguaná** y **El Corazón · Ana Díaz**: sectores con datos oficiales de la Alcaldía de Medellín (modelo de elevación 2024 de 1 m, construcciones, vías e hidrografía POT). En Juan Bobo se simula la creciente; en los otros dos la quebrada pasa cubierta bajo las casas y su eje se dibuja como referencia. Ver `docs/medellin/DATOS_REALES.md`.
 
 **Ninguno es un lugar real.** Los datos reales se incorporan con el pipeline `tools/geo/medellin_pipeline.py`, como explica `docs/medellin/DATOS_REALES.md`.
 

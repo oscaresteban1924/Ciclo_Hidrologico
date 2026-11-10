@@ -1,5 +1,38 @@
 # Cómo reemplazar el sector demostrativo por datos reales de Medellín
 
+## 0. Sectores con datos oficiales incluidos (noviembre de 2026)
+
+La aplicación trae tres sectores construidos con los servicios oficiales de mapas de la Alcaldía de Medellín. El entorno de trabajo no tiene acceso a `www.medellin.gov.co`, así que los datos se consultaron con el navegador integrado del computador del usuario. Las respuestas sin modificar se trajeron al repositorio en `tools/geo/insumos/`, cada una con su SHA-256 verificado. El manifiesto (`tools/geo/insumos/manifiesto.json`) guarda la consulta exacta de cada archivo.
+
+| Insumo | Servicio | Uso |
+|---|---|---|
+| Terreno | `ServiciosImagen/Modelo_digital_de_elevacion_medellin_2024/ImageServer` (1 m, EPSG:9377, modelo de terreno: las construcciones no aparecen como relieve) | Malla de cálculo de 1 m, sin remuestrear |
+| Construcciones | `ServiciosCiudad/CartografiaBase/MapServer/15` (Construccion) | Huellas; altura = número de pisos × 3 m (estimada) |
+| Vías | `ServiciosCiudad/CartografiaBase/MapServer/14` (Vias Medellin) | Ejes; calzada estimada de 5 m (3 m en las de menor jerarquía) |
+| Quebrada | `ServiciosCiudad/CartografiaBase/MapServer/27` (Hidrografia POT, escala 1:25 000) | Eje llevado al fondo del cauce del modelo de elevación |
+
+El constructor `tools/geo/sector_real.py` genera los escenarios en `src/city/scenarios/reales/`:
+
+```bash
+python3 tools/geo/sector_real.py --site andalucia-juan-bobo --out src/city/scenarios/reales/andalucia-juan-bobo.json
+```
+
+| Sector | Dominio (EPSG:9377) | Quebrada | Resultado |
+|---|---|---|---|
+| Andalucía · Juan Bobo (Santa Cruz, comuna 2) | 4717256–4717406 E, 2254459–2254579 N (150 × 120 m) | Cauce abierto en el terreno en el 97 % de las secciones | **Se simula la creciente** (de ejemplo). Capacidad de la sección de control ≈ 20 m³/s; pendiente media del fondo 25 % |
+| Blanquizal · La Iguaná (San Javier, comuna 13) | 4711981–4712101 E, 2252010–2252160 N (120 × 150 m) | El afluente pasa bajo las casas: cauce visible en el 36 % de las secciones | Sector de lluvia urbana; el eje de la quebrada se dibuja como referencia y no se simula |
+| El Corazón · Ana Díaz (San Javier, comuna 13) | 4709311–4709431 E, 2248951–2249101 N (120 × 150 m) | Cauce visible en el 11 % de las secciones | Igual que Blanquizal |
+
+Se simula la quebrada solo si al menos el 80 % de las secciones, cada 5 m, tienen las dos orillas por lo menos 1 m sobre el fondo en 10 m. En Blanquizal y El Corazón la ortofoto de 2024 confirma que el eje POT cruza manzanas construidas. Sin datos de esas coberturas, simular la creciente por encima de las casas exageraría la inundación.
+
+**Acondicionamiento del terreno (queda registrado en la procedencia de cada escenario):**
+- **Eje de la quebrada.** El eje POT se lleva al fondo del cauce: la cota mínima en ±8 m perpendiculares, suavizada. En Juan Bobo el desplazamiento medio es de 2,3 m.
+- **Paso del agua por el cauce.** Donde el perfil del fondo sube aguas abajo, se rebaja el fondo a lo largo de 2 m de ancho para que el agua siga. Esto pasa en vías sobre coberturas o puentes que el modelo de terreno no distingue. En Juan Bobo se rebajaron 21 m, hasta 0,84 m. No se dibuja ninguna obra.
+- **Depresiones sin salida.** Entre construcciones hay terrazas y patios que en el modelo quedan cerrados; en la realidad se desaguan por tuberías. Se rellenan con inundación por prioridad (Barnes et al., 2014), con las construcciones como muros: 796 a 892 celdas por sector. Sin este paso, la lluvia sola dejaba más de 100 edificaciones con agua contra los muros; con él quedan 2.
+- **Patios interiores cerrados.** Las celdas libres rodeadas por construcciones se tratan como parte de la construcción vecina; su lluvia sale por la bajante (`closePockets`).
+
+**Lo que no se incluye ni se inventa:** red de alcantarillado, sumideros, coberturas, puentes y bordillos. Las coberturas del suelo son estimadas: retiro con grama y el resto concreto. La creciente es de ejemplo; no hay una cuenca delineada para estos sectores. Prueba D1 en `PRUEBAS.md`.
+
 ## 1. Qué está listo
 
 - `tools/geo/medellin_pipeline.py`: pipeline reproducible que produce un archivo de escenario (`medellin-lluvia/escenario` v1).

@@ -1823,3 +1823,17 @@
   background: var(--water-wash, #e8f1fa);
   font-size: 0.9rem;
 }
+
+/* Registro del procesamiento de datos reales (pestaña Docente) */
+.prov-log {
+  margin: 6px 0 4px;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.prov-log li + li {
+  margin-top: 3px;
+}
+.prov-log a {
+  word-break: break-all;
+}

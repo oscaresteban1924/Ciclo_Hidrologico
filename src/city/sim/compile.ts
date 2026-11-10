@@ -57,6 +57,8 @@ export interface OutletFace {
 
 export interface Compiled {
   scenarioId: string;
+  /** Celdas de patios interiores cerrados tratadas como construcción (sectores reales). */
+  pockets: number;
   dx: number;
   nx: number;
   ny: number;
@@ -291,6 +293,50 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       building[k] = bi;
     });
   });
+  // 3c) Patios interiores cerrados (sectores reales): celdas libres sin camino hasta un borde del dominio,
+  // rodeadas por construcciones. En la malla de cálculo serían pozos sin salida; en la realidad se desaguan por
+  // las bajantes y tuberías de las casas. Se tratan como parte de la construcción vecina (su lluvia va a la
+  // bajante) y se cuentan en `pockets`.
+  const patio = new Int32Array(sc.buildings.length);
+  let pockets = 0;
+  if (sc.closePockets) {
+    const reach = new Uint8Array(N);
+    const stack: number[] = [];
+    for (let i = 0; i < nx; i++) for (const j of [0, ny - 1]) if (!solid[j * nx + i]) stack.push(j * nx + i);
+    for (let j = 0; j < ny; j++) for (const i of [0, nx - 1]) if (!solid[j * nx + i]) stack.push(j * nx + i);
+    for (const k of stack) reach[k] = 1;
+    while (stack.length) {
+      const k = stack.pop()!;
+      const i = k % nx, j = (k - i) / nx;
+      for (const q of [i > 0 ? k - 1 : -1, i < nx - 1 ? k + 1 : -1, j > 0 ? k - nx : -1, j < ny - 1 ? k + nx : -1]) {
+        if (q >= 0 && !reach[q] && !solid[q]) {
+          reach[q] = 1;
+          stack.push(q);
+        }
+      }
+    }
+    for (let k = 0; k < N; k++) {
+      if (solid[k] || reach[k]) continue;
+      // edificio vecino (el primero que se encuentre en un radio creciente)
+      const i = k % nx, j = (k - i) / nx;
+      let bi = -1;
+      for (let r = 1; r < Math.max(nx, ny) && bi < 0; r++) {
+        for (let jj = Math.max(0, j - r); jj <= Math.min(ny - 1, j + r) && bi < 0; jj++) for (let ii = Math.max(0, i - r); ii <= Math.min(nx - 1, i + r); ii++) {
+          const q = jj * nx + ii;
+          if (building[q] >= 0) {
+            bi = building[q];
+            break;
+          }
+        }
+      }
+      if (bi < 0) continue;
+      solid[k] = 1;
+      building[k] = bi;
+      cover[k] = coverIndex('techo');
+      patio[bi]++;
+      pockets++;
+    }
+  }
   // 4) Zonas modificables (superficie elegida por el estudiante)
   sc.zones.forEach((zn, zi) => {
     const chosen: CoverId = iv.zones[zn.id] ?? zn.cover;
@@ -349,6 +395,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       cells++;
       if (zGround[k] < baseZ) baseZ = zGround[k];
     });
+    cells += patio[bi];
     buildings.push({ id: b.id, index: bi, cells, roofArea: cells * area, downCell: -1, tank: tankOf.get(b.id) ?? -1, baseZ: Number.isFinite(baseZ) ? baseZ : 0, heightM: b.heightM, rainWeight: 0 });
   });
   buildings.forEach((cb, bi) => {
@@ -594,7 +641,8 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       const a = Math.floor(cs.road.x0 / dx), b = Math.ceil(cs.road.x1 / dx);
       if (iu >= a && iu < b && b < i) iu = b;
     }
-    const slope = Math.max(1e-4, (bedAt(iu) - bedAt(i + di)) / ((i + di - iu) * dx));
+    // en valor absoluto: la quebrada puede correr hacia +x (ladera) o hacia −x (sectores reales)
+    const slope = Math.max(1e-4, Math.abs(bedAt(iu) - bedAt(i + di)) / ((i + di - iu) * dx));
     let capacity = 0, capacityManning = 0;
     for (let j = jb0; j <= jb1; j++) {
       const k = j * nx + i;
@@ -672,6 +720,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
   if (creek?.basin) h = fnv(h, 11 + ['bosque', 'mixta', 'urbanizada'].indexOf(creek.basinCover));
 
   return {
+    pockets,
     scenarioId: sc.id,
     dx,
     nx,

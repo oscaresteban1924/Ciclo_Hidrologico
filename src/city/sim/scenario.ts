@@ -33,6 +33,8 @@ export interface Provenance {
   sources: Source[];
   generatedBy: string;
   generatedAt?: string;
+  /** Registro del procesamiento de los datos (sectores reales). */
+  log?: string[];
 }
 
 export interface TerrainRaster {
@@ -375,6 +377,11 @@ export interface Scenario {
   culverts?: CulvertSpec[];
   /** Elementos decorativos: no participan en el cálculo. */
   decor?: Decor;
+  /**
+   * Patios interiores cerrados por construcciones (sin camino a un borde) se tratan como parte de la
+   * construcción vecina. Para sectores reales con manzanas densas.
+   */
+  closePockets?: boolean;
   defaults: Shared;
   engine: { name: string; version: string };
   seed: number;
@@ -386,6 +393,8 @@ export interface Decor {
   lamps: Pt[];
   /** Cable aéreo decorativo (p. ej., Metrocable) con torres. */
   cable?: { towers: Pt[]; label: string };
+  /** Eje de referencia de una quebrada cubierta o no visible en el terreno (solo dibujo; no se simula). */
+  creekRef?: Pt[];
   /** Escaleras peatonales decorativas. */
   stairs?: { a: Pt; b: Pt; width: number }[];
 }

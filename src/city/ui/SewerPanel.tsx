@@ -771,8 +771,10 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
   const zTop = zb + Math.max(5, ...rows.map((r) => r.z + r.hm - zb + 0.4));
   const W = 340, H = 230, L0 = 34, R0 = 10, T0 = 12, B0 = 40;
   const y0 = rows[0].y - dx / 2, y1 = rows[rows.length - 1].y + dx / 2;
-  // mirando aguas abajo, el norte (margen izquierda) queda a la izquierda
-  const X = (y: number) => L0 + ((y1 - y) / (y1 - y0)) * (W - L0 - R0);
+  // mirando aguas abajo: si la quebrada corre hacia el este, el norte queda a la izquierda; hacia el oeste, a la derecha
+  const ax = sc.creek?.axis ?? [];
+  const eastward = ax.length < 2 || ax[ax.length - 1][0] >= ax[0][0];
+  const X = (y: number) => L0 + ((eastward ? y1 - y : y - y0) / (y1 - y0)) * (W - L0 - R0);
   const Y = (z: number) => T0 + (1 - (z - zb + 0.3) / (zTop - zb + 0.3)) * (H - T0 - B0);
   const base = Y(zb - 0.3);
   const rev = [...rows].reverse();
@@ -837,7 +839,7 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
         {houses.map((hh) => {
           const bs = sc.buildings[hh.b];
           const hgt = Math.min(bs.heightM, zTop - hh.z - 0.2);
-          const xa = X(hh.yb + dx / 2), xb = X(hh.ya - dx / 2);
+          const xa = Math.min(X(hh.yb + dx / 2), X(hh.ya - dx / 2)), xb = Math.max(X(hh.yb + dx / 2), X(hh.ya - dx / 2));
           return (
             <g key={`h${hh.b}-${hh.ya}`}>
               <rect x={xa} y={Y(hh.z + hgt)} width={xb - xa} height={Y(hh.z) - Y(hh.z + hgt)} fill="#f3eee6" stroke="#8c7d68" strokeWidth="1" />
@@ -857,7 +859,7 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
         )}
         {/* franja de peligro de cada celda ahora */}
         {rows.map((r) => (
-          <rect key={`hz${r.y}`} x={X(r.y + dx / 2)} y={H - B0 + 6} width={Math.max(0.6, X(r.y - dx / 2) - X(r.y + dx / 2))} height="7" fill={r.solid ? '#cfc8bd' : HAZARD[r.haz].color} />
+          <rect key={`hz${r.y}`} x={Math.min(X(r.y + dx / 2), X(r.y - dx / 2))} y={H - B0 + 6} width={Math.max(0.6, Math.abs(X(r.y - dx / 2) - X(r.y + dx / 2)))} height="7" fill={r.solid ? '#cfc8bd' : HAZARD[r.haz].color} />
         ))}
         <text x={L0 - 4} y={H - B0 + 12} textAnchor="end" className="tick">peligro</text>
         <text x={L0} y={H - 8} className="tick">norte · casas</text>

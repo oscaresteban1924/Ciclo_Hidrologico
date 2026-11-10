@@ -944,6 +944,23 @@ export function TeacherTab({ api }: { api: LabApi }) {
               </li>
             ))}
           </ul>
+          {sc.provenance.log && sc.provenance.log.length > 0 && (
+            <details className="city-summary">
+              <summary>Registro del procesamiento de los datos</summary>
+              <ul className="prov-log">
+                {sc.provenance.log.map((l) => (
+                  <li key={l}>{l}</li>
+                ))}
+              </ul>
+              {sc.provenance.sources.length > 0 && (
+                <ul className="prov-log">
+                  {sc.provenance.sources.map((q) => (
+                    <li key={q.label}>{q.url ? <a href={q.url} target="_blank" rel="noreferrer">{q.label}</a> : q.label}</li>
+                  ))}
+                </ul>
+              )}
+            </details>
+          )}
           <p className="city-small">Sistema de referencia: {sc.extent.crs === 'LOCAL' ? 'coordenadas locales en metros (escenario sin georreferencia)' : `${sc.extent.crs}, origen ${sc.extent.origin.join(', ')}`}. Terreno: {sc.terrain.datum}.</p>
           <p className="city-small">
             Alrededor de la maqueta (solo dibujo, no entra en el cálculo): el Valle de Aburrá a escala real con cotas y trazados <strong>aproximados</strong> (río, metro, metrocables, cerros, quebradas y barrios). {sc.extent.lonLat ? 'El sector se ubica en su longitud y latitud.' : 'La ubicación del sector en el valle es ilustrativa.'} Fachadas, avisos de locales, postes, cables, motos y ropa tendida son ambientación: no son construcciones ni redes reales. Con la lluvia, la bruma, las nubes bajas, las luces encendidas, el velo de lluvia y el brillo de las superficies mojadas también son ambientación; el agua que cuenta es la que tiene color en la leyenda (color natural o, con «Agua en azul», la escala azul).

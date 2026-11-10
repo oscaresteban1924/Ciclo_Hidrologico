@@ -8,7 +8,7 @@ import { compile } from '../../src/city/sim/compile';
 import { ComparePair, change, indicators } from '../../src/city/sim/compare';
 import { CitySim } from '../../src/city/sim/engine';
 import { flowArrows } from '../../src/city/sim/fields';
-import { baseInterventions, cloneInterventions, validateConfig, type BuildingSpec, type Bowl, type DrainSpec, type OutletSpec, type Scenario, type Shared, type TankSite } from '../../src/city/sim/scenario';
+import { baseInterventions, cloneInterventions, validateConfig, validateScenario, type BuildingSpec, type Bowl, type DrainSpec, type OutletSpec, type Scenario, type Shared, type TankSite } from '../../src/city/sim/scenario';
 import { rasterFrom, rect } from '../../src/city/scenarios/primitives';
 import { builtinScenarios } from '../../src/city/scenarios/index';
 import { TracerSet } from '../../src/city/sim/tracers';
@@ -1086,6 +1086,43 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
     measured: `bosque: pico ${fmt(f.ind.basin!.peak, 1)} m³/s en el minuto ${fmt(f.ind.basin!.tPeak / 60, 0)}, error de volumen ${f.eV.toExponential(1)}, residuo ${f.res.toExponential(1)}, edificaciones con agua ${f.ind.damage.affected}${wetF >= 0 ? ` (desde el minuto ${fmt(wetF / 60, 1)})` : ''} | urbanizada: pico ${fmt(u.ind.basin!.peak, 1)} m³/s en el minuto ${fmt(u.ind.basin!.tPeak / 60, 0)}, error de volumen ${u.eV.toExponential(1)}, residuo ${u.res.toExponential(1)}; avisos en los minutos ${seq.map((t) => fmt(t / 60, 1)).join(', ')}; agua en la primera casa en el minuto ${fmt(wetU / 60, 1)} (${fmt((wetU - seq[3]) / 60, 1)} min después de la alerta roja); edificaciones con agua ${u.ind.damage.affected}`,
     pass: f.eV < 1e-6 && u.eV < 1e-6 && f.res < 1e-9 && u.res < 1e-9 && f.ind.damage.affected === 0 && wetF < 0 && u.ind.damage.affected > 0 && ordered && wetU > seq[3],
   });
+}
+
+// ---------------------------------------------------------------- Sectores con datos oficiales de Medellín
+{
+  // D1) Los tres sectores reales: válidos, compilan, conservan el agua y la lluvia sola no inunda casas por
+  // depresiones artificiales; en Juan Bobo la creciente de ejemplo entra completa y el agua sale por el borde
+  const rows: string[] = [];
+  let ok = true;
+  for (const id of ['andalucia-juan-bobo', 'blanquizal-la-iguana', 'el-corazon-ana-diaz']) {
+    const sc = builtinScenarios()[id];
+    const v = validateScenario(sc);
+    const sh: Shared = { ...sc.defaults, simMinutes: 25 };
+    const c = compile(sc, sh, baseInterventions(sc));
+    const sim = new CitySim(c, sh);
+    sim.runToEnd();
+    const chk = sim.check();
+    const res = Math.abs(sim.bal.residual) / sim.bal.precipitation;
+    const aff = damageSummary(exposureOf(sim)).affected;
+    const good = v.ok && chk.nonFinite === 0 && chk.negative === 0 && res < 1e-9 && aff <= 5 && sc.provenance.kind === 'datos-reales';
+    if (!good) ok = false;
+    rows.push(`${id}: ${v.ok ? 'válido' : 'inválido'}, ${c.buildings.length} construcciones, ${c.pockets} celdas de patios cerrados, quebrada ${c.creek ? `simulada (capacidad ${fmt(c.creek.capacity, 1)} m³/s)` : 'de referencia'}, residuo ${res.toExponential(1)}, edificaciones con 10 cm o más solo por la lluvia ${aff}`);
+  }
+  const sc = builtinScenarios()['andalucia-juan-bobo'];
+  const cap = compile(sc, sc.defaults, baseInterventions(sc)).creek!.capacity;
+  const sh: Shared = { ...sc.defaults, simMinutes: 25, creek: { peakM3s: 1.5 * cap, timeToPeakMin: 6, startMin: 2 } };
+  const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+  sim.runToEnd();
+  const hg = sim.creekHydro!;
+  let vin = 0;
+  for (let k = 1; k < hg.t.length; k++) vin += 0.5 * (hg.q[k] + hg.q[k - 1]) * (hg.t[k] - hg.t[k - 1]);
+  vin += hg.q[hg.q.length - 1] * (sim.endT - hg.t[hg.t.length - 1]);
+  const eV = Math.abs(sim.bal.creekIn - vin) / vin;
+  const resC = Math.abs(sim.bal.residual) / (sim.bal.precipitation + sim.bal.inflow);
+  const outFrac = sim.bal.boundaryOut / (sim.bal.precipitation + sim.bal.inflow);
+  if (!(eV < 1e-6 && resC < 1e-9 && outFrac > 0.9)) ok = false;
+  rows.push(`Juan Bobo con creciente de 150 %: volumen de entrada error ${eV.toExponential(1)}, residuo ${resC.toExponential(1)}, salió por los bordes el ${fmt(outFrac * 100, 1)} % de lo que entró`);
+  record({ id: 'D1', kind: 'obligatoria', name: 'Sectores con datos oficiales: válidos, conservan el agua y sin encharcamientos artificiales', tolerance: 'los tres escenarios son válidos y de tipo «datos reales», compilan y simulan 25 min de lluvia sin valores no numéricos ni negativos, con residuo < 10⁻⁹; la lluvia sola deja 10 cm o más contra los muros de 5 edificaciones o menos; en Juan Bobo la creciente de ejemplo entra completa (error < 10⁻⁶) y más del 90 % del agua sale por los bordes', measured: rows.join(' | '), pass: ok });
 }
 
 // ---------------------------------------------------------------- Sensibilidad al límite de Froude (información para docentes)

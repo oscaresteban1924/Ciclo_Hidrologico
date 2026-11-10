@@ -223,6 +223,17 @@ export class SectorMap2D {
       G.fillStyle = dr.obstruction > 0.5 ? '#7a5a2e' : '#22272b';
       G.fillRect(px - 5, py - 4, 10, 8);
     }
+    // Quebrada cubierta o no visible en el terreno: eje de referencia a trazos (solo dibujo)
+    const ref = this.sc.decor?.creekRef;
+    if (ref && ref.length > 1) {
+      G.setLineDash([7, 5]);
+      G.strokeStyle = '#2f8fd8';
+      G.lineWidth = 2.5;
+      G.beginPath();
+      ref.forEach(([x, y], q) => (q ? G.lineTo(...P(x, y)) : G.moveTo(...P(x, y))));
+      G.stroke();
+      G.setLineDash([]);
+    }
     // Coberturas: cajones bajo la vía (contorno discontinuo), cabezales y troncos atascados en la entrada (la
     // franja marrón cubre la fracción obstruida calculada)
     (this.sc.culverts ?? []).forEach((cs, ci) => {

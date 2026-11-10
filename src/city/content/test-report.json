@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-09T22:35:21.082Z",
+  "generatedAt": "2026-11-10T00:06:26.600Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
-  "passed": 43,
-  "total": 43,
+  "passed": 47,
+  "total": 47,
   "results": [
     {
       "id": "1",
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 144 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 667 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5499 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 150 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 700 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5285 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -129,6 +129,30 @@
       "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (Ladera con quebrada, 150 mm/h, 30 min)",
       "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
       "measured": "pasos 7802; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = 4.93e-15; profundidad máx. = 0.983 m",
+      "pass": true
+    },
+    {
+      "id": "V2-andalucia-juan-bobo",
+      "kind": "verificacion",
+      "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (Andalucía · Juan Bobo, 150 mm/h, 30 min)",
+      "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
+      "measured": "pasos 9474; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = 2.69e-15; profundidad máx. = 2.991 m",
+      "pass": true
+    },
+    {
+      "id": "V2-blanquizal-la-iguana",
+      "kind": "verificacion",
+      "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (Blanquizal · La Iguaná, 150 mm/h, 30 min)",
+      "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
+      "measured": "pasos 8888; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = -1.52e-15; profundidad máx. = 2.458 m",
+      "pass": true
+    },
+    {
+      "id": "V2-el-corazon-ana-diaz",
+      "kind": "verificacion",
+      "name": "Sin NaN, Inf ni profundidades negativas; sin agua en edificios (El Corazón · Ana Díaz, 150 mm/h, 30 min)",
+      "tolerance": "0 valores no finitos o negativos en cada paso; 0 celdas de edificio con agua; balance |residuo|/P < 1·10⁻⁹",
+      "measured": "pasos 10194; no finitos/negativos = 0; celdas de edificio con agua = 0; residuo/P = -2.86e-15; profundidad máx. = 3.000 m",
       "pass": true
     },
     {
@@ -349,6 +373,14 @@
       "pass": true
     },
     {
+      "id": "D1",
+      "kind": "obligatoria",
+      "name": "Sectores con datos oficiales: válidos, conservan el agua y sin encharcamientos artificiales",
+      "tolerance": "los tres escenarios son válidos y de tipo «datos reales», compilan y simulan 25 min de lluvia sin valores no numéricos ni negativos, con residuo < 10⁻⁹; la lluvia sola deja 10 cm o más contra los muros de 5 edificaciones o menos; en Juan Bobo la creciente de ejemplo entra completa (error < 10⁻⁶) y más del 90 % del agua sale por los bordes",
+      "measured": "andalucia-juan-bobo: válido, 296 construcciones, 339 celdas de patios cerrados, quebrada simulada (capacidad 19.9 m³/s), residuo 9.5e-15, edificaciones con 10 cm o más solo por la lluvia 2 | blanquizal-la-iguana: válido, 294 construcciones, 355 celdas de patios cerrados, quebrada de referencia, residuo 3.0e-15, edificaciones con 10 cm o más solo por la lluvia 2 | el-corazon-ana-diaz: válido, 143 construcciones, 82 celdas de patios cerrados, quebrada de referencia, residuo 3.2e-16, edificaciones con 10 cm o más solo por la lluvia 0 | Juan Bobo con creciente de 150 %: volumen de entrada error 6.7e-15, residuo 4.8e-15, salió por los bordes el 99.7 % de lo que entró",
+      "pass": true
+    },
+    {
       "id": "R1",
       "kind": "revision",
       "name": "Sensibilidad al límite de Froude (ladera, 10 % de pendiente)",
@@ -369,7 +401,7 @@
       "area": 8,
       "res": -2.5579538487363607e-13,
       "steps": 2326,
-      "ms": 144.14521199999945
+      "ms": 150.04331999999977
     },
     {
       "dx": 1,
@@ -382,7 +414,7 @@
       "area": 0,
       "res": -6.110667527536862e-13,
       "steps": 3072,
-      "ms": 667.0359749999998
+      "ms": 699.7115730000005
     },
     {
       "dx": 0.5,
@@ -395,7 +427,7 @@
       "area": 0,
       "res": -7.247535904753022e-13,
       "steps": 6227,
-      "ms": 5499.274349
+      "ms": 5285.2128840000005
     }
   ],
   "froude": [

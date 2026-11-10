@@ -302,6 +302,17 @@ export class SectorScene {
     return this.c.solid[k] ? this.c.zGround[k] : this.c.z[k];
   }
 
+  /** Cota del techo de la construcción en (x, y), o −∞ si no hay construcción. */
+  roofAt(x: number, y: number): number {
+    const { nx, ny, dx } = this.c;
+    const i = Math.min(nx - 1, Math.max(0, Math.floor(x / dx)));
+    const j = Math.min(ny - 1, Math.max(0, Math.floor(y / dx)));
+    const b = this.c.building[j * nx + i];
+    if (b < 0) return -Infinity;
+    const cb = this.c.buildings[b];
+    return cb.baseZ + cb.heightM;
+  }
+
   // ------------------------------------------------------------ construcción
   setCompiled(c: Compiled): void {
     const first = !this.c;
@@ -1215,6 +1226,38 @@ export class SectorScene {
       const m = new THREE.Mesh(g, white);
       m.userData.keepInCut = true; // las marcas viales orientan también en la vista bajo la calle
       this.decorGroup.add(m);
+    }
+    // Quebrada cubierta o no visible en el terreno: su eje de referencia, a trazos azules sobre el suelo y los
+    // techos (solo dibujo; no se simula)
+    if (d.creekRef && d.creekRef.length > 1) {
+      const blue = new THREE.MeshBasicMaterial({ color: '#2f8fd8', transparent: true, opacity: 0.85, depthWrite: false });
+      const ref: THREE.BufferGeometry[] = [];
+      const pts = d.creekRef;
+      let acc = 0;
+      for (let q = 1; q < pts.length; q++) {
+        const [ax, ay] = pts[q - 1], [bx, by] = pts[q];
+        const L = Math.hypot(bx - ax, by - ay);
+        if (L < 1e-6) continue;
+        const ux = (bx - ax) / L, uy = (by - ay) / L;
+        for (let t = acc; t < L; t += 3) {
+          const t1 = Math.min(L, t + 1.8);
+          const mx = ax + ux * (t + t1) / 2, my = ay + uy * (t + t1) / 2;
+          const g = new THREE.PlaneGeometry(t1 - t, 0.6);
+          g.rotateX(-Math.PI / 2);
+          g.rotateY(Math.atan2(by - ay, bx - ax));
+          // sobre el techo si el eje pasa bajo una construcción
+          const top = Math.max(this.groundAt(mx, my), this.roofAt(mx, my));
+          const p = this.w(mx, my, top + 0.05);
+          g.translate(p.x, p.y, p.z);
+          ref.push(g);
+        }
+        acc = ((acc - L) % 3 + 3) % 3;
+      }
+      for (const g of ref) {
+        const m = new THREE.Mesh(g, blue);
+        m.renderOrder = 3;
+        this.decorGroup.add(m);
+      }
     }
     // Árboles: copas de varios lóbulos con tronco; algunos guayacanes florecidos (amarillos y rosados)
     const rnd = prng(this.sc.seed + 1);

@@ -491,7 +491,22 @@ export class CityController {
     // desde aguas abajo, sobre la quebrada y en diagonal: se ven el cauce, la mira y los frentes de las casas
     // de la orilla
     const x = (cr.i + 0.5) * sim!.c.dx, y = (cr.jt + 0.5) * sim!.c.dx;
-    (v as SectorScene).lookFrom([x + 33, y + 3, cr.bankLevel + 12], [x + 2, y + 6.5, cr.bankLevel + 0.6]);
+    // sentido del flujo en la sección (del eje de la quebrada): la cámara se pone aguas abajo
+    let ux = 1, uy = 0;
+    const ax = this.sc?.creek?.axis ?? [];
+    let best = Infinity;
+    for (let q = 1; q < ax.length; q++) {
+      const [x0, y0] = ax[q - 1], [x1, y1] = ax[q];
+      const d = Math.hypot((x0 + x1) / 2 - x, (y0 + y1) / 2 - y);
+      const L = Math.hypot(x1 - x0, y1 - y0);
+      if (d < best && L > 1e-6) {
+        best = d;
+        ux = (x1 - x0) / L;
+        uy = (y1 - y0) / L;
+      }
+    }
+    const nx = -uy, ny = ux;
+    (v as SectorScene).lookFrom([x + 33 * ux + 3 * nx, y + 33 * uy + 3 * ny, cr.bankLevel + 12], [x + 2 * ux + 6.5 * nx, y + 2 * uy + 6.5 * ny, cr.bankLevel + 0.6]);
     this.notify(true);
   }
   isFlying(): boolean {
