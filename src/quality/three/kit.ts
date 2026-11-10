@@ -128,15 +128,19 @@ export const WALLS = ['#b4603f', '#a85a3c', '#c06c48', '#efe0c0', '#f0c9a2', '#c
  */
 export function waterMaterial(time: { value: number }, opts: { opacity?: number; speed?: number } = {}): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: opts.opacity ?? 0.9, roughness: 0.18, metalness: 0.05, depthWrite: false });
-  const speed = opts.speed ?? 0.6;
+  // la velocidad va en un uniform: three.js comparte un mismo programa entre materiales con el mismo
+  // onBeforeCompile, así que una constante escrita en el código del shader quedaría igual para todos
+  const speed = { value: opts.speed ?? 0.6 };
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = time;
+    sh.uniforms.uSpeed = speed;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aFlow;\nattribute float aFoam;\nvarying vec2 vFlow;\nvarying float vFoam;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlow = aFlow;\nvFoam = aFoam;');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uTime;
+        uniform float uSpeed;
         varying vec2 vFlow;
         varying float vFoam;
         float wh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -145,7 +149,7 @@ export function waterMaterial(time: { value: number }, opts: { opacity?: number;
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-        vec2 fp = vec2(vFlow.x * 0.55 - uTime * ${speed.toFixed(2)}, vFlow.y * 2.2);
+        vec2 fp = vec2(vFlow.x * 0.55 - uTime * uSpeed, vFlow.y * 2.2);
         float n1 = wn(fp * vec2(1.0, 1.0));
         float n2 = wn(fp * vec2(2.3, 1.7) + 7.1);
         float streak = smoothstep(0.62, 0.86, n1 * 0.65 + n2 * 0.35);
@@ -197,11 +201,50 @@ export function fishGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+const concreteCache = new Map<string, THREE.MeshStandardMaterial>();
+/**
+ * Concreto: manchas suaves y vetas de encofrado (ruido en coordenadas del mundo, sin texturas) y el borde de
+ * arriba un poco más claro, como el concreto lavado por la lluvia. Un material por color, compartido.
+ */
+export function concreteMaterial(color = '#c9c6bf'): THREE.MeshStandardMaterial {
+  const hit = concreteCache.get(color);
+  if (hit) return hit;
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.92 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCW;\nvarying vec3 vCN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCW = (modelMatrix * vec4(position, 1.0)).xyz;\nvCN = normalize(mat3(modelMatrix) * normal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vCW;
+        varying vec3 vCN;
+        float ch(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float cn(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(ch(i), ch(i + vec2(1, 0)), u.x), mix(ch(i + vec2(0, 1)), ch(i + vec2(1, 1)), u.x), u.y); }`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        {
+          vec2 q = abs(vCN.y) > 0.5 ? vCW.xz : (abs(vCN.x) > 0.5 ? vCW.zy : vCW.xy);
+          float n = cn(q * 0.9) * 0.6 + cn(q * 3.1 + 5.0) * 0.4;
+          float form = smoothstep(0.92, 0.98, fract(vCW.y / 1.2)) * (1.0 - step(0.5, abs(vCN.y)));
+          diffuseColor.rgb *= 0.9 + 0.16 * n - 0.06 * form;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.85, 0.82), step(0.5, vCN.y) * 0.25);
+        }`,
+      );
+  };
+  concreteCache.set(color, m);
+  return m;
+}
+
 /** Caja abierta (tanque) con paredes de concreto y frente de vidrio opcional. */
 export function tank(w: number, h: number, d: number, opts: { glassFront?: boolean; wall?: number; color?: string } = {}): THREE.Group {
   const g = new THREE.Group();
   const t = opts.wall ?? 0.35;
-  const conc = new THREE.MeshStandardMaterial({ color: opts.color ?? '#c9c6bf', roughness: 0.92 });
+  const conc = concreteMaterial(opts.color ?? '#c9c6bf');
   const glass = new THREE.MeshStandardMaterial({ color: '#cfe6f2', transparent: true, opacity: 0.18, roughness: 0.1, metalness: 0, depthWrite: false });
   const add = (sx: number, sy: number, sz: number, x: number, y: number, z: number, mat: THREE.Material) => {
     const b = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);

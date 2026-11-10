@@ -488,6 +488,28 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Tamaño y rendimiento.** El módulo de datos agrega 128 kB al archivo único (bloque comprimido en base64); el archivo único pasa de 3,34 a 3,54 MB. En el navegador de prueba (render por software, calidad ligera) la escena del valle se arma en 0,45 a 0,58 s y dibuja 443 000 triángulos en 215 llamadas; el cuadro tarda 4,4 ms (mediana de 20).
 
+## 4 novodecies. «Calidad del agua»: robustez, datos reales y planta en 3D (ejecutada)
+
+**Pedidos.** «Robustecer 1000 veces más el módulo de calidad» y «Del río a la llave: robustecerlo gráficamente, es necesario».
+
+**Modelo (detalle en `docs/calidad/MODELO_CALIDAD.md` y `PRUEBAS_CALIDAD.md`).**
+- Amonio y nitrificación: el agua usada trae amonio; se nitrifica aguas abajo (kn = 0,5/d a 20 °C, θ = 1,08) y gasta 4,57 g de O₂ por gramo de N, que se suma a la demanda de Streeter–Phelps. El amoníaco libre sale de la tabla de Emerson et al. (1975) y entra en la regla de los peces (≤ 0,025 mg/L de NH₃, valor imperativo de la Directiva 78/659/CEE).
+- Entradas siempre válidas: casas, cota, dosis, cloro, horas en la red, días secos, lluvia y duración se recortan a rangos documentados; un número no válido (NaN, infinito, texto) toma el valor por defecto.
+- Q14 (tabla de Emerson, error máximo 0,70 %), Q15 (datos reales), Q16 (6 000 barrios con 6 lecturas, 6 000 plantas y 2 000 calles al azar con 8 % de entradas inválidas: 0 excepciones, 0 valores fuera de rango) y Q17 (11 218 comprobaciones de coherencia, 0 violaciones). Batería: 17 de 17.
+
+**Datos reales.** Nueva pestaña «Medellín» en la quebrada: 68 sitios de 18 microcuencas de San Antonio de Prado (Alcaldía de Medellín, muestreos del 19 de diciembre de 2017 al 22 de enero de 2018), con descarga verificada por sha256 en el manifiesto. Medido: 64 de 68 sitios con oxígeno ≥ 5 mg/L; 60 de 68 con coliformes sobre 200 NMP/100 mL; los coliformes suben del sitio alto al bajo en 13 de las 16 microcuencas que tienen ambos; la temperatura del agua implícita en el oxígeno y su saturación (Benson y Krause) va de 13,8 a 19,1 °C (percentiles 5 y 95) y es coherente (entre 10 y 26 °C) en 68 de 68. Se presentan como mediciones de esas fechas, no como estado actual ni como pronóstico.
+
+**Planta en 3D.** Agua que se mueve en la superficie de cada tanque y en el río (vetas y espuma según la etapa), flechas del flujo en las tuberías con el color del agua de cada etapa y en la línea de lodos, concreto con textura, barandas, edificio de laboratorio, cerca, vía de acceso, montañas con el valle del río y un letrero que dice que es una escena ilustrativa. Vista general más cercana que se aleja sola si la planta no cabe; en el teléfono, la planta en diagonal.
+
+**Lo que encontró y se corrigió.**
+- Las velocidades del agua animada se ignoraban: three.js comparte un mismo programa entre materiales con el mismo `onBeforeCompile`, así que la velocidad escrita como constante en el shader era la del primer material compilado. En la calle, la cuneta corría con la velocidad y el sentido de la quebrada. Ahora la velocidad es un uniform.
+- Las superficies horizontales del agua se veían casi blancas bajo el sol de la escena: su color base va más oscuro que el del agua vista de lado.
+- En la tableta, el aviso de medalla tapaba la pregunta de la escena (11 742 px²). En pantallas angostas ahora se coloca encima de la pregunta, con la altura medida de esta.
+- Un rótulo junto al borde podía quedar cortado («10. La llave» en el teléfono): ahora se corre hacia adentro.
+- `superposiciones.py` ignoraba `--pantallas tableta,telefono` (solo leía la forma con «=»): acepta las dos y rechaza nombres desconocidos.
+
+**Resultado.** Superposiciones: 88 de 88 estados sin choques ni cortes (22 por pantalla; se agregó la pestaña Medellín de la quebrada). Archivo único: 3,59 MB.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

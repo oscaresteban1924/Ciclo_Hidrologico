@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type { PlantInput, PlantResult } from '../model';
 import { PROCESSES, type ProcessId } from '../processes';
-import { houses, rng, tank, trees, type TreeSpot } from './kit';
+import { concreteMaterial, houses, noise2, rng, tank, trees, waterMaterial, type TreeSpot } from './kit';
 import type { QStage, StageLabel, StageView } from './stage';
 
 export type UnitId = ProcessId;
@@ -30,6 +30,43 @@ export const bugsFor = (c: number) => (c < 0.5 ? 0 : Math.round(Math.min(26, 4 *
 
 /** Duración del retrolavado en la animación [s]. */
 export const WASH_S = 7;
+
+/** Cómo se mueve el agua en la superficie de cada tanque: velocidad de las vetas y espuma (ilustrativo). */
+const SURF: Partial<Record<ProcessId, { speed: number; foam: number }>> = {
+  desarenador: { speed: 0.7, foam: 0.15 },
+  mezcla: { speed: 2.2, foam: 0.9 },
+  floc: { speed: 0.32, foam: 0.08 },
+  sedim: { speed: 0.06, foam: 0 },
+  filtro: { speed: 0.2, foam: 0 },
+  cloro: { speed: 0.45, foam: 0.05 },
+};
+/** Recorrido del agua por las tuberías: tramo, altura, etapa de la que sale (para su color). */
+const FLOW_SEGS: { x0: number; x1: number; y: number; z: number; from: ProcessId }[] = [
+  { x0: UNIT_X.rio + 2.5, x1: UNIT_X.desarenador - 6, y: 1.4, z: 0, from: 'rio' },
+  { x0: UNIT_X.desarenador + 6, x1: UNIT_X.mezcla - 3, y: 1.8, z: 0, from: 'desarenador' },
+  { x0: UNIT_X.mezcla + 3, x1: UNIT_X.floc - 7, y: 2.8, z: 0, from: 'mezcla' },
+  { x0: UNIT_X.floc + 7, x1: UNIT_X.sedim - 10, y: 2.8, z: 0, from: 'floc' },
+  { x0: UNIT_X.sedim + 10, x1: UNIT_X.filtro - 7.5, y: 3.4, z: 0, from: 'sedim' },
+  { x0: UNIT_X.filtro + 7.5, x1: UNIT_X.cloro - 5, y: 1.2, z: 0, from: 'filtro' },
+  { x0: UNIT_X.cloro + 5, x1: UNIT_X.ph - 1.3, y: 1.2, z: 0, from: 'cloro' },
+  { x0: UNIT_X.ph + 1.3, x1: UNIT_X.tanque - 5, y: 1.2, z: 0, from: 'ph' },
+  { x0: UNIT_X.tanque + 5, x1: UNIT_X.llave - 2.6, y: 0.6, z: 0, from: 'tanque' },
+];
+const WHITE = new THREE.Color(1, 1, 1);
+const smooth = (a: number, b: number, x: number) => {
+  const k = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+/** Relieve ilustrativo alrededor del predio: montañas detrás y a los lados, valle del río, prado plano adelante. */
+function hillH(x: number, z: number, riverX: number): { h: number; n: number; d: number } {
+  const dx = Math.max(0, Math.abs(x + 8) - 104), dz = z < -6 ? Math.max(0, -6 - z - 52) : Math.max(0, z - 190);
+  const d = Math.hypot(dx, dz);
+  const n = noise2(x / 70, z / 70) * 0.65 + noise2(x / 23 + 9, z / 23) * 0.35;
+  const h = smooth(0, 110, d) * (26 + 70 * n) * smooth(9, 46, Math.abs(x - riverX));
+  return { h, n, d };
+}
+/** Velocidad de las flechas del agua en las tuberías [unidades/s]. */
+const FLOW_SPEED = 2.4;
 
 interface Box {
   id: ProcessId;
@@ -69,6 +106,10 @@ export class PlantWorld {
   /** Fracción de la costra de los filtros (1 = la que corresponde al cálculo; baja con el retrolavado y vuelve a crecer). */
   private cakeK = 1;
   private slots: { unit: ProcessId; kind: 'p' | 'b'; a: number; b: number; c: number; ph: number }[] = [];
+  private waterTime = { value: 0 };
+  private surfaces: { id: ProcessId; mesh: THREE.Mesh }[] = [];
+  private chevrons!: THREE.InstancedMesh;
+  private chevSlots: { seg: number; k: number; n: number; sludge: boolean }[] = [];
   readonly views: Record<string, StageView>;
 
   constructor(stage: QStage, cb: { onUnit: (id: ProcessId) => void }) {
@@ -77,7 +118,7 @@ export class PlantWorld {
     stage.setShadowSpan(84);
     // vistas: la planta completa, tres tramos y una por proceso (para el recorrido guiado)
     this.views = {
-      general: { eye: [-14, 92, 168], target: [-12, 0, -8] },
+      general: { eye: [-8, 40, 116], target: [-8, 4, -8], fit: 176, portrait: { eye: [-170, 120, 80], target: [-14, 2, -8] } },
       entrada: { eye: [-66, 17, 30], target: [-58, 1.5, 0] },
       tanques: { eye: [-4, 15, 30], target: [-4, 2, -2] },
       salida: { eye: [40, 14, 30], target: [38, 2, -2] },
@@ -96,29 +137,59 @@ export class PlantWorld {
               : { eye: [x + 5, 9, z + 18], target: [x, 1.6, z] };
     }
 
-    // ---- suelo: prado alrededor y patio de concreto de la planta
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(480, 300), new THREE.MeshStandardMaterial({ color: '#5e8f3c', roughness: 1 }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    sc.add(ground);
-    const yard = new THREE.Mesh(new THREE.PlaneGeometry(166, 44), new THREE.MeshStandardMaterial({ color: '#c9c5bb', roughness: 0.95 }));
+    // ---- suelo: patio plano de la planta y montañas alrededor; el río baja por su valle
+    const riverX = X.rio - 12;
+    sc.add(this.terrain(riverX));
+    const yard = new THREE.Mesh(new THREE.PlaneGeometry(166, 44), concreteMaterial('#c9c5bb'));
     yard.rotation.x = -Math.PI / 2;
     yard.position.set(-8, 0.02, -6);
     yard.receiveShadow = true;
     sc.add(yard);
-    // ---- río, bocatoma y rejilla
-    const rg = new THREE.PlaneGeometry(16, 300, 1, 40);
-    this.river = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: '#8a6a44', roughness: 0.25, transparent: true, opacity: 0.92 }));
-    this.river.rotation.x = -Math.PI / 2;
-    this.river.position.set(X.rio - 12, 0.05, 0);
+    // ---- río (agua que corre, con el color de la turbiedad del agua cruda), bocatoma y rejilla
+    const rg = new THREE.PlaneGeometry(16, 300, 6, 80);
+    rg.rotateX(-Math.PI / 2);
+    {
+      const pos = rg.attributes.position as THREE.BufferAttribute;
+      const n = pos.count;
+      const flow = new Float32Array(n * 2), foam = new Float32Array(n), col = new Float32Array(n * 3).fill(1);
+      for (let i = 0; i < n; i++) {
+        const x = pos.getX(i), z = pos.getZ(i);
+        flow[i * 2] = z;
+        flow[i * 2 + 1] = x;
+        // espuma en las orillas y frente a la bocatoma
+        foam[i] = Math.max(0, (Math.abs(x) - 5.5) / 2.5) * 0.6 + (Math.abs(z) < 6 && x > 4 ? 0.5 : 0);
+      }
+      rg.setAttribute('aFlow', new THREE.BufferAttribute(flow, 2));
+      rg.setAttribute('aFoam', new THREE.BufferAttribute(foam, 1));
+      rg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    }
+    this.river = new THREE.Mesh(rg, waterMaterial(this.waterTime, { opacity: 0.94, speed: 1.6 }));
+    this.river.position.set(riverX, 0.05, 0);
+    this.river.receiveShadow = true;
     sc.add(this.river);
+    // piedras en las orillas
+    {
+      const Rr = rng(12);
+      const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: '#8a8478', roughness: 1, flatShading: true }), 140);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), pv = new THREE.Vector3();
+      for (let k = 0; k < 140; k++) {
+        const side = k % 2 ? 1 : -1;
+        const z = -148 + Rr() * 296, sz = 0.35 + Rr() * 0.9;
+        q.setFromEuler(new THREE.Euler(Rr() * 3, Rr() * 3, Rr() * 3));
+        rocks.setMatrixAt(k, m4.compose(pv.set(riverX + side * (7.6 + Rr() * 2.2), 0.1, z), q, sv.set(sz * (1 + Rr()), sz * 0.6, sz)));
+        rocks.setColorAt(k, new THREE.Color().setHSL(0.09, 0.08, 0.42 + Rr() * 0.18));
+      }
+      rocks.castShadow = true;
+      rocks.receiveShadow = true;
+      sc.add(rocks);
+    }
     const bankM = new THREE.MeshStandardMaterial({ color: '#7d6a52', roughness: 1 });
     for (const s of [-1, 1]) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 300), bankM);
-      b.position.set(X.rio - 12 + s * 8.4, 0.2, 0);
+      b.position.set(riverX + s * 8.4, 0.2, 0);
       sc.add(b);
     }
-    const intake = new THREE.Mesh(new THREE.BoxGeometry(5, 2.4, 6), new THREE.MeshStandardMaterial({ color: '#b8b4ab' }));
+    const intake = new THREE.Mesh(new THREE.BoxGeometry(5, 2.4, 6), concreteMaterial('#b8b4ab'));
     intake.position.set(X.rio, 1.2, 0);
     intake.castShadow = true;
     sc.add(intake);
@@ -154,6 +225,31 @@ export class PlantWorld {
       water.renderOrder = 5;
       sc.add(water);
       this.boxes.push({ id, x: X[id], z, w, d, h, water });
+      // superficie del agua: vetas que avanzan hacia la salida y espuma donde el agua se agita
+      const sf = SURF[id];
+      if (sf) {
+        const sg = new THREE.PlaneGeometry(w - 0.8, d - 0.8, Math.max(4, Math.round(w * 1.5)), Math.max(2, Math.round(d)));
+        sg.rotateX(-Math.PI / 2);
+        const pos = sg.attributes.position as THREE.BufferAttribute;
+        const n = pos.count;
+        const flow = new Float32Array(n * 2), foam = new Float32Array(n), col = new Float32Array(n * 3).fill(1);
+        for (let i = 0; i < n; i++) {
+          const lx = pos.getX(i), lz = pos.getZ(i);
+          flow[i * 2] = lx + X[id];
+          flow[i * 2 + 1] = lz;
+          // en la mezcla rápida, espuma alrededor de la paleta; en el desarenador, a la entrada
+          foam[i] = id === 'mezcla' ? sf.foam * Math.exp(-(lx * lx + lz * lz) / 6) : id === 'desarenador' ? sf.foam * Math.max(0, 1 - (lx + w / 2) / 3) : sf.foam;
+        }
+        sg.setAttribute('aFlow', new THREE.BufferAttribute(flow, 2));
+        sg.setAttribute('aFoam', new THREE.BufferAttribute(foam, 1));
+        sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        const surf = new THREE.Mesh(sg, waterMaterial(this.waterTime, { opacity: 0.85, speed: sf.speed }));
+        surf.position.set(X[id], y0 + wh + 0.02, z);
+        surf.renderOrder = 6;
+        sc.add(surf);
+        this.surfaces.push({ id, mesh: surf });
+      }
+      this.railings(X[id], z, w, d, h);
       const name = PROCESSES.find((p) => p.id === id)!.name;
       stage.addPick(g, () => cb.onUnit(id), `${name}: toca para ver qué pasa aquí`);
       return g;
@@ -230,7 +326,7 @@ export class PlantWorld {
     layer(1.35, 0.7, '#3b3b3b');
     this.cake = layer(2.05, 0.1, '#7a5a35');
     for (const dx of [-2.5, 2.5]) {
-      const div = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 8.2), new THREE.MeshStandardMaterial({ color: '#c9c6bf' }));
+      const div = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 8.2), concreteMaterial());
       div.position.set(X.filtro + dx, 2.1, 0);
       sc.add(div);
     }
@@ -273,7 +369,7 @@ export class PlantWorld {
     sc.add(limeLine);
     for (const o of [silo, phBox]) stage.addPick(o, () => cb.onUnit('ph'), 'Estabilización del pH: toca para ver qué pasa aquí');
     // tanque de almacenamiento
-    const st = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 5.4, 28), new THREE.MeshStandardMaterial({ color: '#d7d3c9', roughness: 0.85 }));
+    const st = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 5.4, 28), concreteMaterial('#d7d3c9'));
     st.position.set(X.tanque, 2.7, 0);
     st.castShadow = true;
     st.receiveShadow = true;
@@ -328,6 +424,10 @@ export class PlantWorld {
     pipeZ(X.sedim - 6, -5, zl, 0.4);
     pipe(X.sedim - 6, X.lodos - 8 + 3.4, 0.4, zl, sludgeM);
     pipeZ(X.filtro, -4.5, zl + 2.6, 0.5);
+    // flechas del agua en las tuberías (con el color de la etapa de la que sale) y en la línea de lodos
+    this.buildChevrons(zl);
+    // edificio de laboratorio y control, letrero y cerca del predio
+    this.buildSite();
     // la casa con la llave (frente abierto) y el vaso
     const hs = houses([{ x: X.llave + 1.5, y: 0.6, z: -1.8, w: 6, d: 3, h: 4.2, rot: 0, wall: '#efe0c0' }]);
     sc.add(hs);
@@ -349,7 +449,8 @@ export class PlantWorld {
       const x = -170 + R() * 340, z = -140 + R() * 280;
       if (z > -32 && z < 22 && x > -94 && x < 80) continue;
       if (Math.abs(x - (X.rio - 12)) < 11) continue;
-      ts.push({ x, y: 0, z, r: 1.6 + R() * 1.8 });
+      if (Math.abs(x - 20) < 6 && z > 14) continue; // vía de acceso
+      ts.push({ x, y: hillH(x, z, X.rio - 12).h, z, r: 1.6 + R() * 1.8 });
     }
     sc.add(trees(ts, 6));
 
@@ -376,6 +477,191 @@ export class PlantWorld {
     this.ring.visible = false;
     sc.add(this.ring);
     stage.view(this.views.general, false);
+  }
+
+  /** Colorea todos los vértices de una malla de agua (su material multiplica por el color del vértice). */
+  private paint(mesh: THREE.Mesh, color: THREE.Color): void {
+    const a = mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+    for (let i = 0; i < a.count; i++) a.setXYZ(i, color.r, color.g, color.b);
+    a.needsUpdate = true;
+  }
+
+  /** Montañas alrededor del predio (relieve ilustrativo), con un valle por donde baja el río. */
+  private terrain(riverX: number): THREE.Mesh {
+    const g = new THREE.PlaneGeometry(760, 600, 152, 120);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(pos.count * 3);
+    const grass = new THREE.Color('#5e8f3c'), forest = new THREE.Color('#3b6a30'), high = new THREE.Color('#6f8a4c'), c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const { h, n, d } = hillH(x, z, riverX);
+      pos.setY(i, h > 0.01 ? h : -0.05);
+      const f = smooth(0.45, 0.7, n + 0.2 * smooth(0, 60, d));
+      c.copy(grass).lerp(forest, f * smooth(2, 14, h)).lerp(high, smooth(55, 95, h) * 0.5);
+      col[i * 3] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+    m.receiveShadow = true;
+    return m;
+  }
+
+  /** Barandas amarillas de seguridad en los bordes de atrás y de los lados de un tanque (el frente es de vidrio). */
+  private railings(cx: number, cz: number, w: number, d: number, h: number): void {
+    const posts: THREE.Matrix4[] = [], rails: THREE.Matrix4[] = [];
+    const m4 = () => new THREE.Matrix4();
+    const H = 1.05;
+    const edge = (x0: number, z0: number, x1: number, z1: number) => {
+      const L = Math.hypot(x1 - x0, z1 - z0);
+      const n = Math.max(1, Math.round(L / 1.8));
+      for (let k = 0; k <= n; k++) {
+        const t = k / n;
+        posts.push(m4().compose(new THREE.Vector3(x0 + (x1 - x0) * t, h + H / 2, z0 + (z1 - z0) * t), new THREE.Quaternion(), new THREE.Vector3(0.09, H, 0.09)));
+      }
+      const ang = Math.atan2(x1 - x0, z1 - z0);
+      for (const y of [H, H * 0.5]) rails.push(m4().compose(new THREE.Vector3((x0 + x1) / 2, h + y, (z0 + z1) / 2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang), new THREE.Vector3(0.07, 0.07, L)));
+    };
+    const x0 = cx - w / 2 + 0.15, x1 = cx + w / 2 - 0.15, z0 = cz - d / 2 + 0.15, z1 = cz + d / 2 - 0.4;
+    edge(x0, z0, x1, z0);
+    edge(x0, z0, x0, z1);
+    edge(x1, z0, x1, z1);
+    const mat = new THREE.MeshStandardMaterial({ color: '#e2b13c', roughness: 0.55, metalness: 0.2 });
+    const unit = new THREE.BoxGeometry(1, 1, 1);
+    for (const list of [posts, rails]) {
+      const im = new THREE.InstancedMesh(unit, mat, list.length);
+      list.forEach((mm, i) => im.setMatrixAt(i, mm));
+      im.castShadow = true;
+      this.stage.scene.add(im);
+    }
+  }
+
+  /** Flechas planas sobre las tuberías: muestran hacia dónde va el agua; avanzan con la animación. */
+  private buildChevrons(zl: number): void {
+    const shape = new THREE.Shape();
+    shape.moveTo(0.55, 0);
+    shape.lineTo(-0.36, 0.4);
+    shape.lineTo(-0.14, 0);
+    shape.lineTo(-0.36, -0.4);
+    shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape);
+    geo.rotateX(-Math.PI / 2);
+    for (let s = 0; s < FLOW_SEGS.length; s++) {
+      const sg = FLOW_SEGS[s];
+      const n = Math.max(1, Math.floor(Math.abs(sg.x1 - sg.x0) / 2.6));
+      for (let k = 0; k < n; k++) this.chevSlots.push({ seg: s, k, n, sludge: false });
+    }
+    // línea de lodos: del sedimentador y de los filtros hacia el espesador (detrás)
+    this.sludgeSegs = [
+      { a: new THREE.Vector3(X.sedim - 6, 0.75, -5), b: new THREE.Vector3(X.sedim - 6, 0.75, zl) },
+      { a: new THREE.Vector3(X.sedim - 6, 0.75, zl), b: new THREE.Vector3(X.lodos - 8 + 3.4, 0.75, zl) },
+      { a: new THREE.Vector3(X.filtro, 0.82, -4.5), b: new THREE.Vector3(X.filtro, 0.82, zl + 2.6) },
+    ];
+    for (let s = 0; s < this.sludgeSegs.length; s++) {
+      const L = this.sludgeSegs[s].a.distanceTo(this.sludgeSegs[s].b);
+      const n = Math.max(1, Math.floor(L / 2.6));
+      for (let k = 0; k < n; k++) this.chevSlots.push({ seg: s, k, n, sludge: true });
+    }
+    this.chevrons = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.18 }), this.chevSlots.length);
+    this.chevrons.frustumCulled = false;
+    this.chevrons.renderOrder = 4;
+    this.stage.scene.add(this.chevrons);
+    this.moveChevrons(0);
+  }
+  private sludgeSegs: { a: THREE.Vector3; b: THREE.Vector3 }[] = [];
+
+  private moveChevrons(t: number): void {
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    this.chevSlots.forEach((sl, i) => {
+      if (!sl.sludge) {
+        const sg = FLOW_SEGS[sl.seg];
+        const L = Math.abs(sg.x1 - sg.x0);
+        const u = (sl.k / sl.n + (t * FLOW_SPEED) / L) % 1;
+        p.set(sg.x0 + (sg.x1 - sg.x0) * u, sg.y + 0.4, sg.z);
+        q.identity();
+      } else {
+        const sg = this.sludgeSegs[sl.seg];
+        const L = sg.a.distanceTo(sg.b);
+        const u = (sl.k / sl.n + (t * FLOW_SPEED * 0.4) / L) % 1;
+        p.copy(sg.a).lerp(sg.b, u);
+        q.setFromAxisAngle(up, Math.atan2(-(sg.b.z - sg.a.z), sg.b.x - sg.a.x));
+      }
+      this.chevrons.setMatrixAt(i, m4.compose(p, q, sc));
+    });
+    this.chevrons.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Edificio de laboratorio y control, letrero de la escena y cerca del predio. */
+  private buildSite(): void {
+    const sc = this.stage.scene;
+    const lab = houses([{ x: 38, y: 0.6, z: -17, w: 13, d: 7, h: 5.4, rot: 0, wall: '#ebe5d6' }]);
+    sc.add(lab);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(13.8, 0.35, 7.8), concreteMaterial('#a8aaa6'));
+    roof.position.set(38, 6.2, -17);
+    roof.castShadow = true;
+    sc.add(roof);
+    // letrero junto a la entrada: dice que la planta es una escena ilustrativa
+    if (typeof document !== 'undefined') {
+      const cv = document.createElement('canvas');
+      cv.width = 512;
+      cv.height = 160;
+      const g = cv.getContext('2d');
+      if (g) {
+        g.fillStyle = '#1f5f8b';
+        g.fillRect(0, 0, 512, 160);
+        g.fillStyle = '#ffffff';
+        g.font = '700 46px system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.fillText('Planta de potabilización', 256, 70);
+        g.font = '400 28px system-ui, sans-serif';
+        g.fillText('escena ilustrativa · no es una planta real', 256, 118);
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const board = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.8), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
+        board.position.set(-74, 3.6, 17.4);
+        sc.add(board);
+        const postM = new THREE.MeshStandardMaterial({ color: '#5a6168' });
+        for (const dx of [-3.8, 3.8]) {
+          const pst = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.6), postM);
+          pst.position.set(-74 + dx, 2.3, 17.3);
+          pst.castShadow = true;
+          sc.add(pst);
+        }
+      }
+    }
+    // vía de acceso desde adelante, con línea central discontinua
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(7, 190), new THREE.MeshStandardMaterial({ color: '#5d5f63', roughness: 0.95 }));
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(20, 0.03, 16 + 95);
+    road.receiveShadow = true;
+    sc.add(road);
+    const dashes = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.22, 2.4).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#f1e6b8', roughness: 0.8 }), 38);
+    for (let k = 0; k < 38; k++) dashes.setMatrixAt(k, new THREE.Matrix4().makeTranslation(20, 0.05, 19 + k * 5));
+    sc.add(dashes);
+    // cerca de malla: atrás y a los lados del predio (adelante queda abierta para ver los tanques)
+    const posts: THREE.Vector3[] = [];
+    const wires: THREE.Matrix4[] = [];
+    const xa = -91, xb = 75, za = -28.5, zb = 16;
+    const run = (x0: number, z0: number, x1: number, z1: number) => {
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 3));
+      for (let k = 0; k <= n; k++) posts.push(new THREE.Vector3(x0 + ((x1 - x0) * k) / n, 0.9, z0 + ((z1 - z0) * k) / n));
+      const ang = Math.atan2(x1 - x0, z1 - z0);
+      for (const y of [0.55, 1.15, 1.7]) wires.push(new THREE.Matrix4().compose(new THREE.Vector3((x0 + x1) / 2, y, (z0 + z1) / 2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ang), new THREE.Vector3(0.03, 0.03, L)));
+    };
+    run(xa, za, xb, za);
+    run(xa, za, xa, zb);
+    run(xb, za, xb, zb);
+    const fm = new THREE.MeshStandardMaterial({ color: '#7d858c', metalness: 0.4, roughness: 0.5 });
+    const unit = new THREE.BoxGeometry(1, 1, 1);
+    const pim = new THREE.InstancedMesh(unit, fm, posts.length);
+    posts.forEach((pp, i) => pim.setMatrixAt(i, new THREE.Matrix4().compose(pp, new THREE.Quaternion(), new THREE.Vector3(0.1, 1.8, 0.1))));
+    const wim = new THREE.InstancedMesh(unit, fm, wires.length);
+    wires.forEach((mm, i) => wim.setMatrixAt(i, mm));
+    sc.add(pim, wim);
   }
 
   /** Turbiedad del agua en cada etapa [UNT] y bacterias [coliformes totales por 100 mL]. */
@@ -418,7 +704,15 @@ export class PlantWorld {
     this.v = v;
     const vals = this.stageValues(v.r);
     const c = new THREE.Color();
-    (this.river.material as THREE.MeshStandardMaterial).color.copy(turbColor(v.r.raw.turbidity, c));
+    // las superficies horizontales reciben sol y cielo de lleno: su color base va más oscuro que el del agua
+    // vista de lado, para que no se vean blancas y para que resalten la espuma y las vetas
+    this.paint(this.river, turbColor(v.r.raw.turbidity, c).multiplyScalar(0.5));
+    for (const sfc of this.surfaces) this.paint(sfc.mesh, turbColor(sfc.id === 'filtro' ? v.r.settled : vals[sfc.id].t, c).multiplyScalar(0.42));
+    for (let i = 0; i < this.chevSlots.length; i++) {
+      const sl = this.chevSlots[i];
+      this.chevrons.setColorAt(i, sl.sludge ? c.set('#a07a4c') : turbColor(vals[FLOW_SEGS[sl.seg].from].t, c).lerp(WHITE, 0.35));
+    }
+    if (this.chevrons.instanceColor) this.chevrons.instanceColor.needsUpdate = true;
     for (const b of this.boxes) {
       const val = b.id === 'filtro' ? v.r.settled : vals[b.id].t;
       const m = b.water.material as THREE.MeshStandardMaterial;
@@ -502,6 +796,8 @@ export class PlantWorld {
   update(dt: number, t: number): void {
     const v = this.v;
     if (!v) return;
+    this.waterTime.value = t;
+    this.moveChevrons(t);
     // máquinas: las paletas de cada zona del floculador giran más despacio (G de 70 a 10 s⁻¹)
     this.mixer.rotation.y = t * 5;
     const sp = [0.9, 0.55, 0.22];

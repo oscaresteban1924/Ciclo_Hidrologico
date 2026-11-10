@@ -19,6 +19,10 @@ export interface StageLabel {
 export interface StageView {
   eye: [number, number, number];
   target: [number, number, number];
+  /** Ancho del mundo que debe caber de lado a lado [unidades]: en pantallas angostas la cámara se aleja. */
+  fit?: number;
+  /** Encuadre para pantallas verticales (celular): por ejemplo, la planta en diagonal en vez de a lo ancho. */
+  portrait?: Omit<StageView, 'portrait'>;
 }
 
 interface Pickable {
@@ -194,7 +198,23 @@ export class QStage {
     this.frame(0);
   }
 
-  view(v: StageView, animate = true): void {
+  /** La vista ajustada a la proporción de la pantalla: si `fit` no cabe de lado a lado, la cámara se aleja. */
+  private fitted(input: StageView): StageView {
+    const v = input.portrait && this.camera.aspect < 0.8 ? input.portrait : input;
+    if (!v.fit) return v;
+    const e = new THREE.Vector3(...v.eye), t = new THREE.Vector3(...v.target);
+    const dir = e.clone().sub(t);
+    const d0 = dir.length();
+    const vf = (this.camera.fov * Math.PI) / 180;
+    const hf = 2 * Math.atan(Math.tan(vf / 2) * Math.max(0.2, this.camera.aspect));
+    const need = v.fit / 2 / Math.tan(hf / 2);
+    if (need <= d0) return v;
+    const e2 = t.clone().add(dir.multiplyScalar(Math.min(need, d0 * 2.6) / d0));
+    return { eye: [e2.x, e2.y, e2.z], target: v.target };
+  }
+
+  view(input: StageView, animate = true): void {
+    const v = this.fitted(input);
     if (!animate || this.reducedMotion) {
       this.camera.position.set(...v.eye);
       this.controls.target.set(...v.target);
@@ -318,8 +338,10 @@ export class QStage {
         el.dataset.h = String(el.offsetHeight || 22);
       }
       const ew = Number(el.dataset.w), eh = Number(el.dataset.h);
-      const box: [number, number, number, number] = [x - ew / 2, y - eh - 6, x + ew / 2, y - 6];
-      const inView = v.z < 1 && v.z > -1 && x > -ew && x < w + ew && y > 0 && y < h + eh;
+      // el rótulo se corre de lado para no salirse de la escena (su punto sigue dentro de la vista)
+      const bx = Math.min(Math.max(x - ew / 2, 4), Math.max(4, w - ew - 4));
+      const box: [number, number, number, number] = [bx, y - eh - 6, bx + ew, y - 6];
+      const inView = v.z < 1 && v.z > -1 && x > 0 && x < w && box[1] >= 0 && y < h;
       const clash = placed.some((p) => !(box[2] < p[0] || box[0] > p[2] || box[3] < p[1] || box[1] > p[3]));
       const show = inView && !clash;
       el.style.visibility = show ? 'visible' : 'hidden';
