@@ -355,6 +355,9 @@ export function CreekLab({ head }: { head: ReactNode }) {
         <p>
           En el tubo, el agua usada del barrio se mezcla con la de la quebrada (balance de masa). Aguas abajo, la materia orgánica (DBO5) se descompone y gasta oxígeno; el amonio del agua usada pasa a nitrato y también gasta oxígeno (4,57 g por gramo de nitrógeno); la quebrada lo recupera del aire (reaireación de Tsivoglou y Neal), y el lodo del fondo también consume oxígeno (ecuación de Streeter y Phelps con demanda del sedimento y nitrificación). Los coliformes mueren con el tiempo de viaje (Mancini), la turbiedad se asienta y la parte del amonio que está como amoníaco libre (la tóxica) depende del pH y de la temperatura (Emerson et al.). Los números están en <em>docs/calidad/MODELO_CALIDAD.md</em>.
         </p>
+        <p>
+          <strong>La pluma del tubo.</strong> Las lecturas son la media de la sección (agua mezclada de orilla a orilla). El dibujo muestra cómo se reparte el agua usada antes de mezclarse: sale pegada a la orilla del tubo y se abre aguas abajo con la mezcla transversal de Fischer (εt = 0,6·H·u*); queda mezclada a unos 1,2 km en verano, 0,7 km con caudal normal y 0,4 km en lluvias. Su tono está reforzado para que se vea.
+        </p>
         <h3>Peces, bichos y nadar</h3>
         <ul>
           <li>

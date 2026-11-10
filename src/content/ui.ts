@@ -104,3 +104,6 @@ export const LEGEND: LegendEntry[] = [
   { id: 'detail', label: 'Ver de cerca', desc: 'Abre una vista de detalle de ese lugar (esquema, no a escala).' },
   { id: 'pin', label: 'Pregunta para investigar', desc: 'Marca rosada con «?» en la exploración libre.' },
 ];
+
+/** Créditos del desarrollo: se muestran al pie de Ayuda y de Ajustes. */
+export const CREDITS = 'Diseñado y elaborado por Leidy Hernandez Acevedo.';

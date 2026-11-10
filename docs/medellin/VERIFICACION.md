@@ -510,6 +510,23 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Superposiciones: 88 de 88 estados sin choques ni cortes (22 por pantalla; se agregó la pestaña Medellín de la quebrada). Archivo único: 3,59 MB.
 
+## 4 vicies. Edificios del valle, tren de tratamiento, pluma del tubo y créditos (ejecutada)
+
+**Pedidos.** «Mejorar gráficamente la vista del Valle de Aburrá: las edificaciones se ven horribles»; «trabajar el tren de tratamiento de calidad del agua, se debe ver muchísimo mejor»; «que la descarga del tubo de las casas muestre la pluma de contaminación que se va diluyendo»; «agregar "Diseñado y elaborado por Leidy Hernandez Acevedo" en los créditos».
+
+**Edificios del valle.** Antes eran cajas al azar en una rejilla, sin calles. Ahora se ubican en franjas a lo largo de las calles reales (red vial metropolitana) y, en Medellín, con la distribución de pisos que registra el catastro en cada barrio y vereda (estadísticas de la capa de construcciones; sin descargar geometrías). Fachadas con franjas de ventanas y ventanas sueltas según la distancia, medianeras y tonos por casa en las hileras, techos de concreto, teja o zinc, tanques de agua en las terrazas, bodegas con cubierta acanalada, cuartos de máquinas sobre las torres, árboles en los andenes y suelo urbano gris con jardines (más en El Poblado). Método y límites: DATOS_REALES.md §7.5.
+- V10: 79 983 franjas, decodificación exacta, ninguna esquina a menos de 35 m del eje del río (mínimo 43 m), 292 barrios y veredas con datos del catastro.
+- Calidad alta: 110 270 edificios (2 lotes por casa en hilera), 2 347 torres de 9 pisos o más, 28 611 árboles de andén; 2,36 millones de triángulos en 222 llamadas. Calidad ligera: 60 020 edificios. La vista del valle se arma en 1,1 a 1,3 s (antes 0,45 a 0,58 s) en el navegador de prueba; el cuadro tarda 1,9 a 2,1 ms de CPU.
+- Lo que se corrigió en el camino: el cupo de edificios cortaba las últimas franjas (quedaba sin ciudad una parte del valle); ahora se agrupan lotes o se ralea por igual. Las franjas se codifican con enteros y una tabla de cosenos redondeados para que el navegador llegue exactamente al mismo punto que el generador.
+
+**Tren de tratamiento.** El nivel del agua baja de un tanque al siguiente (3,81 m en la mezcla rápida, 3,61 en floculación, 3,41 en sedimentación, 3,21 en filtros y 2,81 en el tanque de contacto) y el agua pasa por canales abiertos de concreto donde se ve correr; una caseta de bombeo lleva el agua cruda del desarenador a la mezcla. Antes los tanques tenían alturas que obligaban al agua a subir sin bomba. Las superficies reflejan un cielo de degradé (mapa de entorno prefiltrado, sin texturas descargadas). La vista general sigue mostrando las once etiquetas; en el teléfono, la planta en diagonal.
+
+**Pluma del tubo.** Mezcla transversal de Fischer et al. (1979) con fuente en la orilla e imágenes en las dos orillas (serie de cosenos cuando la pluma ya es ancha); largo de mezcla de 1,2 km en verano, 0,7 km normal y 0,43 km en lluvias. Q18: la media a lo ancho es la de la mezcla completa (error < 0,001 %), en L<sub>m</sub> las orillas quedan a 3,6 % de la media, la pluma nunca supera el agua del tubo y sin casas no hay pluma. El tono está reforzado (y su rótulo lo dice); las lecturas de la sonda siguen siendo la media de la sección.
+
+**Créditos.** «Diseñado y elaborado por Leidy Hernandez Acevedo.» al pie de Ayuda y de Ajustes, en el README y como autora del documento (`<meta name="author">`).
+
+**Resultado.** Pruebas: 64 de 64 del laboratorio de Medellín y 18 de 18 de «Calidad del agua». Superposiciones: 88 de 88 estados sin choques ni cortes en las cuatro pantallas.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

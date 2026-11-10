@@ -199,6 +199,10 @@ El contenido educativo, el modelo de simulación, el estado de navegación y la 
 - *Calidad visual* automática: si el equipo no alcanza unos 40 cuadros por segundo, reduce partículas y resolución. También puede fijarse en «Ligera» o «Alta».
 - Los cambios de interfaz no reinician la escena. El motor, el audio, los temporizadores y los relojes de las secuencias se liberan al cerrar cada vista.
 
+## Créditos
+
+Diseñado y elaborado por Leidy Hernandez Acevedo.
+
 ## Licencias
 
 Three.js 0.187.0 se distribuye bajo licencia MIT. Las fuentes Atkinson Hyperlegible y Bricolage Grotesque se distribuyen bajo la SIL Open Font License; sus licencias están en `src/assets/fonts/`.

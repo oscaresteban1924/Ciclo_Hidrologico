@@ -797,6 +797,14 @@ button.scene-label:hover {
   color: var(--ink-2);
   margin: 0;
 }
+/* créditos del desarrollo, al pie de Ayuda y de Ajustes */
+.settings .credits {
+  margin: 4px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+}
 
 /* ------------------------------------------------------------------ */
 /* Recorrido guiado                                                     */

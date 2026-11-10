@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { TeacherSources } from './FactCard';
-import { UI } from '../content/ui';
+import { CREDITS, UI } from '../content/ui';
 import { speechSupported } from '../lib/speech';
 import { useStore, type Mode, type Tool } from '../state/store';
 import { Disclosure, Icon, Segmented, Toggle } from './ui';
+
 
 const MODES: Mode[] = ['guided', 'explore', 'lab', 'city', 'quality'];
 const TOOLS: Exclude<Tool, null>[] = ['tracer', 'challenges', 'logbook', 'glossary'];
@@ -62,6 +63,7 @@ export function Settings() {
         <TeacherSources />
       </Disclosure>
       <p className="privacy">{UI.settings.privacy}</p>
+      <p className="credits">{CREDITS}</p>
       <button type="button" className="btn-ghost small" onClick={() => dispatch({ type: 'resetProgress' })}>
         {UI.settings.resetProgress}
       </button>
@@ -111,6 +113,7 @@ export function Help({ onClose }: { onClose: () => void }) {
         <dt>Bitácora</dt>
         <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones. Solo queda en este dispositivo.</dd>
       </dl>
+      <p className="credits">{CREDITS}</p>
     </div>
   );
 }

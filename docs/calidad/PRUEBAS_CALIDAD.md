@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**17 de 17 cumplen.**
+**18 de 18 cumplen.**
 
 ## Q1. Oxígeno disuelto de saturación y altitud de Medellín — cumple
 
@@ -88,3 +88,8 @@ Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes 
 
 - Tolerancia: en 2 cauces × 3 temporadas × lluvia reciente o no × árboles o no: más casas nunca bajan la DBO, los coliformes ni el amonio ni suben el oxígeno; un mejor tratamiento nunca sube la DBO ni los coliformes; más caudal (verano → normal → lluvias) baja las concentraciones junto al tubo; en la planta, más cloro nunca deja menos cloro en la llave ni menos inactivación; en la calle, más días secos nunca lavan menos mugre y barrer nunca lava más; 0 violaciones
 - Medido: 11218 comprobaciones; violaciones 0
+
+## Q18. Pluma del tubo: conserva la masa, se mezcla en el largo de Fischer y nunca supera el agua del tubo — cumple
+
+- Tolerancia: en 3 temporadas × 2 cauces × 60, 600 y 3000 casas y a 20, 60, 200, 600 y 2000 m: la media a lo ancho del exceso relativo es 1 (error < 0,5 %); en Lm = 0,4·U·W²/εt las dos orillas están dentro del 5 % de la media; aguas abajo, en la línea donde cae el chorro la pluma nunca sube y en la orilla opuesta nunca baja; nunca más que el agua del tubo sin mezclar; sin casas, sin pluma
+- Medido: 18 casos; error máximo de la media 0.000 %; desvío máximo en Lm 3.59 %; violaciones de orden 0; sobre el tope 0; sin casas F = 1; Lm con 600 casas: verano/montana 1185 m, verano/plana 1203 m, normal/montana 697 m, normal/plana 708 m, lluvioso/montana 429 m, lluvioso/plana 436 m

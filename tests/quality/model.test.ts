@@ -36,6 +36,9 @@ import {
   type CreekInput,
   type PlantInput,
   type StreetInput,
+  PLUME,
+  plumeFactor,
+  plumeMixing,
 } from '../../src/quality/model';
 import { MONITOREO_META, SITIOS, cuencas, impliedTemp, resumen } from '../../src/quality/realdata';
 import { FISH, STATIONS, fishOk, uOf, xOf } from '../../src/quality/three/creekWorld';
@@ -527,6 +530,50 @@ const f = (v: number, d = 2) => v.toFixed(d);
     tolerance: 'en 2 cauces × 3 temporadas × lluvia reciente o no × árboles o no: más casas nunca bajan la DBO, los coliformes ni el amonio ni suben el oxígeno; un mejor tratamiento nunca sube la DBO ni los coliformes; más caudal (verano → normal → lluvias) baja las concentraciones junto al tubo; en la planta, más cloro nunca deja menos cloro en la llave ni menos inactivación; en la calle, más días secos nunca lavan menos mugre y barrer nunca lava más; 0 violaciones',
     measured: `${checks} comprobaciones; violaciones ${viol}`,
     pass: viol === 0 && checks > 3000,
+  });
+}
+
+// Q18) Pluma del tubo: mezcla transversal (Fischer et al., 1979) que conserva la masa y termina mezclada
+{
+  let worstMean = 0, worstLm = 0, monot = 0, overCap = 0, cases = 0;
+  const lms: string[] = [];
+  for (const season of ['verano', 'normal', 'lluvioso'] as const)
+    for (const slope of ['montana', 'plana'] as const)
+      for (const houses of [60, 600, 3000]) {
+        const m = creekModel({ houses, treatment: 'ninguno', season, slope, trees: true, afterRain: false });
+        const { Lm } = plumeMixing(m);
+        if (houses === 600) lms.push(`${season}/${slope} ${Math.round(Lm)} m`);
+        const cap = (m.Qr + m.Qw) / m.Qw;
+        cases++;
+        for (const x of [20, 60, 200, 600, 2000]) {
+          // media a lo ancho (regla del punto medio, 2000 franjas); con el tope cerca del tubo puede quedar algo abajo
+          let s = 0;
+          const N = 2000;
+          for (let i = 0; i < N; i++) {
+            const f = plumeFactor(m, x, (i + 0.5) / N);
+            if (f > cap + 1e-9) overCap++;
+            s += f;
+          }
+          worstMean = Math.max(worstMean, Math.abs(s / N - 1));
+        }
+        // en el largo de mezcla, de orilla a orilla dentro del 5 % de la media
+        worstLm = Math.max(worstLm, Math.abs(plumeFactor(m, Lm, 0) - 1), Math.abs(plumeFactor(m, Lm, 1) - 1));
+        // aguas abajo, en la línea donde cae el chorro (y0) la pluma baja y en la orilla opuesta sube
+        let pb = Infinity, pf = -Infinity;
+        for (const x of [10, 40, 100, 300, 1000, 3000]) {
+          const b = plumeFactor(m, x, PLUME.y0), f = plumeFactor(m, x, 1);
+          if (b > pb + 1e-12 || f < pf - 1e-12) monot++;
+          pb = b;
+          pf = f;
+        }
+      }
+  const none = plumeFactor(creekModel({ houses: 0, treatment: 'ninguno', season: 'normal', slope: 'montana', trees: true, afterRain: false }), 50, 0);
+  record({
+    id: 'Q18',
+    name: 'Pluma del tubo: conserva la masa, se mezcla en el largo de Fischer y nunca supera el agua del tubo',
+    tolerance: 'en 3 temporadas × 2 cauces × 60, 600 y 3000 casas y a 20, 60, 200, 600 y 2000 m: la media a lo ancho del exceso relativo es 1 (error < 0,5 %); en Lm = 0,4·U·W²/εt las dos orillas están dentro del 5 % de la media; aguas abajo, en la línea donde cae el chorro la pluma nunca sube y en la orilla opuesta nunca baja; nunca más que el agua del tubo sin mezclar; sin casas, sin pluma',
+    measured: `${cases} casos; error máximo de la media ${(worstMean * 100).toFixed(3)} %; desvío máximo en Lm ${(worstLm * 100).toFixed(2)} %; violaciones de orden ${monot}; sobre el tope ${overCap}; sin casas F = ${none}; Lm con 600 casas: ${lms.join(', ')}`,
+    pass: worstMean < 0.005 && worstLm <= 0.05 && monot === 0 && overCap === 0 && none === 1,
   });
 }
 

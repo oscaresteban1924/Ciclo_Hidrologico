@@ -3,7 +3,7 @@
 // calculado (model.ts) en cada punto. Dibujo esquemático: la distancia se comprime (más espacio cerca del tubo).
 
 import * as THREE from 'three';
-import type { CreekInput, CreekModel } from '../model';
+import { plumeFactor, plumeMixing, type CreekInput, type CreekModel } from '../model';
 import { naturalWater, doColor, fishGeometry, houses, rng, trees, waterMaterial, noise2, WALLS, type HouseSpot, type TreeSpot } from './kit';
 import type { QStage, StageLabel, StageView } from './stage';
 
@@ -30,6 +30,12 @@ const U0 = -95, U1 = 215;
 const zc = (u: number) => 14 * Math.sin(u * 0.035 + 0.6) + 5 * Math.sin(u * 0.09);
 const bedY = (u: number) => 0.05 * (200 - u) + (u < -20 ? 0.14 * (-20 - u) : 0);
 const HALF = 4.3;
+/** Vértices de agua a lo ancho de cada corte: suficientes para dibujar la pluma pegada a la orilla del tubo. */
+const NS = 11;
+/** Posición a lo ancho del vértice s: −1 orilla opuesta … +1 orilla del tubo (lado +z). */
+const across = (s: number) => (s / (NS - 1)) * 2 - 1;
+/** Color de la pluma del tubo (agua usada: gris lechoso, con detergentes y sólidos finos). */
+const PLUME_COLOR = new THREE.Color(0.66, 0.6, 0.48);
 
 function groundY(u: number, z: number): number {
   const a = Math.abs(z - zc(u));
@@ -117,23 +123,23 @@ export class CreekWorld {
     sc.add(this.terrain);
     this.paintTerrain(true);
 
-    // ---- agua: cinta a lo largo del cauce (tres vértices por corte: orilla, centro, orilla)
+    // ---- agua: cinta a lo largo del cauce (NS vértices por corte, de la orilla opuesta a la del tubo)
     const us: number[] = [];
     for (let u = U0; u <= U1 + 1e-6; u += 0.7) us.push(u);
     this.wU = us;
     const n = us.length;
-    this.wPos = new Float32Array(n * 3 * 3);
-    this.wCol = new Float32Array(n * 3 * 3);
-    this.wFoam = new Float32Array(n * 3);
-    const flow = new Float32Array(n * 3 * 2);
+    this.wPos = new Float32Array(n * NS * 3);
+    this.wCol = new Float32Array(n * NS * 3);
+    this.wFoam = new Float32Array(n * NS);
+    const flow = new Float32Array(n * NS * 2);
     const wi: number[] = [];
     us.forEach((u, k) => {
-      for (let s = 0; s < 3; s++) {
-        flow[(k * 3 + s) * 2] = u;
-        flow[(k * 3 + s) * 2 + 1] = s - 1;
+      for (let s = 0; s < NS; s++) {
+        flow[(k * NS + s) * 2] = u;
+        flow[(k * NS + s) * 2 + 1] = across(s);
       }
-      if (k > 0) for (let s = 0; s < 2; s++) {
-        const a = (k - 1) * 3 + s, b = a + 1, c = k * 3 + s, d = c + 1;
+      if (k > 0) for (let s = 0; s < NS - 1; s++) {
+        const a = (k - 1) * NS + s, b = a + 1, c = k * NS + s, d = c + 1;
         wi.push(a, b, c, b, d, c);
       }
     });
@@ -150,7 +156,8 @@ export class CreekWorld {
     stage.addPick(this.water, (p) => {
       let best = 0, bd = Infinity;
       for (let k = 0; k < n; k++) {
-        const d = Math.hypot(this.wPos[(k * 3 + 1) * 3] - p.x, this.wPos[(k * 3 + 1) * 3 + 2] - p.z);
+        const mid = (k * NS + (NS - 1) / 2) * 3;
+        const d = Math.hypot(this.wPos[mid] - p.x, this.wPos[mid + 2] - p.z);
         if (d < bd) {
           bd = d;
           best = k;
@@ -339,11 +346,11 @@ export class CreekWorld {
       const L = Math.hypot(1, dz);
       const y = bedY(u) - 0.62 + shift;
       const half = HALF + shift * 0.8;
-      for (let s = 0; s < 3; s++) {
-        const o = (k * 3 + s) * 3;
-        this.wPos[o] = u - ((s - 1) * half * dz) / L;
+      for (let s = 0; s < NS; s++) {
+        const o = (k * NS + s) * 3, t = across(s);
+        this.wPos[o] = u - (t * half * dz) / L;
         this.wPos[o + 1] = y;
-        this.wPos[o + 2] = z + ((s - 1) * half) / L;
+        this.wPos[o + 2] = z + (t * half) / L;
       }
     });
     (this.water.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
@@ -367,21 +374,36 @@ export class CreekWorld {
       const shift = Math.max(-0.3, Math.min(0.45, (m.H - 0.13) * 2.2));
       if (Math.abs(shift - this.yShift) > 1e-3) this.placeWater(shift);
     }
-    // agua: color de cada corte con la lectura del modelo
+    // agua: color de cada corte con la lectura del modelo. Aguas abajo del tubo, el exceso de contaminante se
+    // reparte a lo ancho con la pluma (mezcla transversal, plumeFactor): pegado a la orilla del tubo al principio,
+    // de orilla a orilla después del largo de mezcla. Las lecturas de la sonda son la media de la sección.
     const c = new THREE.Color();
     const n = this.wU.length;
+    const bg = m.at(-1);
+    const plume = inp.treatment !== 'alcantarillado' && m.Qw > 0;
     let maxTurb = 0;
     for (let k = 0; k < n; k++) {
       const x = xOf(this.wU[k]);
       const r = m.at(x);
       maxTurb = Math.max(maxTurb, r.turbidity);
-      if (v.mode === 'oxigeno') doColor(r.dissolvedO2, c);
-      else naturalWater(r.turbidity, r.dbo, c);
-      const foam = x >= 0 && inp.treatment !== 'alcantarillado' ? Math.min(0.85, (r.dbo / 45) * Math.exp(-x / 220)) : 0;
       const rapids = this.wU[k] < -25 ? 0.25 * noise2(this.wU[k] * 0.2, 1) : 0;
-      for (let s = 0; s < 3; s++) {
-        this.wCol.set([c.r, c.g, c.b], (k * 3 + s) * 3);
-        this.wFoam[k * 3 + s] = Math.max(foam * (s === 1 ? 1 : 0.6), rapids);
+      for (let s = 0; s < NS; s++) {
+        const F = plume && x > 0 ? plumeFactor(m, x, (1 - across(s)) / 2) : 1;
+        const mixd = (a: number, b: number) => b + (a - b) * F;
+        const dboHere = Math.max(0, mixd(r.dbo, bg.dbo));
+        if (v.mode === 'oxigeno') doColor(Math.max(0, mixd(r.dissolvedO2, bg.dissolvedO2)), c);
+        else {
+          naturalWater(Math.max(0, mixd(r.turbidity, bg.turbidity)), dboHere, c);
+          // pluma con color reforzado (raíz de la materia orgánica que trae el tubo; 30 mg/L de DBO5 = tono pleno):
+          // se avisa en su rótulo
+          if (plume && x > 0) c.lerp(PLUME_COLOR, 0.85 * Math.min(1, Math.sqrt(Math.max(0, dboHere - bg.dbo) / 30)));
+        }
+        // la lámina horizontal recibe sol y cielo de lleno: su color base va más oscuro para que no se vea blanca
+        if (v.mode !== 'oxigeno') c.multiplyScalar(0.66);
+        this.wCol.set([c.r, c.g, c.b], (k * NS + s) * 3);
+        // espuma donde la pluma está concentrada (detergentes y grasas del agua usada)
+        const foam = plume && x >= 0 ? Math.min(0.85, ((dboHere - bg.dbo) / 45) * Math.exp(-x / 260)) : 0;
+        this.wFoam[k * NS + s] = Math.max(0, foam, rapids);
       }
     }
     const g = this.water.geometry;
@@ -422,6 +444,10 @@ export class CreekWorld {
       L(`st-${st.id}`, `${st.id} · ${st.name}`, uOf(st.x), -8.6, 4.4, { sub: fish ? 'hay peces' : 'sin peces', kind: fish ? 'ok' : 'alerta', prio: 5, onClick: () => this.onStation?.(st.id) });
     }
     if (v.inp.treatment !== 'alcantarillado') L('tubo', 'Tubo de las casas', 0, 9.4, 3.2, { sub: v.inp.houses ? `${v.inp.houses} casas` : 'sin casas', prio: 7, kind: 'dato' });
+    if (v.inp.treatment !== 'alcantarillado' && v.m.Qw > 0) {
+      const { Lm } = plumeMixing(v.m);
+      L('pluma', 'Pluma del tubo (color reforzado)', uOf(Math.min(Lm * 0.16, 500)), 3.2, 1.2, { sub: `se mezcla de orilla a orilla en unos ${Math.round(Lm / 50) * 50} m`, prio: 6 });
+    }
     else L('colector', 'Colector', 60, 11, 1.8, { sub: 'el agua usada va a la planta del valle', prio: 4 });
     if (v.inp.treatment === 'ptar') L('ptar', 'Planta pequeña', -9.5, 15, 4.5, { prio: 3 });
     L('nacimiento', 'Nacimiento: agua de montaña', -82, 0, 3, { prio: 1 });

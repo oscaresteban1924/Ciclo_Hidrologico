@@ -68,6 +68,7 @@ export class QStage {
   private hoverAt = 0;
   readonly sun: THREE.DirectionalLight;
   readonly hemi: THREE.HemisphereLight;
+  private envRT: THREE.WebGLRenderTarget | null = null;
   /** Se llama con el texto de ayuda del objeto bajo el puntero (o null). */
   onHover: ((hint: string | null) => void) | null = null;
 
@@ -104,8 +105,12 @@ export class QStage {
     this.scene.background = sky;
     const [fn, ff] = opts.fog ?? [260, 900];
     this.scene.fog = new THREE.Fog(sky, fn, ff);
-    this.hemi = new THREE.HemisphereLight('#eef5ff', '#6f6450', 0.95);
+    this.hemi = new THREE.HemisphereLight('#eef5ff', '#6f6450', 0.8);
     this.scene.add(this.hemi);
+    // reflejos suaves del cielo (agua, metal, vidrio): un cielo de degradé prefiltrado, sin texturas descargadas
+    this.envRT = skyEnvironment(this.renderer, sky);
+    this.scene.environment = this.envRT.texture;
+    this.scene.environmentIntensity = 0.38;
     this.sun = new THREE.DirectionalLight('#fff1dc', 1.9);
     this.sun.position.set(-60, 120, 80);
     this.scene.add(this.sun, this.sun.target);
@@ -373,6 +378,7 @@ export class QStage {
       if (Array.isArray(mat)) mat.forEach((q) => q.dispose());
       else mat?.dispose();
     });
+    this.envRT?.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
@@ -382,4 +388,25 @@ export class QStage {
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+}
+
+/** Mapa de entorno con un cielo de degradé (azul arriba, claro en el horizonte, tierra abajo), prefiltrado con PMREM. */
+function skyEnvironment(renderer: THREE.WebGLRenderer, sky: THREE.Color): THREE.WebGLRenderTarget {
+  const scene = new THREE.Scene();
+  const geo = new THREE.SphereGeometry(10, 32, 16);
+  const col = new Float32Array(geo.attributes.position.count * 3);
+  const top = new THREE.Color('#7fb2df'), hor = sky.clone().lerp(new THREE.Color('#ffffff'), 0.35), ground = new THREE.Color('#6d7458'), c = new THREE.Color();
+  for (let i = 0; i < geo.attributes.position.count; i++) {
+    const y = geo.attributes.position.getY(i) / 10;
+    if (y >= 0) c.copy(hor).lerp(top, Math.pow(y, 0.6));
+    else c.copy(hor).lerp(ground, Math.min(1, -y * 3));
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  scene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const pm = new THREE.PMREMGenerator(renderer);
+  const rt = pm.fromScene(scene, 0.02);
+  pm.dispose();
+  geo.dispose();
+  return rt;
 }

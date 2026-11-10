@@ -186,6 +186,51 @@ export interface CreekModel {
   at: (x: number) => Reading;
 }
 
+// ------------------------------------------------------------------ pluma del vertimiento
+/**
+ * Mezcla transversal de un vertimiento en la orilla (Fischer et al., 1979, Mixing in Inland and Coastal Waters,
+ * cap. 5). El modelo de la quebrada supone el agua mezclada de orilla a orilla; esto reparte el exceso de
+ * contaminante a lo ancho antes de que se mezcle. Coeficiente de mezcla transversal εt = 0,6·H·u*, con
+ * u* = √(g·H·S) (cauces naturales: 0,3 a 1,0; se usa el valor central). Largo de mezcla para un vertimiento
+ * en la orilla: Lm = 0,4·U·W²/εt (concentración a lo ancho dentro del 5 % de la media).
+ */
+export const PLUME = { epsCoef: 0.6, lmCoef: 0.4, y0: 0.12 } as const;
+
+/** Coeficiente de mezcla transversal [m²/s] y largo de mezcla completa [m] de la quebrada. */
+export function plumeMixing(m: Pick<CreekModel, 'H' | 'U' | 'inp'>): { eps: number; Lm: number } {
+  const S = CHANNEL[m.inp.slope].S;
+  const ustar = Math.sqrt(9.81 * m.H * S);
+  const eps = PLUME.epsCoef * m.H * ustar;
+  return { eps, Lm: (PLUME.lmCoef * m.U * CHANNEL.width * CHANNEL.width) / eps };
+}
+
+/**
+ * Concentración relativa de la pluma: exceso en (x, y) ÷ exceso con mezcla completa (1 = mezclado). x [m] aguas
+ * abajo del tubo; yFrac de 0 (orilla del tubo) a 1 (orilla opuesta). El chorro del tubo cae a y0 = 0,12·W de la
+ * orilla; las orillas no dejan pasar contaminante (imágenes): C/C̄ = Σ [exp(−(y′ − y0′ − 2n)²/(4x′)) +
+ * exp(−(y′ + y0′ − 2n)²/(4x′))] / √(4πx′), con x′ = εt·x/(U·W²) y y′ = y/W (Fischer et al., ec. 5.9). Nunca pasa
+ * del agua del tubo sin mezclar (Q/Qw).
+ */
+export function plumeFactor(m: Pick<CreekModel, 'H' | 'U' | 'inp' | 'Qr' | 'Qw'>, x: number, yFrac: number): number {
+  if (x <= 0 || m.Qw <= 0) return 1;
+  const { eps } = plumeMixing(m);
+  const xp = (eps * x) / (m.U * CHANNEL.width * CHANNEL.width);
+  const y = Math.min(1, Math.max(0, yFrac));
+  const y0 = PLUME.y0;
+  let f: number;
+  if (xp < 0.05) {
+    // cerca del tubo: imágenes (convergen rápido cuando la pluma es angosta)
+    let sum = 0;
+    for (let n = -3; n <= 3; n++) sum += Math.exp(-((y - y0 - 2 * n) ** 2) / (4 * xp)) + Math.exp(-((y + y0 - 2 * n) ** 2) / (4 * xp));
+    f = sum / Math.sqrt(4 * Math.PI * xp);
+  } else {
+    // lejos: la misma solución en serie de cosenos (converge rápido cuando la pluma ya es ancha)
+    f = 1;
+    for (let k = 1; k <= 40; k++) f += 2 * Math.cos(k * Math.PI * y0) * Math.cos(k * Math.PI * y) * Math.exp(-k * k * Math.PI * Math.PI * xp);
+  }
+  return Math.min(f, (m.Qr + m.Qw) / m.Qw);
+}
+
 // ------------------------------------------------------------------ entradas válidas
 const fin = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
