@@ -310,14 +310,11 @@ export function facadeAtlas(): FacadeAtlas {
     rect(ox + 74, oy + 34, 108, T - 50, '#e9e6df');
     glass(ox + 80, oy + 40, 96, T - 62, curtains[Math.floor(rand() * curtains.length)]);
     ink(ox + 126, oy + 40, 4, T - 62, '#e9e6df');
-    // losa del balcón y baranda metálica
-    rect(ox, oy + T - 26, T, 12, '#b8b4ab');
-    g.fillStyle = rail;
-    g.fillRect(ox + 6, oy + 150, T - 12, 5);
-    for (let bx = ox + 8; bx < ox + T - 8; bx += 10) g.fillRect(bx, oy + 150, 3, T - 176);
-    m.fillStyle = '#000';
-    for (let bx = ox + 8; bx < ox + T - 8; bx += 10) m.fillRect(bx, oy + 150, 3, T - 176);
-    m.fillRect(ox + 6, oy + 150, T - 12, 5);
+    // la losa del balcón y la baranda se dibujan en 3D delante de la fachada (sectorScene.buildBuildings); aquí
+    // queda solo la sombra que proyectan sobre el muro
+    void rail;
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    g.fillRect(ox + 8, oy + T - 30, T - 16, 10);
     slab(ox, oy);
   };
   const plants = (x: number, y: number, w: number) => {

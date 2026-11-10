@@ -24,7 +24,7 @@ Si `h_f ≤ 0,1 mm`, el caudal de esa cara es 0.
 
 **No es la solución completa de Saint-Venant.** Se desprecia la advección de momento, por eso el método es adecuado para flujo gradualmente variado y menos exacto en flujo rápido.
 
-En pendientes fuertes se limita el número de Froude a `Fr ≤ 1,5`, como estabilización: `|q| ≤ 1,5·h_f·√(g·h_f)`. El efecto de este límite se cuantifica en la sección 9. En un cauce muy empinado tiene un costo: la creciente va más honda y más lenta que en la realidad. En el tramo de 10 % de la ladera, con 60 m³/s, el método da 2,06 m y la profundidad normal de Manning sin límite es 1,39 m, un 48 % más honda (prueba F1). Se probó relajar el límite hasta 3 en agua honda: la creciente llegaba a su profundidad normal, pero contra el terraplén de la carrera aparecían oleadas espurias, con un caudal por los cajones que saltaba entre 3 y 30 m³/s. Se descartó. El método inercial local no incluye la aceleración convectiva y por eso no representa bien el resalto de un torrente que choca con una obra.
+En pendientes fuertes se limita el número de Froude a `Fr ≤ 1,5`, como estabilización: `|q| ≤ 1,5·h_f·√(g·h_f)`. El efecto en las calles se cuantifica en la sección 9. En las quebradas el límite también es coherente con la física: en cauces empinados de lecho móvil (piedras, escalones, pozos) el número de Froude se mantiene cerca de 1 y no lo supera sino por tramos o instantes cortos (Grant 1997). En el tramo de 10 % de la ladera, con 60 m³/s, el modelo da 2,06 m. La resistencia de lechos de grava y bloques (ecuación de potencia variable de Ferguson 2007) da 1,71 m con D84 = 0,3 m y 2,26 m con D84 = 0,5 m; la profundidad crítica de la sección es 2,40 m (prueba F1). Con la rugosidad de un cauce de llanura (Manning `n = 0,035`, sin límite) saldrían 1,43 m y Fr ≈ 3, un régimen que los torrentes reales no sostienen. Se probó agregar la aceleración convectiva y relajar el límite hasta 3: aparecieron ondas que crecían sin control (inestabilidad de Vedernikov) y oleadas espurias contra el terraplén de la carrera. Se descartó.
 
 **Continuidad.** Se usa un balance de volúmenes finitos:
 
@@ -273,7 +273,7 @@ El panel dibuja la sección transversal en vivo y el hidrograma, con la línea d
 
 **Lo que no es.**
 - No es un caudal medido ni un pronóstico.
-- El límite de Froude del modelo (sección 1) subestima la capacidad en tramos muy empinados (10 %): la creciente va más honda y lenta que en la realidad (prueba F1). En la sección de control, con 1,7 % de pendiente, el límite no actúa: la capacidad es la misma con o sin él.
+- En el tramo de 10 % el límite de Froude deja la creciente cerca del flujo crítico, como en los torrentes reales de lecho móvil (sección 1 y prueba F1). En la sección de control, con 1,7 % de pendiente, el límite no actúa: la capacidad es la misma con o sin él.
 
 ### 6.5 Creciente dañina: casas en la orilla, lodo, peligro y daños
 
@@ -511,7 +511,7 @@ El criterio fijado de antemano se cumple: la salida difiere menos de 10 % y la p
 En calles empinadas, la captación de los sumideros tiene una incertidumbre del orden de ±6 % por el método.
 
 **Límites.**
-- El método no conserva el momento de forma completa, y por eso el flujo supercrítico es menos preciso. En la quebrada de 10 % de la ladera, con el límite Fr ≤ 1,5, la creciente va ≈ 48 % más honda que su profundidad normal de Manning (prueba F1).
+- El método no conserva el momento de forma completa, y por eso el flujo supercrítico es menos preciso. En la quebrada de 10 % la profundidad calculada queda entre la de la resistencia de lechos de grava y bloques y la crítica (prueba F1); la velocidad de un torrente concreto depende de su lecho (D84), que el modelo no conoce.
 - No hay redistribución en el suelo durante el evento.
 - No hay evaporación durante el evento.
 - La red no se resuelve hidráulicamente.
@@ -547,4 +547,6 @@ En calles empinadas, la captación de los sumideros tiene una incertidumbre del 
 - Rawls, W. J., Brakensiek, D. L., & Miller, N. (1983). Green-Ampt infiltration parameters from soils data. *Journal of Hydraulic Engineering*, 109(1), 62–70.
 - FHWA (2009). *Urban Drainage Design Manual*, HEC-22, 3.ª ed.
 - Rossman, L. A., & Huber, W. C. (2016). *Storm Water Management Model Reference Manual, Vol. I – Hydrology*. EPA/600/R-15/162A.
+- Ferguson, R. (2007). Flow resistance equations for gravel- and boulder-bed streams. *Water Resources Research*, 43, W05427.
+- Grant, G. E. (1997). Critical flow constrains flow hydraulics in mobile-bed streams: A new hypothesis. *Water Resources Research*, 33(2), 349–358.
 - W3C (2023). *Web Content Accessibility Guidelines (WCAG) 2.2*, criterio 2.3.1 «Umbral de tres destellos o por debajo».

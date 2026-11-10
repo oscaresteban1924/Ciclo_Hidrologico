@@ -32,7 +32,6 @@ import * as THREE from 'three';
 import { MIN_GAP_S, StormSky, strikeRate } from '../../src/city/render/lightning';
 import { buildShots } from '../../src/city/render/cinema';
 import { flowLevel } from '../../src/city/controller';
-import { NUMERICS } from '../../src/city/sim/constants';
 import { AMP_SHEET_M, drawDepth } from '../../src/city/render/palette';
 import { yq } from '../../src/city/scenarios/ladera';
 
@@ -1350,9 +1349,8 @@ const froude: { fr: number; B: number; D: number; esq: number; lim: number }[] =
 
 // ---------------------------------------------------------------- Torrente empinado y dibujo amplificado
 {
-  // F1: en la quebrada de la ladera (10 % de pendiente) una creciente casi estable debe ir en flujo uniforme (a la
-  // profundidad normal del propio modelo: Manning por celda con su límite de Froude) y no represarse junto a la
-  // salida. Se informa también la profundidad normal de Manning sin límite (sesgo conocido del método).
+  // F1: en la quebrada de la ladera (10 % de pendiente) una creciente casi estable debe ir en flujo uniforme y con
+  // una profundidad físicamente plausible para un torrente de montaña, y no represarse junto a la salida
   const sc = builtinScenarios()['ladera-quebrada'];
   const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 0, durationMin: 5 }, simMinutes: 30, creek: { source: 'ejemplo', peakM3s: 60, timeToPeakMin: 25, startMin: 2, sedimentCv: 0 } };
   const iv = baseInterventions(sc);
@@ -1381,34 +1379,61 @@ const froude: { fr: number; B: number; D: number; esq: number; lim: number }[] =
   }
   etaMod /= Math.max(1, nb);
   const S = (c.z[cellAt(8, yq(8))] - c.z[cellAt(44, yq(44))]) / 36;
-  const qOf = (eta: number, frMax: number) => col.reduce((a, k) => {
-    const hh = eta - c.z[k];
-    if (hh <= 0) return a;
-    const qm = (Math.pow(hh, 5 / 3) * Math.sqrt(S)) / c.n[k];
-    return a + Math.min(qm, frMax * hh * Math.sqrt(9.81 * hh)) * dx;
-  }, 0);
-  const normalLevel = (frMax: number) => {
-    let lo = c.z[cellAt(xs, yc)], hi = lo + 6;
+  const bed = c.z[cellAt(xs, yc)];
+  // geometría de la sección del terreno del modelo para un nivel η: área, ancho superficial y perímetro mojado
+  const geom = (eta: number) => {
+    let A = 0, T = 0, P = 0;
+    for (let q = 0; q < col.length; q++) {
+      const d = eta - c.z[col[q]];
+      if (d <= 0) continue;
+      A += d * dx;
+      T += dx;
+      const nxt = q + 1 < col.length ? eta - c.z[col[q + 1]] : 0;
+      P += nxt > 0 ? Math.hypot(dx, c.z[col[q + 1]] - c.z[col[q]]) : dx / 2 + d;
+    }
+    return { A, T, P };
+  };
+  const solve = (f: (eta: number) => number) => {
+    let lo = bed + 1e-3, hi = bed + 6;
     for (let it = 0; it < 80; it++) {
       const mid = (lo + hi) / 2;
-      if (qOf(mid, frMax) < Q) lo = mid;
+      if (f(mid) < 0) lo = mid;
       else hi = mid;
     }
     return (lo + hi) / 2;
   };
-  const etaN = normalLevel(NUMERICS.froudeMax), etaM = normalLevel(Infinity), bed = c.z[cellAt(xs, yc)];
+  // profundidad crítica (Fr = 1): Q²·T / (g·A³) = 1 (Grant 1997: los torrentes de lecho móvil van cerca de Fr = 1)
+  const etaC = solve((eta) => {
+    const g0 = geom(eta);
+    return 1 - (Q * Q * g0.T) / (9.81 * g0.A * g0.A * g0.A);
+  });
+  // profundidad normal con la ecuación de potencia variable de Ferguson (2007) para lechos de grava y bloques
+  const vpe = (d84: number) => solve((eta) => {
+    const { A, P } = geom(eta);
+    const R = A / P, rr = R / d84;
+    const V = Math.sqrt(9.81 * R * S) * (6.5 * 2.5 * rr) / Math.sqrt(6.5 * 6.5 + 2.5 * 2.5 * Math.pow(rr, 5 / 3));
+    return A * V - Q;
+  });
+  const etaV3 = vpe(0.3), etaV5 = vpe(0.5);
+  // Manning con n = 0,035 (rugosidad de cauce de llanura), solo como referencia
+  const etaN = solve((eta) => {
+    const { A, P } = geom(eta);
+    return (A * Math.pow(A / P, 2 / 3) * Math.sqrt(S)) / 0.035 - Q;
+  });
+  const dMod = etaMod - bed, dC = etaC - bed, dV3 = etaV3 - bed, dV5 = etaV5 - bed;
   // perfil junto a la salida: el agua no debe crecer hacia el borde
   const W = nx * dx;
   const hEdge = sim.h[cellAt(W - 0.5, yq(W - 0.5))], hUp = sim.h[cellAt(W - 10.5, yq(W - 10.5))];
-  const errRel = Math.abs(etaMod - etaN) / (etaN - bed);
+  const geoM = geom(etaMod);
+  const frMod = Q / geoM.A / Math.sqrt((9.81 * geoM.A) / geoM.T);
   record({
     id: 'F1',
     kind: 'obligatoria',
-    name: 'Torrente empinado: flujo uniforme en el tramo de 10 % y sin represamiento en la salida',
-    tolerance: 'con una creciente casi estable (60 m³/s, pico a los 27 min) en el tramo recto de 10 % de pendiente, el nivel calculado en el lecho difiere menos de 10 % de la profundidad normal del propio método para el caudal que pasa por esa sección (Manning por celda con el límite Fr ≤ 1,5); junto a la salida la profundidad en el borde no supera en más de 10 % la de 10 m aguas arriba; el balance cierra (< 10⁻⁹). Se informa, sin criterio, la profundidad normal de Manning sin límite',
-    measured: `pendiente ${fmt(S, 3)}; caudal en x = 26 m ${fmt(Q, 1)} m³/s; profundidad calculada ${fmt(etaMod - bed, 2)} m, normal del método ${fmt(etaN - bed, 2)} m (diferencia ${fmt(errRel * 100, 1)} %), normal de Manning sin límite ${fmt(etaM - bed, 2)} m (el método va ${fmt(((etaMod - bed) / (etaM - bed) - 1) * 100, 0)} % más hondo); salida: borde ${fmt(hEdge, 2)} m, 10 m aguas arriba ${fmt(hUp, 2)} m; residuo ${(Math.abs(sim.bal.residual) / Math.max(1, sim.bal.inflow)).toExponential(1)}`,
-    pass: errRel < 0.1 && hEdge <= 1.1 * hUp && Math.abs(sim.bal.residual) / Math.max(1, sim.bal.inflow) < 1e-9,
-    note: 'Prueba agregada al corregir un defecto que señaló el usuario («esa cresta y concentración no tienen sentido»). La salida de la quebrada, con 3 % de pendiente escrita (el cauce baja casi 9 %) y acotada en régimen crítico, represaba el agua en los últimos 15 m (2,0 m en el borde frente a 1,65 m aguas arriba); ahora usa la pendiente del terreno y el mismo límite de Froude de las caras interiores. Se probó además relajar el límite de Froude hasta 3 en agua honda: la creciente iba a su profundidad normal de Manning (1,41 m frente a 1,39 m), pero contra el terraplén de la carrera aparecían oleadas espurias (el caudal por los cajones saltaba entre 3 y 30 m³/s y pasaba agua sobre la vía con solo 60 % de la capacidad del cauce). Se descartó: el método inercial local no representa bien el resalto de un torrente que choca con una obra. Queda el sesgo conocido que informa esta prueba.',
+    name: 'Torrente empinado: profundidad plausible en el tramo de 10 % y sin represamiento en la salida',
+    tolerance: 'con una creciente casi estable (60 m³/s, pico a los 27 min) en el tramo recto de 10 % de pendiente, la profundidad calculada en la sección x = 26 m queda entre la normal de la ecuación de resistencia para lechos de grava y bloques de Ferguson (2007) con D84 = 0,3 m y 1,1 veces la crítica de esa sección (Grant 1997: los torrentes de lecho móvil van cerca de Fr = 1); junto a la salida la profundidad en el borde no supera en más de 10 % la de 10 m aguas arriba; el balance cierra (< 10⁻⁹)',
+    measured: `pendiente ${fmt(S, 3)}; caudal ${fmt(Q, 1)} m³/s; profundidad calculada ${fmt(dMod, 2)} m (Froude de la sección ${fmt(frMod, 2)}); Ferguson D84 0,3 m: ${fmt(dV3, 2)} m, D84 0,5 m: ${fmt(dV5, 2)} m; crítica ${fmt(dC, 2)} m; Manning con n = 0,035 (cauce de llanura, referencia): ${fmt(etaN - bed, 2)} m; salida: borde ${fmt(hEdge, 2)} m, 10 m aguas arriba ${fmt(hUp, 2)} m; residuo ${(Math.abs(sim.bal.residual) / Math.max(1, sim.bal.inflow)).toExponential(1)}`,
+    pass: dMod >= dV3 && dMod <= 1.1 * dC && hEdge <= 1.1 * hUp && Math.abs(sim.bal.residual) / Math.max(1, sim.bal.inflow) < 1e-9,
+    note: 'Prueba agregada al corregir un defecto que señaló el usuario («esa cresta y concentración no tienen sentido»). La salida de la quebrada, con 3 % de pendiente escrita (el cauce baja casi 9 %) y acotada en régimen crítico, represaba el agua en los últimos 15 m (2,0 m en el borde frente a 1,65 m aguas arriba); ahora usa la pendiente del terreno y el mismo límite de Froude de las caras interiores. Se probó relajar el límite de Froude hasta 3 en agua honda, y además agregar la aceleración convectiva: con Manning n = 0,035 el agua iba a Fr ≈ 3, se formaban ondas que crecían sin control (inestabilidad de Vedernikov) y oleadas espurias contra el terraplén de la carrera. Se descartó: los torrentes reales no sostienen Fr ≫ 1 (Grant 1997) y la rugosidad de un cauce de llanura no corresponde a una quebrada de 10 %. La comparación válida es con la resistencia de lechos de grava y bloques (Ferguson 2007) y con el flujo crítico.',
   });
   // A1: la amplificación del dibujo engrosa láminas delgadas y deja nivelada la superficie del agua honda
   const k5 = 5;

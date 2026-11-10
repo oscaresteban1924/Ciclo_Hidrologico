@@ -699,8 +699,9 @@ export class SectorScene {
       const m = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, roughness: 0.16, metalness: 0.02, depthWrite: false, envMap: this.envMap, envMapIntensity: 0.4 });
       // Agua: el color sale de la profundidad calculada (misma escala de la leyenda, interpolada entre
       // celdas); las vetas avanzan a la velocidad calculada en tiempo real; la espuma marca el agua rápida
-      // (número de Froude alto); los anillos de gotas solo aparecen donde llueve. La altura de la lámina
-      // no cambia: solo cambian el color y la normal.
+      // (número de Froude alto); el resalto hidráulico (de Froude > 1 aguas arriba a < 1 aquí, con la lámina
+      // más honda) hierve en blanco; donde la lámina cae por un escalón hay cascada; los anillos de gotas solo
+      // aparecen donde llueve. La altura de la lámina no cambia: solo cambian el color y la normal.
       m.onBeforeCompile = (sh) => {
         const u = this.fx.u;
         Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uRampN: u.uRampN, uNat: u.uNat, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode, uMud: u.uMud, uHaz: u.uHaz, uSed: u.uSed, uSedOn: u.uSedOn });
@@ -751,7 +752,7 @@ export class SectorScene {
             }
             vec2 vel = uMode > 2.5 ? vec2(0.0) : F.gb;
             float spd = length(vel);
-            float streak = 0.0, foam = 0.0, nflow = 0.5, kflow = 0.0, rough = 0.0, chop = 0.5;
+            float streak = 0.0, foam = 0.0, nflow = 0.5, kflow = 0.0, rough = 0.0, chop = 0.5, jump = 0.0, boil = 0.5, casc = 0.0, fr = 0.0;
             vec2 fdir = vec2(1.0, 0.0);
             if (uMode < 0.5 && spd > 0.015) {
               fdir = vel / spd;
@@ -765,7 +766,7 @@ export class SectorScene {
               nflow = mix(n1, n0, w0);
               kflow = smoothstep(0.05, 0.5, spd) * smoothstep(0.001, 0.005, hs);
               streak = smoothstep(0.55, 0.8, nflow) * kflow;
-              float fr = spd / sqrt(9.81 * max(hs, 0.001));
+              fr = spd / sqrt(9.81 * max(hs, 0.001));
               foam = smoothstep(0.85, 1.35, fr) * smoothstep(0.45, 0.72, nflow) * smoothstep(0.005, 0.015, hs);
               // agua honda y rápida (creciente): oleaje picado y espuma que avanzan con la corriente calculada
               rough = smoothstep(1.2, 4.0, spd) * smoothstep(0.15, 0.8, hs);
@@ -774,8 +775,32 @@ export class SectorScene {
                 float c2 = texture2D(uNoise, vec2((al - spd * uTime * 1.1) * 1.7 + 0.5, ac * 1.4)).r;
                 foam = max(foam, rough * smoothstep(0.5, 0.82, 0.6 * chop + 0.4 * c2));
               }
+              // resalto hidráulico: el agua llega rápida (Froude > 1, calculado 1,5 m aguas arriba) y aquí va lenta y
+              // más honda; se dibuja el rodillo de agua blanca que hierve en el sitio (no avanza con la corriente)
+              vec2 off = fdir * 1.5 / (2.0 * uHalf);
+              vec4 Fu = texture2D(uField, fuv - off);
+              float hu = max(Fu.r, 0.001);
+              float fru = length(Fu.gb) / sqrt(9.81 * hu);
+              jump = smoothstep(1.05, 1.4, fru) * (1.0 - smoothstep(0.75, 1.0, fr)) * smoothstep(1.1, 1.5, hs / hu) * smoothstep(0.02, 0.08, hs);
+              if (jump > 0.001) {
+                float b1 = texture2D(uNoise, vec2(al * 0.9 + uTime * 0.35, ac * 0.9 - uTime * 0.27)).r;
+                float b2 = texture2D(uNoise, vec2(al * 2.3 - uTime * 0.6 + 0.4, ac * 2.1 + uTime * 0.5)).r;
+                boil = 0.55 * b1 + 0.45 * b2;
+                foam = max(foam, jump * smoothstep(0.32, 0.62, boil));
+              }
             }
-            float wmix = clamp(streak * 0.38 + foam * 0.65, 0.0, 0.85);
+            // cascada: donde la lámina dibujada se inclina mucho (agua que cae por un escalón del terreno, el
+            // terraplén o la salida de un cajón) y el agua corre, franjas blancas que caen
+            vec3 gN = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
+            float steepW = 1.0 - abs(gN.y);
+            if (uMode < 0.5 && steepW > 0.35 && hs > 0.005 && spd > 0.15) {
+              casc = smoothstep(0.35, 0.65, steepW) * smoothstep(0.15, 0.6, spd);
+              vec2 hz = normalize(vec2(gN.x, gN.z) + 1e-5);
+              float across = dot(vWPos.xz, vec2(-hz.y, hz.x));
+              float fall = texture2D(uNoise, vec2(across * 1.6, vWPos.y * 0.45 + uTime * 1.9)).r;
+              foam = max(foam, casc * (0.35 + 0.65 * smoothstep(0.42, 0.7, fall)));
+            }
+            float wmix = clamp(streak * 0.38 + foam * (0.65 + 0.25 * max(jump, casc)), 0.0, 0.9);
             // vetas: en el agua turbia, crestas más claras del mismo café; espuma casi blanca
             vec3 streakC = nat > 0.5 ? mix(vec3(0.8, 0.74, 0.62), vec3(0.94, 0.93, 0.9), foam) : vec3(0.9, 0.95, 1.0);
             diffuseColor.rgb = mix(diffuseColor.rgb, streakC, wmix);
@@ -788,6 +813,7 @@ export class SectorScene {
             vec3 pert = vec3(sin(wp.x * 2.7 + uTime * 1.9) + sin(wp.y * 1.9 - uTime * 1.3), 0.0, cos(wp.y * 3.1 + uTime * 1.6) + cos(wp.x * 2.2 - uTime * 2.1)) * 0.04;
             pert += vec3(fdir.x, 0.0, -fdir.y) * (nflow - 0.5) * 0.6 * kflow;
             pert += vec3(fdir.x + 0.6 * fdir.y, 0.0, -fdir.y + 0.6 * fdir.x) * (chop - 0.5) * 1.6 * rough;
+            pert += vec3(boil - 0.5, 0.0, 0.5 - boil) * 2.2 * jump;
             float rainHere = uRainGeo.w > 0.5 ? step(distance(wp, uRainGeo.xy), uRainGeo.z) : 1.0;
             float ripAmt = uRainAmt * rainHere * (uMode < 0.5 ? 1.0 : 0.0);
             if (ripAmt > 0.001) {
@@ -916,6 +942,10 @@ export class SectorScene {
     const laundryLines: number[] = [];
     const clothes = geo();
     const sheds = geo();
+    // relieve de las fachadas de barrio: bordes de placa que sobresalen en cada piso y balcones con losa y baranda
+    // (cajas: centro en el mundo, largo a lo largo de la fachada, alto, fondo hacia afuera, giro y color)
+    type Box = { c: THREE.Vector3; L: number; Hh: number; D: number; yaw: number; col: number[] };
+    const slabs: Box[] = [], rails: Box[] = [];
     const rnd = prng(this.sc.seed + 5);
     const a = new THREE.Vector3(), b = new THREE.Vector3();
     const quad = (g: Geo, p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, uv: [number, number, number, number], col: number[], n: [number, number, number]) => {
@@ -1049,6 +1079,35 @@ export class SectorScene {
               }
               const tileCol = id.startsWith('g') ? white : col;
               quad(tgt, this.w(xa, ya, z0, a), this.w(xb, yb, z0, b), this.w(xb, yb, z1), this.w(xa, ya, z1), atlas.uv(id), tileCol, n);
+              if (ed.type === 'frente' && f > 0 && !(obra && top)) {
+                const mxm = (xa + xb) / 2, mym = (ya + yb) / 2, Lm = Math.hypot(xb - xa, yb - ya);
+                // giro en el mundo: el eje x local de la caja sigue la fachada, (ex, −ey) en el mundo (el norte del modelo es −z)
+                const yaw = Math.atan2(yb - ya, xb - xa);
+                // borde de la placa del piso (voladizo de 25 cm, 14 cm de canto)
+                slabs.push({ c: this.w(mxm + ed.nx * 0.125, mym + ed.ny * 0.125, z0), L: Lm + 0.02, Hh: 0.14, D: 0.25, yaw, col: col.map((v) => v * 0.93) });
+                if (id === 'bBalcon' || id === 'pBalcon') {
+                  const bw = Lm * 0.82, dep = 0.8;
+                  slabs.push({ c: this.w(mxm + ed.nx * dep * 0.5, mym + ed.ny * dep * 0.5, z0 + 0.02), L: bw, Hh: 0.12, D: dep, yaw, col: [0.74, 0.72, 0.68] });
+                  // baranda: pasamanos al frente y a los lados, y barrotes cada 12 cm
+                  const railCol = id === 'bBalcon' ? [0.16, 0.16, 0.17] : [0.93, 0.93, 0.9];
+                  const ex = (xb - xa) / Lm, ey = (yb - ya) / Lm;
+                  const fx = mxm + ed.nx * (dep - 0.03), fy = mym + ed.ny * (dep - 0.03);
+                  rails.push({ c: this.w(fx, fy, z0 + 1.0), L: bw, Hh: 0.05, D: 0.05, yaw, col: railCol });
+                  for (const sd of [-1, 1]) {
+                    const sx = mxm + ex * sd * (bw / 2 - 0.02) + ed.nx * dep * 0.5, sy = mym + ey * sd * (bw / 2 - 0.02) + ed.ny * dep * 0.5;
+                    rails.push({ c: this.w(sx, sy, z0 + 1.0), L: 0.05, Hh: 0.05, D: dep, yaw, col: railCol });
+                  }
+                  const nb = Math.max(4, Math.round(bw / (this.quality === 'alta' ? 0.12 : 0.24)));
+                  for (let q = 0; q <= nb; q++) {
+                    const t = -bw / 2 + (bw * q) / nb;
+                    rails.push({ c: this.w(fx + ex * t, fy + ey * t, z0 + 0.56), L: 0.025, Hh: 0.88, D: 0.025, yaw, col: railCol });
+                  }
+                  for (const sd of [-1, 1]) for (const fr of [0.3, 0.62]) {
+                    const sx = mxm + ex * sd * (bw / 2 - 0.02) + ed.nx * dep * fr, sy = mym + ey * sd * (bw / 2 - 0.02) + ed.ny * dep * fr;
+                    rails.push({ c: this.w(sx, sy, z0 + 0.56), L: 0.025, Hh: 0.88, D: 0.025, yaw, col: railCol });
+                  }
+                }
+              }
             }
             if (!obra) {
               // pretil sobre la azotea (cara exterior e interior)
@@ -1201,6 +1260,24 @@ export class SectorScene {
       g.setAttribute('position', new THREE.Float32BufferAttribute(laundryLines, 3));
       this.roofExtras.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#d8d8d2' })));
     }
+    // relieve de las fachadas: cajas instanciadas (una sola llamada de dibujo para placas y otra para barandas)
+    const boxes = (list: Box[], mat: THREE.MeshStandardMaterial) => {
+      if (!list.length) return;
+      const g = new THREE.BoxGeometry(1, 1, 1);
+      const im = new THREE.InstancedMesh(g, mat, list.length);
+      const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), sv = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), cc = new THREE.Color();
+      list.forEach((bx, q) => {
+        qq.setFromAxisAngle(up, bx.yaw);
+        m4.compose(bx.c, qq, sv.set(bx.L, bx.Hh, bx.D));
+        im.setMatrixAt(q, m4);
+        im.setColorAt(q, cc.setRGB(bx.col[0], bx.col[1], bx.col[2]));
+      });
+      im.castShadow = true;
+      im.receiveShadow = true;
+      this.buildingsGroup.add(im);
+    };
+    boxes(slabs, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 }));
+    boxes(rails, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.45, metalness: 0.35 }));
     this.buildingsGroup.add(this.roofExtras);
     this.syncRoofExtras();
   }
