@@ -13,7 +13,7 @@ import { rasterFrom, rect } from '../../src/city/scenarios/primitives';
 import { builtinScenarios } from '../../src/city/scenarios/index';
 import { TracerSet } from '../../src/city/sim/tracers';
 import { FIELD_CHANNELS, outletFlows, packField, spoutFlows, tankFx } from '../../src/city/render/fxData';
-import { EXTENT as ABURRA_EXTENT, HILLS, METRO_A, METRO_B, RIVER, SECTOR_SPOTS, cross as abCross, fabricAt, outerZ, riverAt, valleyZ } from '../../src/city/render/aburra';
+import { EXTENT as ABURRA_EXTENT, HILLS, LINES, METRO_A, METRO_B, RIVER, SECTOR_SPOTS, STATIONS, VALLE_INFORME, creeks, cross as abCross, fabricAt, outerZ, riverAt, valleyZ } from '../../src/city/render/aburra';
 import { buildBackdrop } from '../../src/city/render/backdrop';
 import { DEPTH_STOPS, NATURAL_STOPS, depthColor } from '../../src/city/render/palette';
 import { depthRampTexture } from '../../src/city/render/stormFx';
@@ -526,30 +526,57 @@ const sens: { dx: number; P: number; B: number; D: number; I: number; esq: numbe
   });
 }
 
-// ---------------------------------------------------------------- Vista del valle = su tabla de referencia
+// ---------------------------------------------------------------- Vista del valle = datos oficiales
 {
-  // El relieve del valle es aproximado (no es un MDE): esta prueba verifica que respeta su propia tabla
-  // de cotas y coordenadas de referencia, con las tolerancias declaradas en MODELO.md.
-  let riverErr = 0, monotone = true;
+  // El valle se dibuja con capas oficiales procesadas por tools/geo/valle.py (MODELO.md 6.2, DATOS_REALES.md §7).
+  // Se verifica lo que llega a la pantalla después de decodificar el módulo generado: relieve, río, estaciones,
+  // cerros, tejido urbano y que los sectores ilustrativos caen donde dicen.
+  const I = VALLE_INFORME as unknown as { ciudad: { celdasUrbanas: number }; transporte: { estaciones: number }; rio: { distanciaAlPoligonoOficial_m: { p95: number } } };
+  // relieve decodificado
+  let zmin = Infinity, zmax = -Infinity, urban = 0, cells = 0;
+  for (let y = ABURRA_EXTENT.y0; y <= ABURRA_EXTENT.y1 + 1e-9; y += 0.1) for (let x = ABURRA_EXTENT.x0; x <= ABURRA_EXTENT.x1 + 1e-9; x += 0.1) {
+    const z = valleyZ(x, y);
+    zmin = Math.min(zmin, z);
+    zmax = Math.max(zmax, z);
+    cells++;
+    if (fabricAt(x, y).f !== 0) urban++;
+  }
+  // río: baja de sur a norte, va por el fondo del valle (más bajo que el terreno a 800 m a cada lado)
+  let monotone = true, floorOk = 0, inBed = 0;
   for (let i = 0; i < RIVER.length; i++) {
     const [x, y, z] = RIVER[i];
-    if (y >= ABURRA_EXTENT.y0 && y <= ABURRA_EXTENT.y1) riverErr = Math.max(riverErr, Math.abs(valleyZ(x, y) - z));
-    if (i > 0 && z > RIVER[i - 1][2]) monotone = false;
+    if (i > 0 && z > RIVER[i - 1][2] + 1e-9) monotone = false;
+    const a = RIVER[Math.max(0, i - 1)], b = RIVER[Math.min(RIVER.length - 1, i + 1)];
+    const tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+    const zl = valleyZ(x - (ty / L) * 0.8, y + (tx / L) * 0.8), zr = valleyZ(x + (ty / L) * 0.8, y - (tx / L) * 0.8), zc = valleyZ(x, y);
+    if (zl > zc && zr > zc) floorOk++;
+    if (zc - z < 30) inBed++;
   }
-  const hillErr = HILLS.map((h) => ({ n: h.name, e: Math.abs(valleyZ(h.x, h.y) - h.peak) }));
-  const worstHill = hillErr.reduce((a, b) => (b.e > a.e ? b : a));
+  // estaciones del metro en el fondo del valle
   let stationLift = 0;
   for (const [x, y] of [...METRO_A.stations, ...METRO_B.stations]) stationLift = Math.max(stationLift, valleyZ(x, y) - riverAt(y).z);
+  // cerros tutelares: la cima del modelo de elevación sobresale de su entorno en el punto oficial
+  const tut = HILLS.filter((h) => h.tutelar).map((h) => {
+    let ring = 0;
+    for (let k = 0; k < 24; k++) ring += valleyZ(h.x + 0.7 * Math.cos((k / 24) * 2 * Math.PI), h.y + 0.7 * Math.sin((k / 24) * 2 * Math.PI)) / 24;
+    return { n: h.name, rise: valleyZ(h.x, h.y) - ring };
+  });
+  const lowHill = tut.reduce((a, b) => (b.rise < a.rise ? b : a));
   const [cx, cy] = SECTOR_SPOTS['calle-de-prueba'], [lx, ly] = SECTOR_SPOTS['ladera-quebrada'];
-  const fc = fabricAt(cx, cy, valleyZ(cx, cy)), fl = fabricAt(lx, ly, valleyZ(lx, ly));
+  const fc = fabricAt(cx, cy), fl = fabricAt(lx, ly);
   const tc = abCross(cx, cy).t, tl = abCross(lx, ly).t;
+  const nA = METRO_A.stations.length, nB = METRO_B.stations.length;
+  const named = creeks().filter((c) => c.name).length;
   record({
     id: 'V7',
     kind: 'verificacion',
-    name: 'La vista del valle respeta su tabla de referencia aproximada',
-    tolerance: 'cauce: error < 5 m y cota que baja de sur a norte; cimas de cerros: ±150 m; estaciones del metro en el fondo del valle (< 150 m sobre el río); sectores ilustrativos en zona urbana, la calle al pie de la ladera y la ladera sobre ella',
-    measured: `cauce: error máx. ${fmt(riverErr, 1)} m, baja de sur a norte: ${monotone ? 'sí' : 'no'}; peor cerro: ${worstHill.n} (${fmt(worstHill.e, 0)} m); estaciones: hasta ${fmt(stationLift, 0)} m sobre el río; calle: tejido ${fc.f}, t = ${fmt(tc, 2)}; ladera: tejido ${fl.f}, t = ${fmt(tl, 2)}`,
-    pass: riverErr < 5 && monotone && worstHill.e <= 150 && stationLift < 150 && fc.f !== 0 && fl.f !== 0 && tc < 0.15 && tl > 0.15,
+    name: 'La vista del valle sigue los datos oficiales del modelo de elevación, la red hídrica y el transporte',
+    tolerance: 'relieve entre 1 100 y 3 200 m; río que baja de sur a norte, por el fondo del valle (más bajo que el terreno a 800 m a cada lado en ≥ 90 % de su eje: en el fondo plano un afluente canalizado puede quedar a la misma cota) y dentro del cauce oficial en Medellín (p95 < 25 m); 21 estaciones en la línea A y 6 en la B, todas a menos de 80 m sobre el río; 81 estaciones y 12 líneas existentes; cada cerro tutelar sobresale ≥ 25 m de su entorno a 700 m; tejido urbano decodificado = el del informe (±1 %); sectores ilustrativos en zona urbana, la calle al pie de la ladera (t < 0,15) y la ladera sobre ella (t > 0,15)',
+    measured: `relieve ${fmt(zmin, 0)}–${fmt(zmax, 0)} m; río: baja ${monotone ? 'sí' : 'no'}, fondo del valle ${fmt((100 * floorOk) / RIVER.length, 1)} %, eje a menos de 30 m del cauce dibujado ${fmt((100 * inBed) / RIVER.length, 1)} %, cauce oficial p95 ${fmt(I.rio.distanciaAlPoligonoOficial_m.p95, 1)} m; estaciones A ${nA}, B ${nB}, hasta ${fmt(stationLift, 0)} m sobre el río; ${STATIONS.length} estaciones, ${LINES.length} líneas; cerro menos marcado: ${lowHill.n} (${fmt(lowHill.rise, 0)} m); tejido urbano ${urban} de ${cells} nodos (informe: ${I.ciudad.celdasUrbanas} celdas); quebradas con nombre oficial: ${named}; calle: tejido ${fc.f}, t = ${fmt(tc, 2)}; ladera: tejido ${fl.f}, t = ${fmt(tl, 2)}`,
+    pass:
+      zmin > 1100 && zmax < 3200 && monotone && floorOk / RIVER.length >= 0.9 && I.rio.distanciaAlPoligonoOficial_m.p95 < 25 && nA === 21 && nB === 6 && stationLift < 80 &&
+      STATIONS.length === I.transporte.estaciones && STATIONS.length === 81 && LINES.length === 12 && lowHill.rise >= 25 && Math.abs(urban - I.ciudad.celdasUrbanas) <= 0.01 * I.ciudad.celdasUrbanas &&
+      fc.f !== 0 && fl.f !== 0 && tc < 0.15 && tl > 0.15,
   });
 }
 

@@ -102,7 +102,7 @@ También se puede diseñar un experimento libre que cambia una sola condición.
 ## Módulo «Medellín: laboratorio de lluvia»
 
 Cuarto modo de la aplicación. Tiene dos escalas conectadas:
-- **El valle de Aburrá**: un esquema 3D para orientarse y elegir un sector.
+- **El valle de Aburrá**: vista 3D con datos oficiales (relieve del AMVA, río y quebradas, metro, tranvía, cables y Metroplús con sus estaciones, municipios y comunas) para orientarse y elegir un sector.
 - **El laboratorio**: un sector pequeño en 3D donde la lluvia se calcula en vivo y se puede ver cómo corre, se infiltra, se guarda y sale el agua.
 
 En el laboratorio, los estudiantes pueden:

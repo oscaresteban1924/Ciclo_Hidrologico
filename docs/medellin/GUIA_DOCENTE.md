@@ -118,17 +118,17 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
 
 ### La vista del valle
 
-- Es una **vista aproximada para orientarse**, construida desde una tabla de referencia, no desde cartografía oficial. El relieve y los edificios están exagerados ×1,5; trazados y cotas son aproximados.
+- Se construye con **datos oficiales** de la Alcaldía de Medellín y del Área Metropolitana: el modelo de elevación del AMVA, la red hídrica, la red vial, el sistema de transporte masivo y los límites de municipios y comunas. El relieve y los edificios están exagerados ×1,5; los edificios son ilustrativos (se reparten donde los datos dicen que hay ciudad).
+- La **leyenda** de la escena explica cada trazo: metro (negro, con sus estaciones), tranvía, metrocables, Metroplús, río, quebradas y límites entre municipios. Fuera del área metropolitana el relieve es un relleno suave, más pálido y sin ciudad.
 - Qué se puede reconocer:
-  - el río Medellín, que corre de sur a norte, con su parque lineal y las autopistas;
-  - el Centro con el Edificio Coltejer, las torres de El Poblado y el plano de Laureles;
-  - los barrios de ladera que suben al nororiente y al occidente (San Javier, comuna 13; Robledo);
-  - los cerros tutelares (Nutibara, El Volador, La Asomadera, Pan de Azúcar, Tres Cruces) y El Padre Amaya;
-  - quebradas con árboles en sus orillas que bajan al río;
-  - el metro (líneas A y B), el tranvía y los cables (por ejemplo, el K hasta la Biblioteca España);
-  - el aeropuerto Olaya Herrera, el estadio y los municipios vecinos, de Caldas a Copacabana.
-- Arrastre para girar y use la rueda o dos dedos para acercarse. Las etiquetas naranjas son los sectores de laboratorio: su ubicación es ilustrativa.
-- **Preguntas para la clase:** «¿Por qué casi todas las quebradas llegan al río por los costados?» «¿Dónde llueve sobre más techo y calle: en el fondo del valle o en la montaña verde?»
+  - el río Medellín, que corre de Caldas a Copacabana por el fondo del valle, con su parque lineal y las autopistas;
+  - las quebradas que bajan de las dos laderas; las de Medellín llevan su nombre oficial (La Iguaná, Santa Elena, La Presidenta, La Picacha…);
+  - el metro (21 estaciones de la línea A y las de la B), el tranvía de Ayacucho, los metrocables (el K y el L llegan a Santo Domingo y a Arví) y el Metroplús;
+  - los diez municipios del valle con sus límites, y las comunas y corregimientos de Medellín;
+  - los cerros tutelares con la cota de su cima según el modelo de elevación, y la cuchilla occidental (Padre Amaya, El Boquerón);
+  - el aeropuerto Olaya Herrera, la Unidad Deportiva Atanasio Girardot, el Edificio Coltejer y el Parque Biblioteca España.
+- Arrastre para girar y use la rueda o dos dedos para acercarse. Las etiquetas naranjas son los sectores de laboratorio: los de datos oficiales están en su lugar real; la calle y la ladera de prueba tienen una ubicación ilustrativa.
+- **Preguntas para la clase:** «¿Por qué casi todas las quebradas llegan al río por los costados?» «¿Por qué el metro va por el fondo del valle, junto al río, y los cables suben por las laderas?» «¿Dónde llueve sobre más techo y calle: en el fondo del valle o en la montaña verde?»
 
 ### Dentro de un sector
 

@@ -33,7 +33,7 @@ Verificaciones adicionales:
 - V4: las flechas usan la velocidad calculada.
 - V5: los efectos de lluvia y agua leen el estado calculado. Profundidad y velocidad del campo dibujado son idénticas a las del modelo. Chorros de bajantes y escurrimiento de salida coinciden con el balance (error ≈ 10⁻¹³). El llenado del depósito es exacto.
 - V6: el recorrido dibujado de las gotas sigue la trayectoria calculada. 72 gotas en tres tandas, una de ellas soltada en un techo, y 6 521 tramos. Ningún tramo atraviesa un edificio; la separación máxima entre puntos es 0,58 m; el resumen de viajes cuenta las 72 gotas.
-- V7: la vista del valle respeta su tabla de referencia aproximada. El río pasa por las cotas de la tabla (error 0,0 m) y baja de sur a norte; la cima más alejada de su cota es la del Pan de Azúcar (113 m; tolerancia 150 m); las estaciones del metro quedan a lo sumo 121 m sobre el río (San Javier; tolerancia 150 m); la calle de prueba cae en el fondo del valle y la ladera en la pendiente.
+- V7: la vista del valle sigue los datos oficiales (reescrita en noviembre de 2026, cuando la tabla aproximada se reemplazó por el modelo de elevación del AMVA y las capas de la Alcaldía; detalle en la sección 4 octodecies). Antes verificaba la tabla de referencia: el río pasaba por sus cotas (error 0,0 m), la cima más alejada era la del Pan de Azúcar (113 m; tolerancia 150 m) y las estaciones del metro quedaban a lo sumo 121 m sobre el río.
 - V8: el entorno de cada sector sigue el valle de referencia. Unión con el borde del sector: 0,00 mm. Relieve dibujado frente a la tabla: diferencia media 0,7 m entre 0,3 y 2 km y 9,6 m entre 2 y 8 km (tolerancias 2 m y 15 m); el máximo local, 113 m, está en cañones de quebradas más angostos que la malla lejana. Ningún objeto del entorno dentro del sector (0 de 20 649). Río en su posición (0,00 m).
 - R1: se midió la sensibilidad al límite de Froude.
 
@@ -154,7 +154,7 @@ Objetivo: que el escenario se reconozca como Medellín desde la vista general y 
 
 **Pedido.** Que el escenario general se pareciera a Medellín lo más posible.
 
-**Límite del entorno.** Para usar relieve y trazados reales se intentó acceder a teselas de elevación, OpenTopography, Copernicus, teselas de OpenStreetMap y Overpass. El proxy rechazó todos esos servicios y no se insistió por otras vías. Por eso la vista se construyó desde una **tabla de referencia aproximada** escrita a mano (`MODELO.md`, sección 6.2), y así lo dice el encabezado de la escena: «Vista aproximada para orientarse · relieve y edificios ×1,5 · trazados y cotas aproximados».
+**Límite del entorno (superado en la sección 4 octodecies).** Para usar relieve y trazados reales se intentó acceder a teselas de elevación, OpenTopography, Copernicus, teselas de OpenStreetMap y Overpass. El proxy rechazó todos esos servicios y no se insistió por otras vías. Por eso la vista se construyó desde una **tabla de referencia aproximada** escrita a mano (`MODELO.md`, sección 6.2), y así lo dice el encabezado de la escena: «Vista aproximada para orientarse · relieve y edificios ×1,5 · trazados y cotas aproximados».
 
 | Cambio | Cómo se verificó |
 |---|---|
@@ -465,6 +465,28 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 - El verificador también señalaba contenedores de diseño sin fondo (la capa SVG superior y la franja inferior) como si fueran cajas: se miden sus hijos.
 
 **Resultado final.** 84 de 84 estados sin choques ni cortes: 21 de 21 en cada pantalla (escritorio, portátil, tableta y teléfono).
+
+## 4 octodecies. Vista del Valle de Aburrá con datos oficiales (ejecutada)
+
+**Pedido.** «Mejorar gráficamente la vista del Valle de Aburrá: no se ve el metro, la distribución no es correcta, las líneas de flujo no son correctas y visualmente se ve muy mal.»
+
+**Qué cambió.**
+- **Datos.** La tabla aproximada escrita a mano se reemplazó por capas oficiales de la Alcaldía de Medellín y del AMVA: modelo de elevación, red hídrica, polígono del río, red vial metropolitana (35 469 tramos), transporte masivo (14 líneas, 81 estaciones), límites de los 10 municipios, comunas, barrios, cerros tutelares, toponimia y equipamientos. Ocho paquetes de descarga, con URL y sha256 de cada respuesta en el manifiesto (`DATOS_REALES.md`, sección 7).
+- **Líneas de flujo.** El río y las quebradas salen del D8 sobre el modelo de elevación de 25 m, con los drenajes oficiales quemados: el río va por su cauce oficial y cada quebrada por su cañada. Antes eran curvas trazadas a mano.
+- **Distribución.** La ciudad está donde la red vial dice que hay calles (158 km² en el recuadro), con los barrios de Medellín, los diez municipios y sus límites. Antes eran elipses por zona.
+- **Metro y transporte.** Trazados y estaciones oficiales; además del viaducto 3D, cada línea lleva un trazo de ancho fijo en pantalla con borde blanco, y cada estación un disco con el aro de su sistema (metro en negro, tranvía morado, cables ámbar, Metroplús verde azulado). Así se leen desde cualquier distancia.
+- **Acabado.** Leyenda en la escena; rótulos de mapa (municipios, comunas, cerros con su cota, agua, líneas); bruma que se ajusta a la distancia de la cámara; nubes que no se ven como manchas desde arriba; colores de la ciudad menos saturados; edificios repartidos en todo el valle (antes se cortaban al llegar al máximo y el norte quedaba vacío).
+- **Entorno de los sectores.** Usa el mismo relieve a escala 1:1: el río va por su eje real y las autopistas son las de la red vial oficial.
+
+**Controles.**
+- V7 (reescrita): relieve de 1 382 a 3 128 m; el río baja de sur a norte, por el fondo del valle en 95,3 % de su eje y dentro del cauce oficial en Medellín (p95 0 m, máximo 11 m); 21 estaciones de la línea A y 6 de la B, todas a menos de 68 m sobre el río; 81 estaciones y 12 líneas existentes; cada cerro tutelar sobresale al menos 54 m de su entorno; tejido urbano decodificado igual al del informe (15 811 celdas); los sectores ilustrativos en zona urbana, la calle al pie de la ladera (t = 0,07) y la ladera sobre ella (t = 0,18).
+- V8 (entorno de cada sector) sigue pasando con el relieve oficial: unión con el borde 0,00 mm; relieve dibujado frente al del modelo, diferencia media 0,6 m entre 0,3 y 2 km y 11,7 m entre 2 y 8 km (tolerancias 2 y 15 m; el relieve real es más quebrado que la tabla: antes 9,6 m); ningún objeto dentro del sector (0 de 21 514); río en su posición (0,00 m).
+- Batería completa: 63 de 63 pruebas del laboratorio de Medellín y 13 de 13 de «Calidad del agua».
+- **Umbral fijado antes de correr la batería.** En el primer borrador de V7 el río debía ir por el fondo del valle en el 95 % de su eje; se bajó a 90 % antes de correr la batería completa, después de una medición rápida que dio 95,3 %. No se bajó para que pasara (pasaba), sino porque en el fondo plano un afluente canalizado puede quedar a la misma cota que el río a 800 m y el umbral de 95 % dejaba la prueba al borde. El valor medido se informa siempre.
+- Superposiciones: la vista del valle sin choques ni cortes en las cuatro pantallas (escritorio, portátil, tableta y teléfono). La leyenda y la lista de sectores van lado a lado en un mismo contenedor, así que no pueden montarse; en el teléfono la leyenda arranca cerrada y los botones de sector son compactos.
+- Capturas de control: valle por defecto, vista aérea, centro de Medellín de cerca, teléfono, y los entornos de la Calle de prueba y de La Iguaná.
+
+**Tamaño y rendimiento.** El módulo de datos agrega 128 kB al archivo único (bloque comprimido en base64); el archivo único pasa de 3,34 a 3,54 MB. En el navegador de prueba (render por software, calidad ligera) la escena del valle se arma en 0,45 a 0,58 s y dibuja 443 000 triángulos en 215 llamadas; el cuadro tarda 4,4 ms (mediana de 20).
 
 ## 5. Rendimiento medido
 

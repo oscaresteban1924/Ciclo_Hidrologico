@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { prng } from '../scenarios/primitives';
-import { CABLES, EXTENT, Fabric, HILLS, METRO_A, METRO_B, PLACES, ROADS, TRANVIA, creeks, cross, fabricAt, forestAt, outerZ, riverAt, type Line } from './aburra';
+import { CABLES, EXTENT, Fabric, HILLS, METRO_A, METRO_B, PLACES, RIVER_PATH, ROADS, TRANVIA, creeks, cross, fabricAt, forestAt, outerZ, riverAt, type Line } from './aburra';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CARPET_GLSL } from './carpet';
 
@@ -647,17 +647,19 @@ ${CARPET_GLSL}`)
     mesh.userData.ribbon = color;
     group.add(mesh);
   };
-  const river: [number, number][] = [];
-  for (let y = EXTENT.y0 - 2; y <= EXTENT.y1 + 6; y += 0.05) river.push(wOf(riverAt(y).x, y));
-  // río canalizado: agua, taludes de concreto, parque lineal y autopistas (Regional y Norte/Sur)
+  // río por su eje real (en el norte corre hacia el nororiente), remuestreado cada 50 m
+  const river = resampleKm(RIVER_PATH, 50);
+  // río canalizado: agua, taludes de concreto y parque lineal; las autopistas son las de la red vial oficial
   ribbon(river, 46, 0, '#6b7a62', 0.5, 0.3, '#14281e');
   ribbon(river, 8, -27, '#a19e95', 0.55);
   ribbon(river, 8, 27, '#a19e95', 0.55);
-  ribbon(river, 26, -44, '#5f8f45', 0.4);
-  ribbon(river, 26, 44, '#5f8f45', 0.4);
-  ribbon(river, 24, -69, '#4c4d51', 0.45);
-  ribbon(river, 24, 69, '#4c4d51', 0.45);
-  for (const r of ROADS) ribbon(resampleKm(r.pts, 40), r.w * 1000, 0, '#55585c', 0.45);
+  ribbon(river, 22, -42, '#5f8f45', 0.4);
+  ribbon(river, 22, 42, '#5f8f45', 0.4);
+  // vías principales a menos de 12 km del sector (autopistas más anchas que las arterias)
+  for (const r of ROADS) {
+    if (!r.pts.some(([xk, yk]) => Math.hypot(...wOf(xk, yk)) < 12000)) continue;
+    ribbon(resampleKm(r.pts, 40), r.cls === 1 ? 22 : 14, 0, r.cls === 1 ? '#4c4d51' : '#55585c', 0.45);
+  }
   ribbon(resampleKm(TRANVIA.pts, 30), 9, 0, '#7a8a6e', 0.5);
 
   // ---- edificios: casas del barrio cercano, ciudad media y torres lejanas (una sola malla con instancias)
@@ -974,7 +976,7 @@ ${CARPET_GLSL}`)
   const trees: { x: number; z: number; r: number; c: string; near: boolean }[] = [];
   const greens = ['#3f7a34', '#4c8a3c', '#356b2d', '#5a9443', '#2f5f2a'];
   const nTrees = alta ? 12000 : 2000;
-  const hills = HILLS.filter((h) => h.id !== 'padre-amaya').map((h) => ({ ...h, w: wOf(h.x, h.y), rm: h.r * 1000 * 0.62 }));
+  const hills = HILLS.filter((h) => h.tutelar).map((h) => ({ ...h, w: wOf(h.x, h.y), rm: h.r * 1000 * 0.62 }));
   const tryTree = (x: number, z: number, near: boolean) => {
     if (inClear(x, z, 8) || blocked(x, z)) return;
     const [xk, yk] = kmOf(x, z);
@@ -1258,7 +1260,6 @@ ${CARPET_GLSL}`)
     landmarks.push({ id: 'biblioteca', text: 'Biblioteca España', at: atKm(...PLACES.bibliotecaEspana, 50), priority: 1 });
     landmarks.push({ id: 'centro', text: 'Centro (Edificio Coltejer)', at: atKm(...PLACES.coltejer, 190), priority: 1 });
     for (const h of HILLS) {
-      if (h.id === 'padre-amaya') continue;
       const [x, z] = wOf(h.x, h.y);
       if (Math.hypot(x, z) < 6000) landmarks.push({ id: `cerro-${h.id}`, text: h.name, at: atKm(h.x, h.y, 40), priority: 1 });
     }

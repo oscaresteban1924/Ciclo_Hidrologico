@@ -6,6 +6,18 @@
 /** Exageración vertical del esquema del valle (se informa en la interfaz; no afecta el cálculo). */
 export const VALLEY_EXAGGERATION = 1.5;
 
+/** Colores de la simbología de la vista del valle (escena 3D y su leyenda). */
+export const VALLEY_COLORS = {
+  metro: '#1c1f26',
+  tranvia: '#6d3fb5',
+  cable: '#e09400',
+  metroplus: '#0d8f87',
+  rio: '#1f6fc4',
+  quebrada: '#3d95dd',
+  limite: '#ffffff',
+  via: '#4f5358',
+} as const;
+
 export interface DepthStop {
   depth: number;
   color: string;

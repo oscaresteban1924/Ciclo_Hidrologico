@@ -1,0 +1,167 @@
+{
+ "relieve": {
+  "malla": "251 × 306 nodos cada 100 m",
+  "conDatos": 0.8365
+ },
+ "quemado": {
+  "tramosRedHidrica": 5055,
+  "celdasQuebradas": 92337,
+  "celdasRio": 855
+ },
+ "cuencaAltaRio": {
+  "areaKm2": 58.1,
+  "entrada9377": [
+   4708725,
+   2230110
+  ],
+  "celdaEntrada": {
+   "columna": 336,
+   "cota": 1760.5
+  }
+ },
+ "drenaje": {
+  "cuencaMinimaKm2": 0.8,
+  "celdasCauce": 18546,
+  "enlaces": 622,
+  "ordenMaximo": 5,
+  "rioCeldas": 1433,
+  "enlacesConNombre": 125,
+  "quebradasConNombre": 110
+ },
+ "rio": {
+  "largoKm": 40.56,
+  "cotaEntrada": 1760,
+  "cotaSalida": 1397,
+  "entradaKm": [
+   -6.59,
+   -18.55
+  ],
+  "salidaKm": [
+   8.05,
+   12.06
+  ],
+  "distanciaAlPoligonoOficial_m": {
+   "mediana": 0.0,
+   "p95": 0.0,
+   "max": 11.3,
+   "puntos": 142,
+   "nota": "eje del río D8 frente al polígono oficial del cauce, dentro de Medellín (0 = dentro del cauce)"
+  }
+ },
+ "vias": {
+  "tramos": 35469
+ },
+ "ciudad": {
+  "celdasUrbanas": 15811,
+  "km2Urbanos": 158.1,
+  "porTipo": {
+   "Ladera": 6653,
+   "Plano": 3008,
+   "Centro": 684,
+   "Poblado": 1410,
+   "Industria": 494,
+   "Municipio": 3562
+  }
+ },
+ "transporte": {
+  "lineas": [
+   "Acevedo-Santo Domingo",
+   "Alejandro Echavarría-La Sierra",
+   "Cable Palmitas",
+   "Miraflores-13 Noviembre",
+   "Niquía-La Estrella",
+   "Picacho",
+   "San Antonio-Alejandro Echavarría",
+   "San Antonio-San Javier",
+   "San Javier-La Aurora",
+   "Santo Domingo-Arví",
+   "U. de M- Pretroncal Oriental",
+   "U. de M-Av. del Ferrocarril-Parque Aranjuez"
+  ],
+  "excluidas": [
+   "Corredor de la 80 Caribe-La Palma  (estado 4)",
+   "Corredor de la 80 La Palma-Aguacatala (estado 5)"
+  ],
+  "estaciones": 81,
+  "estacionesConEstadoDistinto": [
+   "H: Las Torres (estado 3)",
+   "H: Villa Sierra (estado 3)",
+   "M: 13 de Noviembre (estado 3)",
+   "M: El Pinal (estado 3)"
+  ]
+ },
+ "viasPrincipales": {
+  "autopistaKm": 341.2,
+  "arteriasKm": 569.3,
+  "polilineas": 291
+ },
+ "cerros": [
+  {
+   "name": "Cerro de las Tres Cruces",
+   "peak": 1927,
+   "tutelar": true
+  },
+  {
+   "name": "Cerro del Padre Amaya",
+   "peak": 2961,
+   "tutelar": false
+  },
+  {
+   "name": "Cerro El Boquerón",
+   "peak": 3116,
+   "tutelar": false
+  },
+  {
+   "name": "Cerro El Picacho",
+   "peak": 2088,
+   "tutelar": true
+  },
+  {
+   "name": "Cerro La Asomadera",
+   "peak": 1607,
+   "tutelar": true
+  },
+  {
+   "name": "Cerro Nutibara",
+   "peak": 1548,
+   "tutelar": true
+  },
+  {
+   "name": "Cerro Pan de Azúcar",
+   "peak": 2122,
+   "tutelar": true
+  },
+  {
+   "name": "Cerro Santo Domingo",
+   "peak": 1947,
+   "tutelar": true
+  },
+  {
+   "name": "Cerro El Volador",
+   "peak": 1610,
+   "tutelar": true
+  }
+ ],
+ "verificacion": {
+  "estacionesMetroSobreElRio_m": {
+   "max": 67.7,
+   "mediana": 3.4
+  },
+  "rioBajaDeSurANorte": true
+ },
+ "datos": {
+  "bytes": 137072,
+  "comprimidos": 95977,
+  "secciones": {
+   "relieve": 76819,
+   "horizonte": 14084,
+   "relleno": 1353,
+   "rellenoH": 376,
+   "tejido": 16557,
+   "quebradas": 11013,
+   "lineas": 1390,
+   "vias": 13990,
+   "limites": 1490
+  }
+ }
+}

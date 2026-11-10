@@ -1120,6 +1120,7 @@ export function TeacherTab({ api }: { api: LabApi }) {
           <li>Rawls, W. J., Brakensiek, D. L. y Miller, N. (1983). Green-Ampt infiltration parameters from soils data. Journal of Hydraulic Engineering, 109(1), 62–70.</li>
           <li>FHWA (2009). Urban Drainage Design Manual, HEC-22, 3.ª ed.</li>
           <li>Rossman, L. A. y Huber, W. C. (2016). Storm Water Management Model Reference Manual, Vol. I – Hydrology. EPA/600/R-15/162A.</li>
+          <li>Vista del valle y entorno de los sectores: Alcaldía de Medellín, servidor de mapas (modelo digital de elevación del AMVA, red hídrica, río Medellín, red vial metropolitana, sistema de transporte masivo, límite del Área Metropolitana, comunas, barrios y veredas, cerros tutelares, toponimia y equipamientos), consulta de noviembre de 2026. Cauces con relleno por prioridad (Barnes et al., 2014) y D8 (O'Callaghan y Mark, 1984).</li>
         </ul>
       </Sec>
     </div>

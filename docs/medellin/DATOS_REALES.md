@@ -110,21 +110,48 @@ npx tsx tests/city/scenario-check.ts mi-sector.json
 
 La aplicación muestra la insignia «Datos reales con elementos estimados» y, en la pestaña Docente, el tipo de cada capa. Recuerde: aunque los edificios y el terreno sean reales, **los parámetros hidráulicos son estimados y la red de drenaje no está levantada**. El resultado sigue siendo educativo.
 
-## 7. Reemplazar la vista general del valle por datos oficiales
+## 7. Vista general del valle con datos oficiales (noviembre de 2026)
 
-La vista general del Valle de Aburrá se dibuja desde una tabla de referencia **aproximada** (`src/city/render/aburra.ts`; ver `MODELO.md`, sección 6.2). Se escribió a mano porque, desde el entorno de trabajo, el proxy rechazó los servicios de elevación (teselas de relieve, OpenTopography, Copernicus) y de OpenStreetMap (teselas y Overpass). No se descargó ningún dato.
+La vista del Valle de Aburrá y el entorno de cada sector ya no salen de una tabla escrita a mano: se construyen con capas oficiales descargadas del servidor de mapas de la Alcaldía de Medellín (`https://www.medellin.gov.co/servidormapas/rest/services`), que también publica el modelo de elevación del Área Metropolitana del Valle de Aburrá (AMVA). Las respuestas se guardaron **sin modificar** en `tools/geo/insumos/valle-aburra/`, con su URL, su estado HTTP y el sha256 de los bytes recibidos en `tools/geo/insumos/manifiesto.json` (paquetes `medellin-valle-insumos-4` a `-8`; `tools/geo/insumos_paquete.py` verifica cada sha256 antes de escribir y rechaza el paquete entero si uno no coincide). El servidor no responde desde el entorno de cálculo; se consultó desde el navegador integrado, con autorización del usuario, y los paquetes se pasaron al entorno.
 
-Para reemplazarla, no hace falta descargar toda la ciudad. Basta con un DEM grueso del valle y unas pocas capas lineales:
+### 7.1 Insumos
 
-| Insumo | Resolución o forma sugerida | Dónde se conecta |
+| Capa oficial (servicio y número de capa) | Archivo | Para qué se usa |
 |---|---|---|
-| DEM del valle, de Caldas a Copacabana (≈ 22 × 29 km) | 30 m (por ejemplo, Copernicus GLO-30 o el DEM oficial del AMVA), remuestreado a 100 m: ≈ 64 000 valores | `valleyZ(x, y)`: reemplazar la función por una lectura bilineal del ráster, en las mismas coordenadas en km |
-| Eje del río Medellín | Polilínea | `RIVER` (lon, lat y cota) |
-| Líneas del metro, del tranvía y de los cables, con estaciones | Polilíneas y puntos | `METRO_A`, `METRO_B`, `TRANVIA`, `CABLES` |
-| Quebradas principales | Polilíneas | `creeks()` |
-| Perímetro urbano y comunas | Polígonos | `fabricAt(x, y, z)`: la zona de cada punto saldría del polígono que lo contiene |
+| `ServiciosImagen/Modelo_digital_de_elevacion_AMVA/ImageServer` (10 m; MAGNA Medellín local; cotas de 1 120 a 3 130 m) exportado a 25 m en EPSG:9377 sobre el recuadro del esquema | `valle-dem-amva-25m-ampliado.tif` | Relieve detallado (cada 100 m), río y quebradas (D8) |
+| El mismo servicio a 400 m en todo su recuadro (55 × 59 km) | `valle-dem-amva-400m.tif` | Horizonte (cada 800 m) y cuenca alta del río al sur de Caldas |
+| `mapas_nacionales/VC_Hidrografia` 1 (Red Hídrica, POT) y 0 (polígono del Río Medellín) | `red-hidrica.geojson`, `rio-medellin-poligono.geojson` | Quemado de cauces y nombres de las quebradas; control del eje del río |
+| `mapas_nacionales/VC_Transporte` 3 (sentido vial: 35 469 tramos del área metropolitana, con jerarquía) | `sentido-vial-00…17.geojson`, `sentido-vial-capa.json` | Dónde hay ciudad (densidad de calles) y vías principales |
+| `mapas_nacionales/VC_Transporte` 1 y 2 (líneas y estaciones del sistema de transporte masivo) | `transporte-masivo-lineas.geojson`, `transporte-masivo-estaciones.geojson` | Metro, tranvía, metrocables y Metroplús con sus estaciones |
+| `ServiciosCiudad/MAP5_Cartobase` 15 (Límite del Área Metropolitana: los 10 municipios) y 13 (cerros tutelares) | `area-metropolitana-municipios.geojson`, `cerros-tutelares.geojson` | Límites municipales, rótulos de los municipios, cerros sin barrios |
+| `mapas_nacionales/VC_Limite_Politico_Admtivo` 0, 1 y 3 (barrios y veredas, comunas y corregimientos, clasificación del suelo) | `barrios-veredas.geojson`, `comunas-corregimientos.geojson`, `clasificacion-suelo.geojson` | Suelo urbano de Medellín y tipo de tejido por comuna |
+| `mapas_nacionales/VC_Nombre_geografico` 1 (toponimia) | `toponimia-cerros.geojson`, `toponimia-coltejer.geojson` | Posición oficial de los cerros y del Edificio Coltejer |
+| `mapas_nacionales/VC_Infraestructura_Fisica` 1 (equipamientos), `VM_Cartografia_City_Urban_2025` 7 (pista) y `MAP5_Cartobase` 3 (aeropuertos) | `equipamientos-referentes.geojson`, `aeropuerto-pista.geojson`, `aeropuerto-punto.geojson` | Unidad Deportiva Atanasio Girardot, Parque Biblioteca España, pista y terminal del Olaya Herrera |
 
-La misma tabla dibuja, a escala 1:1, el entorno de cada sector: al reemplazarla, también el entorno pasa a usar los datos oficiales, y un escenario de datos reales con `extent.lonLat` se dibuja en su lugar del valle. Si se reemplaza la tabla, las pruebas V7 y V8 siguen sirviendo como control: el río debe bajar de sur a norte y las estaciones del metro deben quedar cerca de su cota. La atribución de cada fuente debe agregarse al encabezado de la vista y a la pestaña Docente.
+Primero se descargó el relieve de 25 m en el recuadro del esquema anterior (x de −12 a 10 km); se reemplazó por el recuadro ampliado (x desde −15 km e y desde −18,5 km) para incluir la cuchilla occidental, donde está el Cerro del Padre Amaya, y la cabecera de Caldas. La primera copia quedó fuera del repositorio y su entrada del manifiesto lo indica.
+
+### 7.2 Procesamiento (`tools/geo/valle.py`)
+
+1. **Relieve.** El MDE de 25 m se filtra con una gaussiana de 40 m (para no producir aliasing) y se muestrea cada 100 m en las coordenadas del esquema (km desde lon −75,5736, lat 6,2442; la conversión a EPSG:9377 se hace con pyproj). El horizonte se muestrea cada 800 m. **Fuera del área del AMVA no hay datos** (16 % del recuadro: al oriente de Santa Elena, al suroccidente de Caldas y al occidente de la cuchilla): allí el relieve es un relleno armónico desde el borde, que desciende 35 m por kilómetro con un ruido suave. Se dibuja más pálido, sin bosque y sin ciudad, y la leyenda lo dice.
+2. **Río y quebradas.** Sobre el MDE de 25 m se queman los drenajes oficiales de Medellín (red hídrica −2 m, polígono del río −5 m) para que los cauces entubados sigan su trazado oficial; luego relleno de depresiones por inundación con prioridad (Barnes et al., 2014), dirección D8 (O'Callaghan y Mark, 1984) y acumulación. El río entra por el borde sur con el área de su cuenca alta (58,1 km², D8 sobre el MDE de 400 m); en ese tramo del borde se pone una pared para que el relleno no lo saque hacia el sur. Se dibujan los cauces de más de 0,8 km² de cuenca (622 tramos, orden de Strahler hasta 5); 125 tramos (110 quebradas) toman el nombre de la red hídrica cuando al menos el 60 % de sus puntos queda a menos de 60 m de un drenaje con nombre. Fuera de Medellín no hay red hídrica oficial en el servidor: esas quebradas salen sin nombre.
+3. **Ciudad.** Densidad de calles en metros de vía por hectárea (sin autopistas ni vías interveredales). Hay ciudad en los núcleos de más de 110 m/ha y en su borde hasta 300 m donde todavía hay más de 45 m/ha; en Medellín, además, en los polígonos de barrio con alguna calle (las torres de El Poblado tienen manzanas grandes). Se excluyen el cauce del río (70 m), los cerros tutelares, la pista del aeropuerto y la unidad deportiva. Resultado: 158 km² urbanos en el recuadro. **El tipo de tejido es ilustrativo**: La Candelaria = centro; El Poblado = torres; Laureles, La América, Belén, Castilla y Aranjuez = barrios planos (de ladera si la pendiente pasa del 14 %); Guayabal = industria en el fondo plano cerca del río; el resto de comunas = ladera; los otros municipios = cabecera (o ladera si es empinado). Los edificios se reparten al azar donde hay ciudad.
+4. **Transporte.** Se dibujan las líneas con estado 1 (*Existente*) de la capa oficial: metro A y B, tranvía T-A, metrocables K, J, L, H, M, P y el cable de La Aldea (Palmitas), y Metroplús 1 y 2. Se excluyen las dos líneas del corredor de la 80 (estado 4, *En ejecución*, y 5, *En estudio*). En la capa de estaciones, las cuatro estaciones de las líneas H y M (Las Torres, Villa Sierra, 13 de Noviembre, El Pinal) figuran con estado 3 (*Proyectado*) aunque sus líneas figuran como existentes; se dibujan con su línea. **El perfil vertical del metro es ilustrativo** (viaducto continuo a ≈ 17 m): la capa no dice dónde va elevado y dónde a nivel.
+5. **Vías, límites y referentes.** Autopistas (jerarquía 1) y arterias principales (2) fundidas y simplificadas a 20 m; límites entre municipios (sin el contorno exterior del área metropolitana); cerros en su punto oficial con la cota del MDE (máximo a menos de 400 m); anclas de rótulos en el centro de la mancha urbana de cada comuna o municipio.
+6. **Salida.** `src/city/render/aburraData.ts` (generado: no se edita a mano), con un bloque binario comprimido (137 kB sin comprimir, 96 kB con zlib; se descomprime con `fflate`, que ya trae three.js) y metadatos en JSON. `src/city/render/aburra.ts` lo lee y conserva sus funciones (`valleyZ`, `riverAt`, `cross`, `fabricAt`, `creeks`, `METRO_A`…), así que la vista del valle y el entorno de cada sector usan los mismos datos. El informe de la corrida queda en `docs/medellin/valle-informe.json`.
+
+### 7.3 Controles (prueba V7 y el informe)
+
+| Control | Resultado |
+|---|---|
+| Eje del río dentro del cauce oficial de Medellín (142 puntos) | mediana 0 m, p95 0 m, máximo 11 m |
+| Río de sur a norte | baja siempre: de 1 760 m al sur de Caldas a 1 397 m en Copacabana, 40,6 km |
+| Estaciones del metro (21 de la línea A, 6 de la B) | todas a menos de 68 m sobre el río (mediana 3 m) |
+| Cerros tutelares | cada cima sobresale de su entorno a 700 m: el menos marcado, La Asomadera, 54 m |
+| Tejido urbano decodificado en la aplicación | 15 811 celdas, igual al informe |
+
+### 7.4 Límites
+
+No es un levantamiento ni un mapa oficial: es una vista para orientarse. El relieve a 100 m suaviza los cañones estrechos (en Caldas el cauce dibujado queda hasta 30 m por encima del fondo real) y está exagerado ×1,5. Las quebradas son las que el D8 encuentra con 0,8 km² de cuenca: las más pequeñas no aparecen y las que corren por fuera de Medellín no tienen nombre. Los edificios y el tipo de tejido son ilustrativos. Fuera del área del AMVA el relieve es inventado y se marca como tal.
 
 ## 8. Servicios oficiales de la Alcaldía de Medellín: lo que se revisó y lo que falta
 
@@ -164,6 +191,6 @@ Las capas vectoriales entregan hasta 2 000 registros por consulta; el pipeline p
 
 Para el valle, la misma consulta con `bbox=4698974,2239446,4726835,2263390` y `size=1115,958`.
 
-El DEM es del municipio de Medellín. Fuera de él (Bello, Itagüí, Envigado y los demás municipios del valle), el relieve seguiría siendo el de la tabla de referencia, fundido en el borde, y así se rotularía.
+El DEM es del municipio de Medellín. Fuera de él (Bello, Itagüí, Envigado y los demás municipios del valle), el relieve seguiría siendo el de la tabla de referencia, fundido en el borde, y así se rotularía. *(Superado en noviembre de 2026: la vista del valle usa el modelo de elevación del AMVA, que cubre los diez municipios; ver la sección 7.)*
 
 **Alcantarillado en escenarios de datos reales.** Los dos sectores didácticos tienen una red separada trazada con criterios de EPM, pero esa red es inventada para enseñar. Por eso el pipeline **no** genera una red para un sector real: un escenario importado usa la red esquemática, salvo que alguien agregue en el campo `sewer` una red levantada (catastro de redes de EPM), con su procedencia. El formato del escenario acepta esa red: nodos con cota de batea, tramos con diámetro, material y bateas, sumideros con su caja y aportes de aguas residuales. La aplicación la valida al compilar: rechaza tramos que unan los dos sistemas y bateas por debajo del fondo de su nodo.

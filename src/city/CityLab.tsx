@@ -9,7 +9,7 @@ import { baseInterventions, cloneInterventions, type Interventions, type Scenari
 import { COVERS, COVER_LIST, H_WET } from './sim/constants';
 import { MISSIONS, budgetItems, type Mission } from './content/missions';
 import { takeCityIntent } from './intent';
-import { DEPTH_STOPS, VALLEY_EXAGGERATION, ampMaxCm, cssDepthGradient, fmtClock, fmtDepth, fmtNum, fmtTime } from './render/palette';
+import { DEPTH_STOPS, VALLEY_COLORS, VALLEY_EXAGGERATION, ampMaxCm, cssDepthGradient, fmtClock, fmtDepth, fmtNum, fmtTime } from './render/palette';
 import { CompareTab, MissionsTab, TeacherTab, ToolsTab, WordsTab, type LabApi, type MissionUi, type TabId, type ToolId } from './ui/Panels';
 import { RainBudget, SedBudget } from './ui/RainBudget';
 import { compile } from './sim/compile';
@@ -290,7 +290,7 @@ export default function CityLab() {
           <>
             <div className="city-ov city-crumb">
               <strong>Valle de Aburrá</strong>
-              <span>Vista aproximada para orientarse · relieve y edificios ×{fmtNum(VALLEY_EXAGGERATION, 1)} · trazados y cotas aproximados</span>
+              <span>Relieve, río, quebradas y transporte con datos oficiales · relieve y edificios ×{fmtNum(VALLEY_EXAGGERATION, 1)} · edificios ilustrativos</span>
             </div>
             {renderer === '2d' && <ValleyList api={api!} />}
             {panelHidden && (
@@ -298,13 +298,16 @@ export default function CityLab() {
                 <PanelPeek api={api!} />
               </div>
             )}
-            <div className="city-ov city-pick">
-              <p>Elige un sector para estudiar:</p>
-              {Object.values(allScenarios()).map((s) => (
-                <button key={s.id} type="button" className="btn" onClick={() => goSector(s.id)}>
-                  {s.shortTitle}
-                </button>
-              ))}
+            <div className="city-valley-bottom">
+              <div className="city-ov city-pick">
+                <p>Elige un sector para estudiar:</p>
+                {Object.values(allScenarios()).map((s) => (
+                  <button key={s.id} type="button" className="btn" onClick={() => goSector(s.id)}>
+                    {s.shortTitle}
+                  </button>
+                ))}
+              </div>
+              {renderer !== '2d' && <ValleyLegend />}
             </div>
           </>
         )}
@@ -382,6 +385,50 @@ function PanelPeek({ api }: { api: LabApi }) {
       <Icon name="panel" />
       <span>Mostrar panel</span>
     </button>
+  );
+}
+
+/** Leyenda de la vista del valle: qué es cada trazo y de dónde salen los datos. */
+function ValleyLegend() {
+  const wide = typeof window !== 'undefined' && window.matchMedia?.('(min-width: 901px)').matches;
+  const C = VALLEY_COLORS;
+  const line = (color: string, w: number, dashed = false, dot = false) => (
+    <svg width="34" height="12" viewBox="0 0 34 12" aria-hidden="true" focusable="false">
+      {color === '#ffffff' ? <line x1="1" y1="6" x2="33" y2="6" stroke="#5b6670" strokeWidth={w + 2} strokeLinecap="round" /> : <line x1="1" y1="6" x2="33" y2="6" stroke="#fff" strokeWidth={w + 3} strokeLinecap="round" />}
+      <line x1="1" y1="6" x2="33" y2="6" stroke={color} strokeWidth={w} strokeLinecap="round" strokeDasharray={dashed ? '5 3' : undefined} />
+      {dot && <circle cx="17" cy="6" r="4" fill="#fff" stroke={color} strokeWidth="2.2" />}
+    </svg>
+  );
+  const rows: [ReactNode, string][] = [
+    [line(C.metro, 4, false, true), 'Metro (líneas A y B) y estaciones'],
+    [line(C.tranvia, 3, false, true), 'Tranvía de Ayacucho (T-A)'],
+    [line(C.cable, 3, false, true), 'Metrocables'],
+    [line(C.metroplus, 2.5, false, true), 'Metroplús (líneas 1 y 2)'],
+    [line(C.rio, 4), 'Río Medellín'],
+    [line(C.quebrada, 2), 'Quebradas (cuenca de más de 0,8 km²)'],
+    [line(C.limite, 1.5, true), 'Límite entre municipios'],
+    [
+      <svg width="34" height="12" viewBox="0 0 34 12" aria-hidden="true" focusable="false" key="s">
+        <path d="M11 1 L23 1 L17 11 Z" fill="#ffb000" stroke="#5a3900" strokeWidth="1" />
+      </svg>,
+      'Sector de estudio',
+    ],
+  ];
+  return (
+    <details className="city-ov city-vlegend" open={wide}>
+      <summary>Leyenda</summary>
+      <ul>
+        {rows.map(([sym, txt]) => (
+          <li key={txt}>
+            {sym}
+            <span>{txt}</span>
+          </li>
+        ))}
+      </ul>
+      <p>
+        Datos: Alcaldía de Medellín y Área Metropolitana del Valle de Aburrá (modelo de elevación, red hídrica, red vial, transporte masivo, límites). Fuera del área metropolitana el relieve es un relleno suave, sin ciudad.
+      </p>
+    </details>
   );
 }
 

@@ -140,6 +140,61 @@
   border-left-color: rgba(31, 41, 51, 0.3);
   font-weight: 500;
 }
+/* vista del valle: rótulos de mapa (municipios, comunas, cerros, agua y líneas de transporte) */
+.city-label.kind-municipio,
+.city-label.kind-zona,
+.city-label.kind-agua {
+  background: none;
+  box-shadow: none;
+  padding: 0 2px;
+}
+.city-label.kind-municipio {
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 3px rgba(15, 25, 35, 0.95), 0 0 6px rgba(15, 25, 35, 0.7), 0 1px 2px rgba(15, 25, 35, 0.9);
+}
+.city-label.kind-zona {
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-shadow: 0 0 3px rgba(15, 25, 35, 0.95), 0 0 5px rgba(15, 25, 35, 0.6);
+}
+.city-label.kind-agua {
+  color: #eaf5ff;
+  font-size: 0.74rem;
+  font-style: italic;
+  font-weight: 700;
+  text-shadow: 0 0 3px #0b3a66, 0 0 5px rgba(11, 58, 102, 0.8);
+}
+.city-label.kind-cerro {
+  background: rgba(255, 255, 255, 0.9);
+  color: #2d261d;
+  font-size: 0.7rem;
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+.city-label.kind-cerro .city-label-text::before {
+  content: '▲';
+  margin-right: 4px;
+  color: #7a5a2e;
+  font-size: 0.62rem;
+}
+.city-label.kind-cerro .city-label-sub:not(:empty) {
+  border-left-color: rgba(45, 38, 29, 0.3);
+  font-weight: 500;
+}
+.city-label.kind-linea {
+  background: rgba(255, 255, 255, 0.95);
+  color: #1f2933;
+  font-size: 0.72rem;
+  border-radius: 5px;
+  border-left: 6px solid var(--dot, #c4194b);
+  padding: 2px 7px;
+}
 .city-label.kind-sector {
   background: #ffb000;
   color: #1b1b1b;
@@ -2059,4 +2114,102 @@
 .plan-result td.is-bad {
   color: #a3321f;
   font-weight: 650;
+}
+
+/* Parte de abajo de la vista del valle: sectores y leyenda lado a lado (nunca una sobre otra) */
+.city-valley-bottom {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+.city-valley-bottom > .city-ov {
+  position: static;
+  pointer-events: auto;
+}
+.city-valley-bottom > .city-pick {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.city-valley-bottom > .city-vlegend {
+  margin-left: auto;
+}
+/* Leyenda de la vista del valle */
+.city-vlegend {
+  flex: 0 0 auto;
+  width: 280px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+  padding: 6px 12px 8px;
+  font-size: 0.78rem;
+}
+.city-vlegend:not([open]) {
+  width: auto;
+}
+.city-vlegend summary {
+  cursor: pointer;
+  font-weight: 700;
+  padding: 2px 0;
+}
+.city-vlegend ul {
+  list-style: none;
+  margin: 6px 0 4px;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+.city-vlegend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.city-vlegend li svg {
+  flex: none;
+}
+.city-vlegend p {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+@media (max-width: 900px) {
+  /* en pantallas angostas la leyenda va encima de la lista de sectores y arranca cerrada */
+  .city-valley-bottom {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .city-vlegend {
+    align-self: flex-end;
+    width: auto;
+    max-width: 100%;
+    padding: 4px 10px;
+  }
+  .city-vlegend[open] {
+    width: min(300px, 100%);
+    max-height: 40vh;
+  }
+}
+@media (max-width: 600px) {
+  /* en el teléfono los botones de sector van compactos (dos por fila) para que se vea el valle */
+  .city-valley-bottom .city-pick {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .city-valley-bottom .city-pick p {
+    font-size: 0.85rem;
+  }
+  .city-valley-bottom .city-pick .btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    min-height: 36px;
+  }
 }

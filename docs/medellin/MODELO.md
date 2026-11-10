@@ -146,23 +146,23 @@ Además, siguen siendo **decorativos**:
 - las cabinas del cable aéreo;
 - los árboles y las marcas viales;
 - las nubes;
-- el **entorno del sector**: el Valle de Aburrá de referencia de la sección 6.2, a escala 1:1, alrededor de la maqueta (`src/city/render/backdrop.ts`):
+- el **entorno del sector**: el Valle de Aburrá de la sección 6.2 (datos oficiales), a escala 1:1, alrededor de la maqueta (`src/city/render/backdrop.ts`):
   - **Ubicación.** El sector se dibuja en su punto del esquema del valle (`SECTOR_SPOTS`; un escenario de datos reales usa su longitud y latitud). En los escenarios didácticos esa ubicación es **ilustrativa**: la calle queda al pie de la ladera noroccidental, a ≈ 1,4 km del río; la ladera, más arriba, a ≈ 2,9 km.
   - **El sector está asentado en el terreno, no sobre una base.**
     - Cerca del sector, el terreno sigue el plano de su pendiente, calculado por mínimos cuadrados sobre sus celdas. Ese plano se funde con el relieve del valle a unos 230 m.
     - Una franja de unión empieza con la altura exacta del borde del sector y con el color de su superficie (calle, andén, prado o cauce), sin escalón. A unos 12 a 30 m se une con el terreno del entorno.
     - Las casas cercanas se apoyan en ese suelo y, en pendiente, se entierran hasta su esquina más baja.
-  - **Relieve.** El de la tabla de referencia, sin exagerar, con las montañas que cierran el valle (`outerZ`). La malla es fina cerca (20 m en calidad alta, 40 m en ligera) y se abre hacia el horizonte (hasta 30 km). Con lluvia fuerte la bruma baja la visibilidad a algo más de un kilómetro detrás del sector.
+  - **Relieve.** El del modelo de elevación del AMVA (sección 6.2), sin exagerar, con las montañas que cierran el valle (`outerZ`). La malla es fina cerca (20 m en calidad alta, 40 m en ligera) y se abre hacia el horizonte (hasta 30 km). Con lluvia fuerte la bruma baja la visibilidad a algo más de un kilómetro detrás del sector.
   - **Barrios, por tipo de tejido urbano** (el mismo de la vista del valle):
     - hasta ≈ 650 m (340 m en ligera): cuadras con casas pegadas en lo plano y casas escalonadas en las laderas, con el frente hacia la calle o ladera abajo; culatas de ladrillo sin ventanas aunque el frente esté pintado; puertas, persianas de locales, ventanas con reja y balcones; tanques negros y azules, pisos en obra gris con varillas y algunos murales; carros, taxis y busetas parqueados;
     - hasta ≈ 5 km (2,4 km en ligera): volúmenes por tejido (ladera, plano, Centro, El Poblado, industria, municipios);
     - más lejos: el tapete de techos moteados y, en todo el valle, las torres del Centro y de El Poblado.
   - **Agua y verde.** Quebradas con franjas de bosque en sus retiros, cerros tutelares arbolados, bosque y potreros montaña arriba, guayacanes amarillos y rosados.
-  - **Transporte e hitos.** Río canalizado con taludes, parque lineal y autopistas; metro elevado (líneas A y B) con estaciones y trenes que van y vuelven; tranvía; los seis metrocables con torres, estaciones y cabinas; Edificio Coltejer, Biblioteca España, estadio y pista del aeropuerto.
+  - **Transporte e hitos.** Río canalizado por su eje real, con taludes y parque lineal; autopistas y arterias de la red vial oficial; metro (líneas A y B) con sus estaciones oficiales y trenes que van y vuelven (perfil vertical ilustrativo); tranvía; los metrocables con torres, estaciones y cabinas; Edificio Coltejer, Biblioteca España, estadio y pista del aeropuerto en sus posiciones oficiales.
   - **Rótulos lejanos** de baja prioridad (río, metro, metrocables cercanos, cerros, Centro, Biblioteca España), solo en las vistas altas.
   - **Detalle según el equipo.** Si cada cuadro tarda más de ≈ 0,2 s durante 3 s (equipos sin tarjeta gráfica), se ocultan los volúmenes y árboles lejanos y las nubes; el relieve sigue mostrando la ciudad. Vuelven si el equipo dibuja a más de ≈ 16 cuadros por segundo durante 8 s.
 
-  Trazados y cotas son aproximados (no es un modelo digital de elevación) y no hay infraestructura levantada: casas, carros, murales y cables son ilustrativos y no intervienen en el cálculo. La prueba V8 verifica la unión con el borde, el relieve frente a la tabla de referencia, que ningún objeto quede dentro del sector y la posición del río. Las ventanas encendidas al oscurecer con la lluvia son solo ambiente.
+  El relieve, el río, las quebradas y los trazados salen de capas oficiales (sección 6.2); casas, carros, murales y cables son ilustrativos y no intervienen en el cálculo. La prueba V8 verifica la unión con el borde, el relieve dibujado frente al del modelo de elevación, que ningún objeto quede dentro del sector y la posición del río. Las ventanas encendidas al oscurecer con la lluvia son solo ambiente.
 - **las fachadas y la vida de calle del propio sector** (solo dibujo; las huellas, alturas y bajantes de los edificios no cambian):
   - cada fachada de casa de barrio se arma con módulos de 3 m por un piso de un atlas dibujado a mano (`facadeAtlas`, en `textures.ts`); cada cara mira lo que tiene enfrente en la malla del sector: calle o andén (frente), casa vecina (culata) o patio (lado);
   - frente: ladrillo a la vista o pañete pintado; en el primer piso, una puerta y locales con aviso y persiana metálica (abierta o cerrada) o garaje; arriba, ventanas con reja o con marco de aluminio, balcones con baranda y materas;
@@ -184,21 +184,20 @@ Toda la información sigue disponible en colores, números y flechas.
 
 **Relámpagos.** No se incluyen, a propósito: los destellos pueden afectar a personas sensibles a la luz intermitente (WCAG 2.3).
 
-### 6.2 Vista general del Valle de Aburrá (orientación, aproximada)
+### 6.2 Vista general del Valle de Aburrá (orientación, con datos oficiales)
 
-La primera escena del módulo sirve para **orientarse**. No interviene en ningún cálculo. Se dibuja a partir de una tabla de referencia aproximada (`src/city/render/aburra.ts`), escrita a mano porque desde el entorno de trabajo **no hubo acceso** a un modelo digital de elevación ni a OpenStreetMap: el proxy rechazó esos servicios. Coordenadas: kilómetros desde lon −75,5736, lat 6,2442 (x al oriente, y al norte), de Caldas a Copacabana.
+La primera escena del módulo sirve para **orientarse**. No interviene en ningún cálculo. Se construye con capas oficiales de la Alcaldía de Medellín y del AMVA procesadas por `tools/geo/valle.py` (detalle, insumos y controles en `DATOS_REALES.md`, sección 7). Coordenadas: kilómetros desde lon −75,5736, lat 6,2442 (x al oriente, y al norte), de x = −15 a 10 km y de y = −18,5 a 12 km (de Caldas a Copacabana).
 
-| Elemento | Cómo se construye | Tolerancia comprobada (V7) |
+| Elemento | Cómo se construye | Control (V7) |
 |---|---|---|
-| Río Medellín | Polilínea con cotas, de ≈ 1 780 m en Caldas a ≈ 1 420 m al norte | El dibujo pasa por las cotas de la tabla (error 0,0 m) y baja siempre de sur a norte |
-| Forma del valle | Perfil transversal: fondo casi plano, piedemonte o banco, escarpe y cresta. Ancho del fondo y altura de la cresta interpolados en 10 cortes de sur a norte, distintos al oriente y al occidente | Las estaciones de las líneas A y B del metro quedan a menos de 150 m sobre el río (San Javier, ≈ 120 m) |
-| Cerros tutelares | Nutibara, El Volador, La Asomadera, Pan de Azúcar, Tres Cruces y Padre Amaya, con su cota de referencia | Error ≤ 150 m en la cima (el mayor: Pan de Azúcar, 113 m) |
-| Quebradas | 25 cauces tallados en las laderas, con árboles en sus retiros | — |
-| Ciudad | Tejido urbano por zonas (ladera, plano, Centro, El Poblado, industria, municipios vecinos) hasta un borde superior que cambia por sector de la ciudad; los cerros quedan verdes | Los dos sectores de laboratorio caen en zona urbana: la calle en el fondo del valle y la ladera en la pendiente |
-| Transporte | Metro (líneas A y B) en viaducto, con estaciones y trenes; tranvía de Ayacucho; cables K, L, J, H, M y P con torres, estaciones y cabinas | Trazados aproximados, sin verificación cartográfica |
-| Puntos de referencia | Aeropuerto Olaya Herrera, estadio, Edificio Coltejer, Biblioteca España, Parque Arví, municipios vecinos | Posiciones aproximadas |
+| Relieve | MDE del AMVA cada 100 m (horizonte cada 800 m); fuera del área del AMVA, relleno suave dibujado más pálido y sin ciudad | Cotas de 1 382 a 3 128 m |
+| Río Medellín | D8 sobre el MDE de 25 m con los drenajes oficiales quemados; entra por el sur con su cuenca alta | Dentro del cauce oficial en Medellín (p95 0 m); baja siempre de sur a norte; va por el fondo del valle |
+| Quebradas | Cauces D8 de más de 0,8 km² de cuenca, con su orden de Strahler y el nombre de la red hídrica oficial | 110 quebradas con nombre oficial |
+| Ciudad | Densidad de calles de la red vial metropolitana y barrios de Medellín; tipo de tejido ilustrativo por comuna y pendiente | Tejido decodificado igual al del informe; los sectores ilustrativos en zona urbana, la calle al pie de la ladera y la ladera sobre ella |
+| Transporte | Trazados y estaciones oficiales de las líneas existentes (metro A y B, tranvía, 7 cables, Metroplús 1 y 2); viaducto, trenes, torres y cabinas | 21 estaciones en la línea A y 6 en la B, a menos de 80 m sobre el río; 81 estaciones y 12 líneas |
+| Cerros y referentes | Toponimia oficial, con la cota de la cima del MDE; aeropuerto, unidad deportiva, Coltejer y Biblioteca España de capas oficiales | Cada cerro tutelar sobresale ≥ 25 m de su entorno |
 
-**Escala.** Relieve y edificios exagerados ×1,5, como lo dice el encabezado de la escena. La misma tabla, **sin exagerar**, es el entorno de cada sector (sección 6.1). **Qué no es.** No es cartografía oficial ni un modelo digital de elevación: los trazados, las cotas y los límites entre zonas son aproximados, los edificios se colocan al azar dentro de cada zona y las posiciones de los sectores de laboratorio son ilustrativas. Si se dispone de un DEM y de capas oficiales, se pueden reemplazar como se explica en `DATOS_REALES.md`, sección 7.
+**Dibujo.** Además de su modelo 3D a escala, el metro, el tranvía, los cables, el Metroplús, el río, las quebradas, las vías principales y los límites municipales llevan un trazo de ancho fijo en pantalla (simbología de mapa), con borde blanco, para que se lean desde lejos; las estaciones son discos blancos con el aro del color de su sistema. Una leyenda en la escena explica cada trazo y de dónde salen los datos. **Escala.** Relieve y edificios exagerados ×1,5, como lo dice el encabezado. El mismo relieve, **sin exagerar**, es el entorno de cada sector (sección 6.1). **Qué no es.** No es un mapa oficial ni un levantamiento: el relieve está suavizado a 100 m, los edificios y el tipo de tejido son ilustrativos, el perfil vertical del metro es ilustrativo y las posiciones de los dos sectores de laboratorio son ilustrativas.
 
 ### 6.3 Red de alcantarillado separada (drenaje dual)
 
@@ -577,3 +576,8 @@ En calles empinadas, la captación de los sumideros tiene una incertidumbre del 
 - Ferguson, R. (2007). Flow resistance equations for gravel- and boulder-bed streams. *Water Resources Research*, 43, W05427.
 - Grant, G. E. (1997). Critical flow constrains flow hydraulics in mobile-bed streams: A new hypothesis. *Water Resources Research*, 33(2), 349–358.
 - W3C (2023). *Web Content Accessibility Guidelines (WCAG) 2.2*, criterio 2.3.1 «Umbral de tres destellos o por debajo».
+
+- Barnes, R., Lehman, C. y Mulla, D. (2014). Priority-flood: An optimal depression-filling and watershed-labeling algorithm for digital elevation models. *Computers & Geosciences*, 62, 117–127.
+- O'Callaghan, J. F. y Mark, D. M. (1984). The extraction of drainage networks from digital elevation data. *Computer Vision, Graphics, and Image Processing*, 28(3), 323–344.
+- Strahler, A. N. (1957). Quantitative analysis of watershed geomorphology. *Transactions, American Geophysical Union*, 38(6), 913–920.
+- Alcaldía de Medellín, servidor de mapas (`servidormapas/rest/services`): modelo digital de elevación del AMVA, red hídrica, río Medellín, sentido vial, sistema de transporte masivo, límite del Área Metropolitana, comunas y corregimientos, barrios y veredas, cerros tutelares, toponimia, equipamientos y cartografía City Urban 2025. Consulta de noviembre de 2026; URL y sha256 de cada respuesta en `tools/geo/insumos/manifiesto.json`.
