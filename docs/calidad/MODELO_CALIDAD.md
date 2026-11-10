@@ -2,7 +2,7 @@
 
 Quinto modo de la aplicación (`src/quality/`). Tiene tres partes con la misma distribución: una escena interactiva a la izquierda y un panel a la derecha (una sola columna en teléfonos). El cálculo está en `src/quality/model.ts`, sin interfaz, y se prueba en `tests/quality/model.test.ts` (`npm run test:quality`; informe en `PRUEBAS_CALIDAD.md`).
 
-**Qué es y qué no es.** Es un laboratorio educativo con ecuaciones publicadas, valores típicos de la literatura y normas colombianas vigentes. No es un monitoreo de una quebrada real de Medellín ni una evaluación de una planta real. Lo que es regla didáctica se dice en la interfaz y en este documento.
+**Qué es y qué no es.** Es un laboratorio educativo con ecuaciones publicadas, valores típicos de la literatura y normas colombianas vigentes. Las escenas no son un monitoreo de una quebrada real de Medellín ni una evaluación de una planta real; para comparar, la pestaña Medellín de la quebrada muestra mediciones reales de 18 quebradas (sección 4 bis). Lo que es regla didáctica se dice en la interfaz y en este documento.
 
 ## 1. La quebrada y su salud
 
@@ -23,9 +23,14 @@ Una quebrada de montaña recibe en x = 0 el agua usada de un grupo de casas. La 
 | Lodo del fondo | 4 g O₂/m²·día sin tratar, 2 con tanque séptico, 0,5 con planta, en los primeros 800 m; θ = 1,065 | Chapra (valores típicos cerca de un vertimiento) |
 | Oxígeno | Streeter y Phelps con el déficit inicial de la mezcla, la DBO y el lodo: D(t) = D₀e^(−k<sub>a</sub>t) + k<sub>d</sub>L₀/(k<sub>a</sub> − k<sub>d</sub>)·(e^(−k<sub>d</sub>t) − e^(−k<sub>a</sub>t)) + (SOD/H)/k<sub>a</sub>·(1 − e^(−k<sub>a</sub>t)) | Streeter y Phelps (1925); Chapra |
 | Coliformes | mueren con k<sub>b</sub> = 0,8 por día a 20 °C; θ = 1,07 | Mancini (1978), en Chapra |
+| Amonio | 25 mg/L de N en el agua usada cruda; queda 100 % con tanque séptico (sin aire, el nitrógeno sale como amonio), 50 % con la planta pequeña (nitrificación parcial, supuesto didáctico), 0 con alcantarillado; 0,03 mg/L de N aguas arriba (0,08 recién llovió) | Metcalf y Eddy (agua residual doméstica de concentración media) |
+| Nitrificación | el amonio pasa a nitrato con k<sub>n</sub> = 0,5 por día a 20 °C, θ = 1,08, y gasta 4,57 g de O₂ por gramo de N: al déficit se suma 4,57·k<sub>n</sub>·N₀/(k<sub>a</sub> − k<sub>n</sub>)·(e^(−k<sub>n</sub>t) − e^(−k<sub>a</sub>t)) | Bowie et al. (1985); Chapra |
+| Amoníaco libre | NH₃ = N amoniacal × f × 17,03/14,01, con f = 1/(1 + 10^(pK<sub>a</sub> − pH)) y pK<sub>a</sub> = 0,09018 + 2 729,92/T(K) | Emerson et al. (1975) |
 | Turbiedad | se asienta con una velocidad de caída de 1 m/día | Supuesto didáctico |
 
 **¿Se puede nadar?** Criterios de calidad para contacto primario del Decreto 1076 de 2015, artículo 2.2.3.3.9.7 (transitorio; recoge el artículo 42 del Decreto 1594 de 1984): coliformes fecales hasta 200 NMP/100 mL, oxígeno al menos 70 % de saturación y pH entre 5 y 9.
+
+**Entradas siempre válidas.** Cada parte sanea lo que recibe antes de calcular (`sanitizeCreek`, `sanitizePlant`, `sanitizeStreet`): un número que no es finito toma el valor por defecto, uno fuera de rango se lleva al borde (casas 0–5 000; altitud 0–4 500 m; dosis 0–200 mg/L; cloro 0–10 mg/L; red 0–72 h; días secos 0–60; lluvia 0–300 mm/h; duración 1–240 min; casas mal conectadas 0–20) y una opción desconocida toma la de por defecto. La prueba Q16 lo comprueba con miles de entradas al azar, inválidas incluidas, y Q17 revisa que cada decisión empuje el resultado hacia donde debe en toda la malla de opciones.
 
 **Lo que muestra.** En una quebrada de montaña la reaireación es tan rápida (cientos por día) que el oxígeno casi no baja aunque llegue mucha materia orgánica; en un cauce lento y plano, en verano y con muchas casas sin tratar, el oxígeno baja hasta un mínimo aguas abajo y luego se recupera (prueba Q4). Los coliformes, en cambio, viajan kilómetros: la quebrada deja de servir para nadar mucho antes de que falte el oxígeno.
 
@@ -104,7 +109,7 @@ Cada parte es una escena 3D (Three.js) alimentada por las mismas funciones de es
 
 **La quebrada.** El color de cada tramo de agua mezcla un agua de montaña clara con café según la turbiedad y con gris verdoso según la DBO5 calculadas en ese punto; la espuma aparece cerca del tubo según la DBO5; con «Ver el oxígeno» el agua toma el color de su clase de oxígeno disuelto (7 o más, 5 a 7, 3 a 5, 1 a 3, menos de 1 mg/L). La distancia se comprime aguas abajo (u = 200·√(x/3 000) unidades del dibujo; aguas arriba, 0,18 por metro), con más espacio cerca del tubo (prueba Q10). Cada casa del barrio representa 10.
 
-**Regla de los peces** (didáctica, con dos criterios publicados): hay peces donde el oxígeno disuelto es de al menos 5 mg/L —criterio de preservación de flora y fauna en aguas dulces frías del Decreto 1594 de 1984, compilado en el Decreto 1076 de 2015, artículo 2.2.3.3.9.10— y la DBO5 es de 6 mg/L o menos —valor guía para aguas ciprinícolas de la Directiva 78/659/CEE (hoy 2006/44/CE)—. En una quebrada de montaña la reaireación es tan rápida que el oxígeno casi no baja; lo que aleja a los peces es la materia orgánica. En verano y con 600 casas, ni sin tratar ni con tanque séptico hay peces junto al tubo; con planta pequeña o alcantarillado vuelven a las cuatro estaciones (prueba Q9).
+**Regla de los peces** (didáctica, con criterios publicados): hay peces donde el oxígeno disuelto es de al menos 5 mg/L —criterio de preservación de flora y fauna en aguas dulces frías del Decreto 1594 de 1984, compilado en el Decreto 1076 de 2015, artículo 2.2.3.3.9.10—, la DBO5 es de 6 mg/L o menos —valor guía para aguas ciprinícolas de la Directiva 78/659/CEE (hoy 2006/44/CE)— y el amoníaco libre es de 0,025 mg/L de NH₃ o menos —valor imperativo de la misma directiva—. Con el pH de la quebrada (cerca de 7,3) el amoníaco libre queda por debajo de ese límite en todos los casos del juego: la regla está para que la sonda lo muestre y para que se vea que subiría con un agua más alcalina. En una quebrada de montaña la reaireación es tan rápida que el oxígeno casi no baja; lo que aleja a los peces es la materia orgánica. En verano y con 600 casas, ni sin tratar ni con tanque séptico hay peces junto al tubo; con planta pequeña o alcantarillado vuelven a las cuatro estaciones (prueba Q9).
 
 **Vigencia de los criterios.** Los criterios de calidad por uso del Decreto 1076 de 2015 (artículos 2.2.3.3.9.2 a 2.2.3.3.9.13) siguen vigentes de manera transitoria: la Resolución 0565 de 2026 del Ministerio de Ambiente, publicada el 21 de mayo de 2026, define los nuevos criterios y rige desde el 21 de mayo de 2027. Habrá que revisar entonces los criterios de nadar y de los peces.
 
@@ -116,13 +121,36 @@ Cada parte es una escena 3D (Three.js) alimentada por las mismas funciones de es
 
 **Retos.** Se revisan con el estado de la escena; al cumplirse se guarda la medalla en el equipo y se anota en la bitácora. La quebrada: que vuelvan los peces (verano, 600 casas o más, peces en las cuatro estaciones), detective de bichos (piedras en A y B con el tubo sin tratar), ¿se puede nadar? (un punto abajo del tubo que cumpla el criterio de contacto primario con 300 casas o más) y bacterias en una gota. La planta: los once pasos (abrirlos todos en la pestaña Procesos), la jarra más clara, agua segura después de la lluvia (IRCA 0 %), el cloro justo (IRCA 0 % con 1,4 mg/L o menos), la creciente (acercarse a la mejor dosis; ni así baja de 2 UNT) y bacterias en el vaso. La calle: detective de conexiones erradas, el primer lavado (10 días secos o más, con y sin barrido) y una quebrada que no recibe mugre (5 kg o menos con un aguacero fuerte).
 
+## 4 bis. Datos reales: 18 quebradas de San Antonio de Prado
+
+La pestaña **Medellín** de «La quebrada y su salud» muestra mediciones reales. Fuente: capa «Sitios Muestreo» del servicio `ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua` del servidor de mapas de la Alcaldía de Medellín (Secretaría de Medio Ambiente): monitoreo de 18 microcuencas del corregimiento de San Antonio de Prado (convenios de 2012–2013 y 2014 y contrato de 2017). Se descargó sin modificar, con su sha256 en `tools/geo/insumos/manifiesto.json` (paquete `medellin-calidad-insumos-9`), y `tools/geo/calidad_monitoreo.py` la convierte en `src/quality/data/monitoreo.ts`:
+
+- 75 sitios publicados; 7 sin medición (todo en cero: Astillera, Popala, un sitio de Zulia y un afluente de La Larga) se dejan fuera. Quedan **68 sitios con medición**, del 19 de diciembre de 2017 al 22 de enero de 2018.
+- Cada sitio se asigna a su microcuenca (la lista de la descripción de la capa) y a su parte del cauce (alta, media alta, media, media baja, baja, como la publica la capa), y se le une la calidad de su retiro (capa «Calidad Retiros», mismo identificador).
+- La DBO5 viene como texto: «< 2,00» es menor que el límite de detección y se muestra así. Nada se corrige ni se completa.
+
+**Lo que dicen los datos** (calculado en `src/quality/realdata.ts`, no escrito a mano; prueba Q15):
+
+| Hallazgo | Valor |
+|---|---|
+| Sitios con oxígeno disuelto de al menos 5 mg/L | 64 de 68 (mediana 7,3 mg/L; 97 % de saturación) |
+| Sitios con coliformes fecales por encima de 200 NMP/100 mL (no se puede nadar) | 60 de 68; los 8 restantes, casi todos en la parte alta |
+| Quebradas con sitio alto y bajo donde los coliformes suben aguas abajo | 13 de 16 |
+| Temperatura del agua implícita en el oxígeno y su saturación (Benson y Krause a la altitud de cada sitio) | 13,8 a 19,1 °C (5 % a 95 %): los dos números del laboratorio son coherentes con la ecuación del modelo |
+
+**Frente al modelo.** Con 600 casas sin tratar en una quebrada de montaña, el modelo da oxígeno de al menos 5 mg/L en todo el tramo y coliformes que impiden nadar en los 3 km: lo mismo que las quebradas reales. No es una calibración: el modelo no se ajustó a estos datos, y cada medición es de un solo día (cambia con la lluvia y la hora). Dos retos usan esta pestaña: «Datos de verdad» (una quebrada donde los coliformes suben de la parte alta a la baja) y «¿Dónde se podría nadar de verdad?».
+
 ## 5. Accesibilidad
 
-Pestañas con teclado (flechas), pasos de la planta como botones con el paso actual anunciado (`aria-current` y región «Paso n de 11» que se lee al cambiar), «Recorrer la planta» que se detiene con el mismo botón, escenas con descripción textual, rótulos que también son botones (las estaciones de la quebrada), controles equivalentes fuera de la escena (estaciones, casas del colorante y jarras como botones), gráficas navegables con flechas, colores con texto (cumple o no cumple, hay peces o no), movimiento reducido respetado (sin animación, la lluvia y el colorante dan su resultado de una vez).
+Pestañas con teclado (flechas), la quebrada real se elige con una lista desplegable y sus gráficas tienen descripción textual y tabla equivalente (que se desplaza de lado en el teléfono), pasos de la planta como botones con el paso actual anunciado (`aria-current` y región «Paso n de 11» que se lee al cambiar), «Recorrer la planta» que se detiene con el mismo botón, escenas con descripción textual, rótulos que también son botones (las estaciones de la quebrada), controles equivalentes fuera de la escena (estaciones, casas del colorante y jarras como botones), gráficas navegables con flechas, colores con texto (cumple o no cumple, hay peces o no), movimiento reducido respetado (sin animación, la lluvia y el colorante dan su resultado de una vez).
 
 ## 6. Referencias
 
 - APHA, AWWA, WEF. *Standard Methods for the Examination of Water and Wastewater*, 4500-O.
+- Alcaldía de Medellín, Secretaría de Medio Ambiente. Monitoreo de quebradas del corregimiento de San Antonio de Prado (capas «Sitios Muestreo» y «Calidad Retiros» del servicio VM_Monitoreo_Calidad_Agua del servidor de mapas), consulta de noviembre de 2026.
+- Bowie, G. L. et al. (1985). *Rates, Constants, and Kinetics Formulations in Surface Water Quality Modeling*, 2.ª ed. EPA/600/3-85/040.
+- Emerson, K., Russo, R. C., Lund, R. E. y Thurston, R. V. (1975). Aqueous ammonia equilibrium calculations: effect of pH and temperature. *Journal of the Fisheries Research Board of Canada*, 32(12), 2379–2383.
+- Metcalf & Eddy (2003). *Wastewater Engineering: Treatment and Reuse*, 4.ª ed. McGraw-Hill (composición típica del agua residual doméstica).
 - Consejo de las Comunidades Europeas. Directiva 78/659/CEE, relativa a la calidad de las aguas continentales que requieren protección o mejora para ser aptas para la vida de los peces (codificada como 2006/44/CE). Anexo I: DBO5 ≤ 3 mg/L (salmonícolas) y ≤ 6 mg/L (ciprinícolas), valores guía.
 - Ministerio de Ambiente y Desarrollo Sostenible. Resolución 0565 de 2026, por la cual se definen los criterios de calidad para el uso de las aguas superficiales, subterráneas y marinas (Diario Oficial 53.497, 21 de mayo de 2026; rige desde el 21 de mayo de 2027).
 - DANE, Sistema de Información del Medio Ambiente. Ficha técnica «Oxígeno disuelto» (criterios del Decreto 1594 de 1984: 5,0 mg/L en aguas dulces frías y 4,0 mg/L en cálidas para preservación de flora y fauna).

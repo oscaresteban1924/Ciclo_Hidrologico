@@ -8,6 +8,7 @@ import { useStore } from '../../state/store';
 import { CritterGlyph } from '../Glyphs';
 import { BMWP_CLASSES, DEFAULT_CREEK, PERSONS_PER_HOUSE, SWIM, TREATMENTS, bmwp, canSwim, creekModel, doSat, stoneSample, type CreekInput, type Reading, type Season, type Slope, type Treatment } from '../model';
 import { ProfileChart, QLayout, QRange, fmt, fmtBig } from '../ui';
+import { RealCreeks } from '../RealData';
 
 const X_MIN = -400, X_MAX = 3000, OUT_SX = 250;
 /** Posición en el dibujo (0–1000) para una distancia a lo largo de la quebrada [m]. */
@@ -48,6 +49,7 @@ function readingRows(r: Reading) {
     { k: 'pH', v: fmt(r.pH, 1), c: ph },
     { k: 'Conductividad', v: `${fmt(r.conductivity, 0)} µS/cm`, c: ce },
     { k: 'Turbiedad', v: `${fmt(r.turbidity, r.turbidity < 10 ? 1 : 0)} UNT`, c: tb },
+    { k: 'Amoníaco libre', v: `${fmt(r.nh3 * 1000, 1)} µg/L`, c: r.nh3 <= 0.025 ? chip('ok', 'bien') : chip('bad', 'tóxico para peces') },
   ];
 }
 
@@ -58,6 +60,7 @@ export function CreekPart({ head, goStreet }: { head: ReactNode; goStreet: () =>
   const [samples, setSamples] = useState<{ id: number; x: number; inp: CreekInput; r: Reading }[]>([]);
   const [stone, setStone] = useState(false);
   const [param, setParam] = useState<Param>('coliformes');
+  const [realPick, setRealPick] = useState('Barro Azul');
   const nextId = useRef(1);
   const set = (p: Partial<CreekInput>) => setInp((s) => ({ ...s, ...p }));
   const m = useMemo(() => creekModel(inp), [inp]);
@@ -404,13 +407,17 @@ export function CreekPart({ head, goStreet }: { head: ReactNode; goStreet: () =>
           <button type="button" className="q-link" onClick={goStreet}>Ver qué arrastra la lluvia de las calles →</button>
         </section>
 
+        <Disclosure title="Quebradas reales de Medellín: mediciones de 18 quebradas de San Antonio de Prado">
+          <RealCreeks picked={realPick} onPick={setRealPick} />
+        </Disclosure>
+
         <Disclosure title="Para docentes: el modelo y sus fuentes">
           <div className="q-teacher">
             <p>
               <strong>Mezcla.</strong> En el tubo, balance de masa con mezcla completa: C = (Q<sub>r</sub>·C<sub>r</sub> + Q<sub>w</sub>·C<sub>w</sub>)/(Q<sub>r</sub> + Q<sub>w</sub>). El agua usada es 102 L por persona al día (120 L de consumo con 85 % de retorno), con valores típicos de agua residual doméstica cruda: DBO5 300 mg/L, coliformes fecales 10⁷ NMP/100 mL (orden de magnitud), conductividad 900 µS/cm, turbiedad 150 UNT.
             </p>
             <p>
-              <strong>Aguas abajo.</strong> La DBO se descompone con k<sub>d</sub> = 0,3·(H/2,4)^−0,434 por día a 20 °C (Hydroscience, en Chapra); el oxígeno sigue la ecuación de Streeter y Phelps con reaireación de Tsivoglou y Neal (k<sub>a</sub> = 31 183·S·U por día) y demanda del lodo del fondo de 4 g O₂/m²·día en los primeros 800 m si el agua llega sin tratar; los coliformes mueren con k<sub>b</sub> = 0,8 por día a 20 °C (Mancini); las constantes se corrigen por temperatura (θ = 1,047, 1,024, 1,065 y 1,07). El oxígeno de saturación es el de Standard Methods (APHA 4500-O) corregido por la presión a 1 495 m (16 % menos que al nivel del mar).
+              <strong>Aguas abajo.</strong> La DBO se descompone con k<sub>d</sub> = 0,3·(H/2,4)^−0,434 por día a 20 °C (Hydroscience, en Chapra); el amonio (25 mg/L de N en el agua usada) pasa a nitrato con k<sub>n</sub> = 0,5 por día a 20 °C y gasta 4,57 g de oxígeno por gramo de nitrógeno; el oxígeno sigue la ecuación de Streeter y Phelps con reaireación de Tsivoglou y Neal (k<sub>a</sub> = 31 183·S·U por día) y demanda del lodo del fondo de 4 g O₂/m²·día en los primeros 800 m si el agua llega sin tratar; los coliformes mueren con k<sub>b</sub> = 0,8 por día a 20 °C (Mancini); las constantes se corrigen por temperatura (θ = 1,047, 1,024, 1,065 y 1,07). El oxígeno de saturación es el de Standard Methods (APHA 4500-O) corregido por la presión a 1 495 m (16 % menos que al nivel del mar).
             </p>
             <p>
               <strong>Ahora:</strong> H = {fmt(m.H * 100, 1)} cm de profundidad, U = {fmt(m.U, 2)} m/s, k<sub>a</sub> = {fmt(m.ka, 0)}/día, k<sub>d</sub> = {fmt(m.kd, 2)}/día, k<sub>b</sub> = {fmt(m.kb, 2)}/día. En una quebrada de montaña la reaireación es tan rápida que el oxígeno casi no baja; los microbios, en cambio, viajan kilómetros.

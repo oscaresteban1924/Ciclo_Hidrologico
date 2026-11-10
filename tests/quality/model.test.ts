@@ -22,8 +22,22 @@ import {
   stoneSample,
   treatPlant,
   washoff,
+  NH3_PER_N,
+  NITRIF,
+  CREEK_LIMITS,
+  PLANT_LIMITS,
+  STREET,
+  STREET_LIMITS,
+  TREATMENTS,
+  nh3Fraction,
+  sanitizeCreek,
+  sanitizePlant,
+  sanitizeStreet,
   type CreekInput,
+  type PlantInput,
+  type StreetInput,
 } from '../../src/quality/model';
+import { MONITOREO_META, SITIOS, cuencas, impliedTemp, resumen } from '../../src/quality/realdata';
 import { FISH, STATIONS, fishOk, uOf, xOf } from '../../src/quality/three/creekWorld';
 import { rodsFor } from '../../src/quality/three/kit';
 import { PROCESSES, processComplete } from '../../src/quality/processes';
@@ -87,20 +101,23 @@ const f = (v: number, d = 2) => v.toFixed(d);
   const m = creekModel(inp);
   const satMix = doSat(m.mix.T, 1495);
   const sodV = (4 * Math.pow(1.065, m.mix.T - 20)) / m.H;
-  // integración explícita fina de dL/dt = −kd L; dD/dt = kd L + SOD/H (en el tramo con lodo) − ka D
-  let L = m.mix.dbo, D = satMix - m.mix.dissolvedO2, t = 0, worst = 0;
+  // integración explícita fina de dL/dt = −kd L; dN/dt = −kn N; dD/dt = kd L + 4,57 kn N + SOD/H (en el tramo
+  // con lodo) − ka D
+  let L = m.mix.dbo, N = m.mix.ammoniaN, D = satMix - m.mix.dissolvedO2, t = 0, worst = 0, worstN = 0;
   const dt = 1e-6;
   const tEnd = 2000 / m.U / 86400;
   for (let k = 0; t < tEnd; k++) {
     const x = t * m.U * 86400;
     const s = x <= 800 ? sodV : 0;
-    const dL = -m.kd * L, dD = m.kd * L + s - m.ka * D;
+    const dL = -m.kd * L, dN = -m.kn * N, dD = m.kd * L + 4.57 * m.kn * N + s - m.ka * D;
     L += dL * dt;
+    N += dN * dt;
     D += dD * dt;
     t += dt;
     if (k % 2000 === 0) {
       const r = m.at(t * m.U * 86400);
       worst = Math.max(worst, Math.abs(satMix - D - r.dissolvedO2));
+      worstN = Math.max(worstN, Math.abs(N - r.ammoniaN));
     }
   }
   const r2 = m.at(2000);
@@ -115,10 +132,10 @@ const f = (v: number, d = 2) => v.toFixed(d);
   }
   record({
     id: 'Q4',
-    name: 'Curva de oxígeno de Streeter y Phelps con demanda del lodo',
-    tolerance: 'la solución analítica coincide con la integración numérica fina de las ecuaciones (diferencia < 0,01 mg/L en 2 km); con 600 casas sin tratamiento, verano y cauce plano, el mínimo de oxígeno está aguas abajo del vertimiento y a 3 km el oxígeno es mayor que en el mínimo',
-    measured: `diferencia máxima ${worst.toExponential(1)} mg/L; mezcla ${f(m.mix.dissolvedO2)} mg/L; mínimo ${f(dm)} mg/L a ${xm} m; a 2 km ${f(r2.dissolvedO2)} mg/L; a 3 km ${f(m.at(3000).dissolvedO2)} mg/L (ka ${f(m.ka, 1)}, kd ${f(m.kd, 2)} 1/día)`,
-    pass: worst < 0.01 && xm > 0 && m.at(3000).dissolvedO2 > dm,
+    name: 'Curva de oxígeno de Streeter y Phelps con demanda del lodo y nitrificación',
+    tolerance: 'la solución analítica coincide con la integración numérica fina de las ecuaciones de DBO, amonio y oxígeno (diferencia < 0,01 mg/L en 2 km, en el oxígeno y en el amonio); con 600 casas sin tratamiento, verano y cauce plano, el mínimo de oxígeno está aguas abajo del vertimiento y a 3 km el oxígeno es mayor que en el mínimo',
+    measured: `diferencia máxima ${worst.toExponential(1)} mg/L de oxígeno y ${worstN.toExponential(1)} mg/L de amonio; amonio en la mezcla ${f(m.mix.ammoniaN)} mg/L de N (kn ${f(m.kn, 2)} 1/día); mezcla ${f(m.mix.dissolvedO2)} mg/L; mínimo ${f(dm)} mg/L a ${xm} m; a 2 km ${f(r2.dissolvedO2)} mg/L; a 3 km ${f(m.at(3000).dissolvedO2)} mg/L (ka ${f(m.ka, 1)}, kd ${f(m.kd, 2)} 1/día)`,
+    pass: worst < 0.01 && worstN < 0.01 && xm > 0 && m.at(3000).dissolvedO2 > dm,
   });
 }
 
@@ -291,6 +308,225 @@ const f = (v: number, d = 2) => v.toFixed(d);
     tolerance: 'once procesos numerados del 1 al 11 sin repetir, cada uno con texto, mecanismo, criterios de diseño, fuente, fallas y mediciones, y con su lugar en la escena; sus valores «en el juego» existen y son números válidos para los tres ríos, tres dosis y dos dosis de cloro (ninguno NaN ni vacío); los procesos citan los artículos 55, 111, 112, 113, 114, 121 y 125 de la Resolución 0330 de 2017; el IRCA que muestra la llave es el calculado',
     measured: `orden ${order ? 'correcto' : 'INCORRECTO'}; completos ${complete} de ${PROCESSES.length}; en la escena ${drawn ? 'todos' : 'FALTAN'}; valores revisados ${cells}, inválidos ${bad}; citas ${cited ? 'correctas' : 'INCORRECTAS'}; IRCA de la llave ${sameIrca ? 'coincide' : 'NO coincide'} (${f(rr.irca, 1)} %)`,
     pass: order && complete === PROCESSES.length && drawn && bad === 0 && cells > 0 && cited && sameIrca,
+  });
+}
+
+// Q14) Amoníaco: fracción libre (Emerson et al., 1975) y nitrificación aguas abajo
+{
+  // valores de la tabla de Emerson et al. (1975): porcentaje de NH₃ libre
+  const table: [number, number, number][] = [
+    [20, 7, 0.397],
+    [20, 8, 3.82],
+    [20, 9, 28.4],
+    [25, 7, 0.566],
+    [25, 8, 5.38],
+    [25, 9, 36.2],
+  ];
+  const errs = table.map(([T, pH, pct]) => Math.abs((nh3Fraction(T, pH) * 100) / pct - 1));
+  const worstRel = Math.max(...errs);
+  // amonio en la mezcla = balance de masa; aguas abajo decae con kn; el nitrato formado + el amonio que queda = el inicial
+  const m = creekModel({ ...DEFAULT_CREEK, houses: 600, season: 'verano', slope: 'plana' });
+  const Nmix = (m.Qr * m.up.ammoniaN + m.Qw * 25) / (m.Qr + m.Qw);
+  const r1 = m.at(1500);
+  const expectN = Nmix * Math.exp(-m.kn * (r1.travelH / 24));
+  // el oxígeno baja más con la nitrificación que sin ella (la demanda nitrogenada existe)
+  const noN = creekModel({ ...DEFAULT_CREEK, houses: 600, season: 'verano', slope: 'plana', treatment: 'ninguno' });
+  const nbodLoad = NITRIF.o2PerN * noN.mix.ammoniaN;
+  // tratamientos: lo que queda de amonio sigue la tabla
+  const order = (['ninguno', 'septico', 'ptar', 'alcantarillado'] as const).map((t) => creekModel({ ...DEFAULT_CREEK, houses: 600, treatment: t }).mix.ammoniaN);
+  const nh3Ok = Math.abs(r1.nh3 - r1.ammoniaN * nh3Fraction(r1.T, r1.pH) * NH3_PER_N) < 1e-12;
+  record({
+    id: 'Q14',
+    name: 'Amoníaco libre (Emerson et al.) y nitrificación aguas abajo',
+    tolerance: 'fracción de NH₃ libre igual a la tabla de Emerson et al. (1975) a 20 y 25 °C y pH 7, 8 y 9 (error relativo < 2 %); amonio de la mezcla = balance de masa (error < 10⁻⁹) y aguas abajo = N₀·e^(−kn·t) (error < 10⁻⁹); el amoníaco libre de la lectura es el amonio por su fracción libre; el amonio que llega baja con cada tratamiento (directo = séptico ≥ planta ≥ alcantarillado) y la demanda nitrogenada (4,57 g O₂/g N) es positiva',
+    measured: `error máximo frente a la tabla ${(worstRel * 100).toFixed(2)} %; amonio en la mezcla ${f(m.mix.ammoniaN, 4)} frente a ${f(Nmix, 4)} mg/L; a 1,5 km ${f(r1.ammoniaN, 4)} frente a ${f(expectN, 4)} mg/L; NH₃ libre ${f(r1.nh3 * 1000, 2)} µg/L; amonio que llega (directo, séptico, planta, alcantarillado): ${order.map((v) => f(v, 3)).join(' / ')} mg/L; demanda nitrogenada en la mezcla ${f(nbodLoad, 2)} mg/L de O₂ (${TREATMENTS.ptar.ammonia * 100} % del amonio queda con la planta pequeña)`,
+    pass: worstRel < 0.02 && Math.abs(m.mix.ammoniaN - Nmix) < 1e-9 && Math.abs(r1.ammoniaN - expectN) < 1e-9 && nh3Ok && order[0] === order[1] && order[1] >= order[2] && order[2] >= order[3] && nbodLoad > 0,
+  });
+}
+
+// Q15) Datos reales: monitoreo de 18 quebradas de San Antonio de Prado (Secretaría de Medio Ambiente)
+{
+  const R = resumen();
+  const finite = SITIOS.every((s) => [s.od, s.sat, s.cf, s.ct, s.turb, s.ce, s.altura].every((v) => v === null || Number.isFinite(v)) && (s.dbo === null || Number.isFinite(s.dbo[0])));
+  const dates = SITIOS.every((s) => s.fecha !== null && s.fecha >= '2017-12-01' && s.fecha <= '2018-01-31');
+  // recuento independiente de lo que muestra el panel
+  const noSwim = SITIOS.filter((s) => s.cf !== null && s.cf > 200).length;
+  const fishDO = SITIOS.filter((s) => s.od !== null && s.od >= 5).length;
+  const order = cuencas().every((c) => c.sitios.every((s, k) => k === 0 || s.orden >= c.sitios[k - 1].orden));
+  // coherencia de oxígeno y saturación con la ecuación de Benson y Krause a la altitud de cada sitio
+  const tt = SITIOS.map((s) => (s.od !== null && s.sat !== null && s.altura !== null ? impliedTemp(s.od, s.sat, s.altura) : null));
+  const evaluated = tt.filter((t) => t !== null).length;
+  const roundTrip = SITIOS.every((s, k) => {
+    const T = tt[k];
+    return T === null || Math.abs(doSat(T, s.altura as number) * ((s.sat as number) / 100) - (s.od as number)) < 1e-6;
+  });
+  // el modelo dice lo mismo que los datos: en una quebrada de montaña con 600 casas sin tratar el oxígeno no baja de 5 mg/L
+  // pero los coliformes impiden nadar en los 3 km
+  const mm = creekModel({ ...DEFAULT_CREEK, houses: 600, treatment: 'ninguno', slope: 'montana' });
+  let minDO = Infinity, swimAny = false;
+  for (let x = 0; x <= 3000; x += 25) {
+    const r = mm.at(x);
+    minDO = Math.min(minDO, r.dissolvedO2);
+    if (canSwim(r).ok) swimAny = true;
+  }
+  record({
+    id: 'Q15',
+    name: 'Datos reales de 18 quebradas de San Antonio de Prado y lo que dicen frente al modelo',
+    tolerance: '68 sitios con medición en 18 microcuencas, todos con números válidos y medidos entre diciembre de 2017 y enero de 2018; los sitios de cada microcuenca, de la parte alta a la baja; el resumen del panel = un recuento independiente; el oxígeno y la saturación medidos son coherentes con la ecuación de Benson y Krause a la altitud del sitio (temperatura del agua implícita entre 10 y 26 °C en al menos 90 % de los sitios; ida y vuelta < 10⁻⁶ mg/L); el modelo y los datos coinciden en lo cualitativo: oxígeno de al menos 5 mg/L en la mayoría de los sitios reales y en la quebrada de montaña del modelo, y coliformes por encima del criterio para nadar en la mayoría de los sitios reales y en todo el tramo del modelo con 600 casas sin tratar',
+    measured: `${R.sitios} sitios en ${R.cuencas} microcuencas (${MONITOREO_META.fechas?.join(' a ')}); números ${finite ? 'válidos' : 'INVÁLIDOS'}; fechas ${dates ? 'en el rango' : 'FUERA'}; orden ${order ? 'correcto' : 'INCORRECTO'}; oxígeno ≥ 5 mg/L: ${R.oxigenoParaPeces} (recuento ${fishDO}) de ${R.conOxigeno}, mediana ${f(R.medianaOxigeno)} mg/L y ${f(R.medianaSaturacion, 1)} %; coliformes > 200: ${R.noNadar} (recuento ${noSwim}) de ${R.conColiformes}; suben aguas abajo en ${R.subenAguasAbajo} de ${R.conAltaYBaja} microcuencas; temperatura implícita ${f(R.tempP5, 1)}–${f(R.tempP95, 1)} °C (5 % a 95 %), coherente en ${R.tempCoherentes} de ${evaluated}; modelo: oxígeno mínimo ${f(minDO)} mg/L, ¿se puede nadar en algún punto? ${swimAny ? 'sí' : 'no'}`,
+    pass:
+      R.sitios === 68 && R.cuencas === 18 && finite && dates && order && R.noNadar === noSwim && R.oxigenoParaPeces === fishDO && R.tempCoherentes >= 0.9 * evaluated && evaluated > 60 && roundTrip &&
+      R.oxigenoParaPeces > R.conOxigeno / 2 && R.noNadar > R.conColiformes / 2 && minDO >= 5 && !swimAny,
+  });
+}
+
+// Q16) Robustez: miles de entradas al azar y entradas inválidas, sin NaN, sin infinitos y dentro de lo físico
+{
+  let seed = 20261110;
+  const rnd = () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const pick = <T,>(a: readonly T[]) => a[Math.floor(rnd() * a.length)];
+  const weird = [NaN, Infinity, -Infinity, -1, -1e9, 1e12, 0, 0.5, '7' as unknown as number, null as unknown as number, undefined as unknown as number];
+  const num = (lo: number, hi: number) => (rnd() < 0.08 ? pick(weird) : lo + rnd() * (hi - lo));
+  let creekCases = 0, creekBad = 0, plantCases = 0, plantBad = 0, streetCases = 0, streetBad = 0, thrown = 0;
+  const bad = (v: number) => !Number.isFinite(v);
+  for (let k = 0; k < 6000; k++) {
+    const raw = {
+      houses: num(0, 6000),
+      treatment: rnd() < 0.05 ? 'otro' : pick(['ninguno', 'septico', 'ptar', 'alcantarillado'] as const),
+      season: rnd() < 0.05 ? 7 : pick(['verano', 'normal', 'lluvioso'] as const),
+      slope: pick(['montana', 'plana', 'x'] as const),
+      trees: rnd() < 0.05 ? ('si' as unknown as boolean) : rnd() < 0.5,
+      afterRain: rnd() < 0.5,
+      ...(rnd() < 0.3 ? { elevM: num(0, 5000) } : {}),
+    } as unknown as CreekInput;
+    try {
+      const m = creekModel(raw);
+      const sat = doSat(m.mix.T, m.inp.elevM ?? 1495);
+      for (let q = 0; q < 6; q++) {
+        const r = m.at(q === 5 ? NaN : -400 + rnd() * 6000);
+        creekCases++;
+        const vals = [r.dissolvedO2, r.satPct, r.dbo, r.coliforms, r.turbidity, r.ammoniaN, r.nh3, r.pH, r.conductivity, r.T, r.Q, r.travelH];
+        if (vals.some(bad) || r.dissolvedO2 < 0 || r.dissolvedO2 > Math.max(sat, doSat(m.up.T, m.inp.elevM ?? 1495)) * 1.0001 || r.dbo < 0 || r.coliforms < 0 || r.turbidity < 0 || r.ammoniaN < 0 || r.nh3 > r.ammoniaN * NH3_PER_N + 1e-12 || r.pH < 6 || r.pH > 9) creekBad++;
+      }
+    } catch {
+      thrown++;
+    }
+    const pin = { raw: rnd() < 0.05 ? 'nada' : pick(['verano', 'lluvia', 'creciente'] as const), dose: num(0, 250), chlorine: num(0, 12), ...(rnd() < 0.3 ? { networkH: num(0, 100) } : {}) } as unknown as PlantInput;
+    try {
+      const p = treatPlant(pin);
+      plantCases++;
+      const vals = [p.settled, p.filtered, p.pH, p.demand, p.clExit, p.clTap, p.logKill, p.coliTotalTap, p.eColiTap, p.irca];
+      if (vals.some(bad) || p.irca < 0 || p.irca > 100 || p.filtered < 0 || p.clTap > p.clExit + 1e-12 || p.coliTotalTap < 0 || p.filtered > p.raw.turbidity + 1e-9) plantBad++;
+    } catch {
+      thrown++;
+    }
+    if (k % 3 === 0) {
+      const sin = { dryDays: num(0, 80), sweeping: rnd() < 0.5, litter: pick(['poca', 'mucha', '?'] as const), rainMmH: num(0, 400), durationMin: num(0, 300), wrongHouses: num(0, 30) } as unknown as StreetInput;
+      try {
+        const w = washoff(sin);
+        streetCases++;
+        const si = sanitizeStreet(sin);
+        const B = (buildup(si.dryDays, si.sweeping) * STREET.area) / 1000;
+        const mono = w.massKg.every((v, i) => i === 0 || v >= w.massKg[i - 1] - 1e-12);
+        if ([w.totalKg, w.firstFlushPct, w.sewageM3, w.coliformsGiga].some(bad) || w.conc.some((c) => bad(c) || c < 0) || w.totalKg > B + 1e-9 || !mono || w.firstFlushPct < 0 || w.firstFlushPct > 100 + 1e-9) streetBad++;
+      } catch {
+        thrown++;
+      }
+    }
+  }
+  // las entradas saneadas quedan dentro de sus límites
+  const sc = sanitizeCreek({ houses: -5, treatment: 'x' as never, elevM: 1e9 });
+  const sp = sanitizePlant({ dose: NaN, chlorine: 99, raw: 'x' as never });
+  const ss = sanitizeStreet({ dryDays: -3, durationMin: 0.2, wrongHouses: 99 });
+  const limits = sc.houses === CREEK_LIMITS.houses[0] && sc.treatment === 'ninguno' && sc.elevM === CREEK_LIMITS.elevM[1] && sp.dose === 0 && sp.chlorine === PLANT_LIMITS.chlorine[1] && sp.raw === 'verano' && ss.dryDays === 0 && ss.durationMin === STREET_LIMITS.durationMin[0] && ss.wrongHouses === STREET_LIMITS.wrongHouses[1];
+  record({
+    id: 'Q16',
+    name: 'Robustez ante miles de entradas al azar y entradas inválidas',
+    tolerance: '6 000 barrios, 6 000 plantas y 2 000 calles al azar (8 % de los números son NaN, infinitos, negativos, enormes o de otro tipo, y algunas opciones no existen): ninguna excepción; ningún NaN ni infinito; oxígeno entre 0 y la saturación; DBO, coliformes, turbiedad y amonio ≥ 0; amoníaco libre ≤ amonio; pH entre 6 y 9; IRCA entre 0 y 100; cloro en la llave ≤ cloro a la salida; turbiedad filtrada entre 0 y la del río; masa lavada creciente y nunca mayor que la acumulada; primer lavado entre 0 y 100 %; las entradas saneadas quedan en sus límites',
+    measured: `lecturas de la quebrada ${creekCases} (fuera de rango ${creekBad}); plantas ${plantCases} (fuera de rango ${plantBad}); calles ${streetCases} (fuera de rango ${streetBad}); excepciones ${thrown}; límites ${limits ? 'correctos' : 'INCORRECTOS'}`,
+    pass: thrown === 0 && creekBad === 0 && plantBad === 0 && streetBad === 0 && creekCases > 30000 && plantCases === 6000 && streetCases === 2000 && limits,
+  });
+}
+
+// Q17) Coherencia: cada decisión empuja el resultado hacia donde debe (sin excepciones en la malla de casos)
+{
+  let checks = 0, viol = 0;
+  const xs = [0, 100, 400, 1000, 2500];
+  const treats = ['ninguno', 'septico', 'ptar', 'alcantarillado'] as const;
+  for (const slope of ['montana', 'plana'] as const)
+    for (const season of ['verano', 'normal', 'lluvioso'] as const)
+      for (const afterRain of [false, true])
+        for (const trees of [false, true]) {
+          // más casas (mismo tratamiento): más DBO, coliformes y amonio; menos oxígeno
+          for (const treatment of treats.slice(0, 3)) {
+            let prev = creekModel({ houses: 0, treatment, season, slope, afterRain, trees });
+            for (let h = 100; h <= 1000; h += 150) {
+              const cur = creekModel({ houses: h, treatment, season, slope, afterRain, trees });
+              for (const x of xs) {
+                const a = prev.at(x), b = cur.at(x);
+                checks += 4;
+                if (b.dbo < a.dbo - 1e-9) viol++;
+                if (b.coliforms < a.coliforms - 1e-9) viol++;
+                if (b.ammoniaN < a.ammoniaN - 1e-9) viol++;
+                if (b.dissolvedO2 > a.dissolvedO2 + 1e-9) viol++;
+              }
+              prev = cur;
+            }
+          }
+          // mejor tratamiento (mismo barrio): no más DBO ni coliformes
+          for (let k = 1; k < treats.length; k++) {
+            const a = creekModel({ houses: 600, treatment: treats[k - 1], season, slope, afterRain, trees }), b = creekModel({ houses: 600, treatment: treats[k], season, slope, afterRain, trees });
+            for (const x of xs) {
+              checks += 2;
+              if (b.at(x).dbo > a.at(x).dbo + 1e-9) viol++;
+              if (b.at(x).coliforms > a.at(x).coliforms + 1e-9) viol++;
+            }
+          }
+        }
+  // temporadas (sin lluvia reciente): más caudal, menos concentración junto al tubo
+  for (const treatment of treats.slice(0, 3)) {
+    const v = (['verano', 'normal', 'lluvioso'] as const).map((season) => creekModel({ ...DEFAULT_CREEK, houses: 600, treatment, season }).at(50));
+    checks += 2;
+    if (!(v[0].dbo > v[1].dbo && v[1].dbo > v[2].dbo)) viol++;
+    if (!(v[0].coliforms > v[1].coliforms && v[1].coliforms > v[2].coliforms)) viol++;
+  }
+  // planta: más cloro, no menos cloro en la llave ni menos inactivación; calle: más días secos, más mugre; barrer, menos
+  for (const raw of ['verano', 'lluvia', 'creciente'] as const)
+    for (const dose of [5, 15, 40]) {
+      let prev = treatPlant({ raw, dose, chlorine: 0 });
+      for (let c = 0.2; c <= 4; c += 0.2) {
+        const cur = treatPlant({ raw, dose, chlorine: c });
+        checks += 2;
+        if (cur.clTap < prev.clTap - 1e-12) viol++;
+        if (cur.logKill < prev.logKill - 1e-12) viol++;
+        prev = cur;
+      }
+    }
+  for (const sweeping of [false, true]) {
+    let prev = washoff({ dryDays: 0, sweeping, litter: 'poca', rainMmH: 40, durationMin: 30, wrongHouses: 0 }).totalKg;
+    for (let d = 1; d <= 30; d++) {
+      const cur = washoff({ dryDays: d, sweeping, litter: 'poca', rainMmH: 40, durationMin: 30, wrongHouses: 0 }).totalKg;
+      checks++;
+      if (cur < prev - 1e-12) viol++;
+      prev = cur;
+    }
+  }
+  for (let d = 1; d <= 30; d += 3) {
+    checks++;
+    if (washoff({ dryDays: d, sweeping: true, litter: 'poca', rainMmH: 40, durationMin: 30, wrongHouses: 0 }).totalKg > washoff({ dryDays: d, sweeping: false, litter: 'poca', rainMmH: 40, durationMin: 30, wrongHouses: 0 }).totalKg) viol++;
+  }
+  record({
+    id: 'Q17',
+    name: 'Coherencia de las respuestas en toda la malla de decisiones',
+    tolerance: 'en 2 cauces × 3 temporadas × lluvia reciente o no × árboles o no: más casas nunca bajan la DBO, los coliformes ni el amonio ni suben el oxígeno; un mejor tratamiento nunca sube la DBO ni los coliformes; más caudal (verano → normal → lluvias) baja las concentraciones junto al tubo; en la planta, más cloro nunca deja menos cloro en la llave ni menos inactivación; en la calle, más días secos nunca lavan menos mugre y barrer nunca lava más; 0 violaciones',
+    measured: `${checks} comprobaciones; violaciones ${viol}`,
+    pass: viol === 0 && checks > 3000,
   });
 }
 

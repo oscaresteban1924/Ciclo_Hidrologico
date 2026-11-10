@@ -48,15 +48,32 @@ export const RAW_SEWAGE = {
   temperature: 22, // °C
   dissolvedO2: 0.5, // mg/L
   pH: 7.2,
+  /** Nitrógeno amoniacal [mg/L de N]: agua residual doméstica de concentración media (Metcalf y Eddy). */
+  ammoniaN: 25,
 } as const;
 
 /** Fracción que queda después de cada tratamiento (valores típicos de remoción). */
-export const TREATMENTS: Record<Treatment, { name: string; dbo: number; solids: number; coliforms: number; flow: number; note: string }> = {
-  ninguno: { name: 'Directo a la quebrada', dbo: 1, solids: 1, coliforms: 1, flow: 1, note: 'El tubo de las casas descarga sin tratar.' },
-  septico: { name: 'Tanque séptico', dbo: 0.6, solids: 0.4, coliforms: 0.5, flow: 1, note: 'Remueve cerca de 40 % de la materia orgánica y 60 % de los sólidos; casi no quita microbios.' },
-  ptar: { name: 'Planta pequeña (tratamiento secundario)', dbo: 0.1, solids: 0.1, coliforms: 0.01, flow: 1, note: 'Remueve cerca de 90 % de la materia orgánica y de los sólidos y 99 % de los coliformes (sin desinfección).' },
-  alcantarillado: { name: 'Conectadas al alcantarillado', dbo: 0, solids: 0, coliforms: 0, flow: 0, note: 'El agua usada se va por la red de aguas residuales hasta la planta de tratamiento del valle: no llega a la quebrada.' },
+export const TREATMENTS: Record<Treatment, { name: string; dbo: number; solids: number; coliforms: number; ammonia: number; flow: number; note: string }> = {
+  ninguno: { name: 'Directo a la quebrada', dbo: 1, solids: 1, coliforms: 1, ammonia: 1, flow: 1, note: 'El tubo de las casas descarga sin tratar.' },
+  septico: { name: 'Tanque séptico', dbo: 0.6, solids: 0.4, coliforms: 0.5, ammonia: 1, flow: 1, note: 'Remueve cerca de 40 % de la materia orgánica y 60 % de los sólidos; casi no quita microbios ni el amonio (sin aire, el nitrógeno sale como amonio).' },
+  ptar: { name: 'Planta pequeña (tratamiento secundario)', dbo: 0.1, solids: 0.1, coliforms: 0.01, ammonia: 0.5, flow: 1, note: 'Remueve cerca de 90 % de la materia orgánica y de los sólidos y 99 % de los coliformes (sin desinfección); convierte cerca de la mitad del amonio en nitrato.' },
+  alcantarillado: { name: 'Conectadas al alcantarillado', dbo: 0, solids: 0, coliforms: 0, ammonia: 0, flow: 0, note: 'El agua usada se va por la red de aguas residuales hasta la planta de tratamiento del valle: no llega a la quebrada.' },
 };
+
+/** Nitrificación en la quebrada: velocidad a 20 °C [1/día], corrección por temperatura y oxígeno que gasta cada
+ *  gramo de nitrógeno amoniacal que pasa a nitrato (Bowie et al., 1985; Chapra, 1997). */
+export const NITRIF = { k20: 0.5, theta: 1.08, o2PerN: 4.57 } as const;
+
+/**
+ * Fracción del nitrógeno amoniacal que está como amoníaco libre (NH₃, el tóxico para los peces) según la
+ * temperatura [°C] y el pH: pKa = 0,09018 + 2 729,92 / T[K] (Emerson et al., 1975).
+ */
+export function nh3Fraction(T: number, pH: number): number {
+  const pKa = 0.09018 + 2729.92 / (T + 273.15);
+  return 1 / (1 + Math.pow(10, pKa - pH));
+}
+/** mg/L de NH₃ (como amoníaco) a partir de mg/L de N amoniacal. */
+export const NH3_PER_N = 17.031 / 14.007;
 
 /** Caudal de la quebrada antes del vertimiento [m³/s] según la temporada. */
 export const SEASON_FLOW: Record<Season, number> = { verano: 0.05, normal: 0.15, lluvioso: 0.4 };
@@ -65,6 +82,8 @@ export const SEASON_FLOW: Record<Season, number> = { verano: 0.05, normal: 0.15,
 export interface Upstream {
   T: number;
   dbo: number;
+  /** Nitrógeno amoniacal [mg/L de N]. */
+  ammoniaN: number;
   turbidity: number;
   coliforms: number;
   conductivity: number;
@@ -96,6 +115,7 @@ export function upstreamWater(inp: CreekInput): Upstream {
   return {
     T,
     dbo: inp.afterRain ? 4 : 1.5,
+    ammoniaN: inp.afterRain ? 0.08 : 0.03,
     turbidity: inp.afterRain ? (inp.trees ? 60 : 140) : 4,
     coliforms: inp.afterRain ? 4000 : 150,
     conductivity: inp.afterRain ? 45 : 70,
@@ -140,6 +160,9 @@ export interface Reading {
   turbidity: number;
   coliforms: number;
   dbo: number;
+  /** Nitrógeno amoniacal [mg/L de N] y amoníaco libre [mg/L de NH₃]. */
+  ammoniaN: number;
+  nh3: number;
   /** Caudal en ese punto [m³/s] y tiempo de viaje desde el vertimiento [h]. */
   Q: number;
   travelH: number;
@@ -157,8 +180,32 @@ export interface CreekModel {
   kd: number;
   kb: number;
   ks: number;
+  /** Nitrificación [1/día] a la temperatura de la mezcla. */
+  kn: number;
   /** Lectura en una posición x [m] (negativa: aguas arriba del vertimiento). */
   at: (x: number) => Reading;
+}
+
+// ------------------------------------------------------------------ entradas válidas
+const fin = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+const oneOf = <T extends string>(v: unknown, ok: readonly T[], d: T): T => (typeof v === 'string' && (ok as readonly string[]).includes(v) ? (v as T) : d);
+/** Límites de las entradas de la quebrada (lo que está fuera se lleva al borde; lo que no es válido, al valor por defecto). */
+export const CREEK_LIMITS = { houses: [0, 5000], elevM: [0, 4500] } as const;
+
+/** Entrada de la quebrada siempre válida: números finitos dentro de sus límites y opciones conocidas. */
+export function sanitizeCreek(inp: Partial<CreekInput> | null | undefined): CreekInput {
+  const i = (inp ?? {}) as Partial<CreekInput>;
+  const elev = i.elevM === undefined ? undefined : clamp(fin(i.elevM, ELEV_MEDELLIN_M), CREEK_LIMITS.elevM[0], CREEK_LIMITS.elevM[1]);
+  return {
+    houses: Math.round(clamp(fin(i.houses, DEFAULT_CREEK.houses), CREEK_LIMITS.houses[0], CREEK_LIMITS.houses[1])),
+    treatment: oneOf(i.treatment, ['ninguno', 'septico', 'ptar', 'alcantarillado'] as const, DEFAULT_CREEK.treatment),
+    season: oneOf(i.season, ['verano', 'normal', 'lluvioso'] as const, DEFAULT_CREEK.season),
+    slope: oneOf(i.slope, ['montana', 'plana'] as const, DEFAULT_CREEK.slope),
+    trees: typeof i.trees === 'boolean' ? i.trees : DEFAULT_CREEK.trees,
+    afterRain: typeof i.afterRain === 'boolean' ? i.afterRain : DEFAULT_CREEK.afterRain,
+    ...(elev === undefined ? {} : { elevM: elev }),
+  };
 }
 
 /**
@@ -166,7 +213,8 @@ export interface CreekModel {
  * (balance de masa); aguas abajo, la DBO se descompone, el oxígeno sigue la ecuación de Streeter y Phelps con
  * reaireación y demanda del lodo del fondo, los coliformes mueren (Mancini) y la turbiedad se asienta.
  */
-export function creekModel(inp: CreekInput): CreekModel {
+export function creekModel(input: CreekInput): CreekModel {
+  const inp = sanitizeCreek(input);
   const elev = inp.elevM ?? ELEV_MEDELLIN_M;
   const up = upstreamWater(inp);
   const Qr = SEASON_FLOW[inp.season] * (inp.afterRain ? 2.5 : 1);
@@ -187,32 +235,44 @@ export function creekModel(inp: CreekInput): CreekModel {
     turbidity: mixC(up.turbidity, RAW_SEWAGE.turbidity * tr.solids),
     coliforms: mixC(up.coliforms, RAW_SEWAGE.coliforms * tr.coliforms),
     dbo: mixC(up.dbo, RAW_SEWAGE.dbo * tr.dbo),
+    ammoniaN: mixC(up.ammoniaN, RAW_SEWAGE.ammoniaN * tr.ammonia),
+    nh3: 0,
     Q,
   };
+  mix.nh3 = mix.ammoniaN * nh3Fraction(T, mix.pH) * NH3_PER_N;
   const satMix = doSat(T, elev);
   mix.satPct = (mix.dissolvedO2 / satMix) * 100;
   const { H, U, S } = hydraulics(Q, inp.slope);
   const ka = theta(reaeration(Q, S, U), 1.024, T);
   const kd = theta(boDecay(H), 1.047, T);
   const kb = theta(0.8, 1.07, T);
+  const kn = theta(NITRIF.k20, NITRIF.theta, T);
   // asentamiento de partículas finas: velocidad de caída de 1 m/día sobre la profundidad
   const ks = 1 / Math.max(0.05, H);
   const sodV = (theta(SOD[inp.treatment], 1.065, T) / H) * (Qw > 0 ? 1 : 0); // mg/L/día (g/m³)
   const L0 = mix.dbo;
+  const N0 = mix.ammoniaN;
   const D0 = satMix - mix.dissolvedO2;
+  const nh3Up = up.ammoniaN * nh3Fraction(up.T, up.pH) * NH3_PER_N;
+  /** Déficit que deja una demanda de primer orden de carga C0 y velocidad k (forma de Streeter y Phelps). */
+  const sp = (k: number, C0: number, t: number) => (Math.abs(ka - k) > 1e-9 ? ((k * C0) / (ka - k)) * (Math.exp(-k * t) - Math.exp(-ka * t)) : k * C0 * t * Math.exp(-ka * t));
   const at = (x: number): Reading => {
+    if (!Number.isFinite(x)) x = 0;
     if (x < 0) {
       const sat = doSat(up.T, elev);
-      return { x, T: up.T, dissolvedO2: doUp, satPct: (doUp / sat) * 100, pH: up.pH, conductivity: up.conductivity, turbidity: up.turbidity, coliforms: up.coliforms, dbo: up.dbo, Q: Qr, travelH: 0 };
+      return { x, T: up.T, dissolvedO2: doUp, satPct: (doUp / sat) * 100, pH: up.pH, conductivity: up.conductivity, turbidity: up.turbidity, coliforms: up.coliforms, dbo: up.dbo, ammoniaN: up.ammoniaN, nh3: nh3Up, Q: Qr, travelH: 0 };
     }
     const t = x / U / 86400; // días
     const L = L0 * Math.exp(-kd * t);
     // déficit: inicial + DBO (Streeter y Phelps) + lodo del fondo mientras dura el tramo con lodo
     const tS = Math.min(t, SLUDGE_REACH_M / U / 86400);
-    const dDBO = Math.abs(ka - kd) > 1e-9 ? ((kd * L0) / (ka - kd)) * (Math.exp(-kd * t) - Math.exp(-ka * t)) : kd * L0 * t * Math.exp(-ka * t);
+    const dDBO = sp(kd, L0, t);
+    // nitrificación: el amonio pasa a nitrato y gasta 4,57 g de oxígeno por gramo de nitrógeno
+    const dN = sp(kn, NITRIF.o2PerN * N0, t);
     const dSOD = (sodV / ka) * (1 - Math.exp(-ka * tS)) * Math.exp(-ka * (t - tS));
-    const D = D0 * Math.exp(-ka * t) + dDBO + dSOD;
+    const D = D0 * Math.exp(-ka * t) + dDBO + dN + dSOD;
     const dO = Math.max(0, satMix - D);
+    const N = N0 * Math.exp(-kn * t);
     return {
       x,
       T,
@@ -223,12 +283,20 @@ export function creekModel(inp: CreekInput): CreekModel {
       turbidity: up.turbidity + (mix.turbidity - up.turbidity) * Math.exp(-ks * t),
       coliforms: mix.coliforms * Math.exp(-kb * t),
       dbo: L,
+      ammoniaN: N,
+      nh3: N * nh3Fraction(T, mix.pH) * NH3_PER_N,
       Q,
       travelH: t * 24,
     };
   };
-  return { inp, Qr, Qw, up, mix, H, U, ka, kd, kb, ks, at };
+  return { inp, Qr, Qw, up, mix, H, U, ka, kd, kb, ks, kn, at };
 }
+
+/** Regla de los peces (didáctica, con criterios publicados): oxígeno de al menos 5 mg/L (Decreto 1076 de 2015,
+ *  art. 2.2.3.3.9.10, aguas dulces frías), DBO5 de 6 mg/L o menos y amoníaco libre de 0,025 mg/L de NH₃ o menos
+ *  (Directiva 78/659/CEE, valor guía de aguas ciprinícolas y valor imperativo, respectivamente). */
+export const FISH = { minDO: 5, maxDBO: 6, maxNH3: 0.025 } as const;
+export const fishOk = (r: { dissolvedO2: number; dbo: number; nh3?: number }) => r.dissolvedO2 >= FISH.minDO && r.dbo <= FISH.maxDBO && (r.nh3 ?? 0) <= FISH.maxNH3;
 
 /** Criterios para nadar (contacto primario, Decreto 1076 de 2015, art. 2.2.3.3.9.7, antes Decreto 1594 de 1984). */
 export const SWIM = { coliformsFecal: 200, satPct: 70, pHmin: 5, pHmax: 9 } as const;
@@ -399,7 +467,22 @@ export function irvaRisk(irca: number): string {
  * y red hasta la llave. Resultado comparado con la Resolución 2115 de 2007 y su índice IRCA calculado con las
  * cinco características que mide el juego.
  */
-export function treatPlant(inp: PlantInput): PlantResult {
+/** Límites de las entradas de la planta. */
+export const PLANT_LIMITS = { dose: [0, 200], chlorine: [0, 10], networkH: [0, 72] } as const;
+
+/** Entrada de la planta siempre válida. */
+export function sanitizePlant(inp: Partial<PlantInput> | null | undefined): PlantInput {
+  const i = (inp ?? {}) as Partial<PlantInput>;
+  return {
+    raw: oneOf(i.raw, ['verano', 'lluvia', 'creciente'] as const, 'verano'),
+    dose: clamp(fin(i.dose, 0), PLANT_LIMITS.dose[0], PLANT_LIMITS.dose[1]),
+    chlorine: clamp(fin(i.chlorine, 0), PLANT_LIMITS.chlorine[0], PLANT_LIMITS.chlorine[1]),
+    ...(i.networkH === undefined ? {} : { networkH: clamp(fin(i.networkH, 12), PLANT_LIMITS.networkH[0], PLANT_LIMITS.networkH[1]) }),
+  };
+}
+
+export function treatPlant(input: PlantInput): PlantResult {
+  const inp = sanitizePlant(input);
   const raw = RAW_WATER[inp.raw];
   const settled = settledTurbidity(raw.turbidity, inp.dose);
   const { out: filtered, clogged } = filteredTurbidity(settled);
@@ -469,7 +552,24 @@ export function buildup(days: number, sweeping: boolean): number {
  * lluvia caída en mm. Devuelve la serie cada minuto: masa arrastrada [kg], concentración en el agua que sale
  * de la calle [mg/L] y caudal [L/s].
  */
-export function washoff(inp: StreetInput): { t: number[]; conc: number[]; massKg: number[]; flowLs: number[]; totalKg: number; firstFlushPct: number; trashItems: number; sewageM3: number; coliformsGiga: number } {
+/** Límites de las entradas de la calle. */
+export const STREET_LIMITS = { dryDays: [0, 60], rainMmH: [0, 300], durationMin: [1, 240], wrongHouses: [0, STREET.houses] } as const;
+
+/** Entrada de la calle siempre válida. */
+export function sanitizeStreet(inp: Partial<StreetInput> | null | undefined): StreetInput {
+  const i = (inp ?? {}) as Partial<StreetInput>;
+  return {
+    dryDays: clamp(fin(i.dryDays, 5), STREET_LIMITS.dryDays[0], STREET_LIMITS.dryDays[1]),
+    sweeping: typeof i.sweeping === 'boolean' ? i.sweeping : false,
+    litter: oneOf(i.litter, ['poca', 'mucha'] as const, 'poca'),
+    rainMmH: clamp(fin(i.rainMmH, 30), STREET_LIMITS.rainMmH[0], STREET_LIMITS.rainMmH[1]),
+    durationMin: Math.round(clamp(fin(i.durationMin, 30), STREET_LIMITS.durationMin[0], STREET_LIMITS.durationMin[1])),
+    wrongHouses: Math.round(clamp(fin(i.wrongHouses, 0), STREET_LIMITS.wrongHouses[0], STREET_LIMITS.wrongHouses[1])),
+  };
+}
+
+export function washoff(input: StreetInput): { t: number[]; conc: number[]; massKg: number[]; flowLs: number[]; totalKg: number; firstFlushPct: number; trashItems: number; sewageM3: number; coliformsGiga: number } {
+  const inp = sanitizeStreet(input);
   const B0 = buildup(inp.dryDays, inp.sweeping) * STREET.area; // g
   const t: number[] = [], conc: number[] = [], massKg: number[] = [], flowLs: number[] = [];
   let left = B0, cum = 0, cumRain = 0, firstHalf = 0;
@@ -481,7 +581,7 @@ export function washoff(inp: StreetInput): { t: number[]; conc: number[]; massKg
     const washed = left * (1 - Math.exp(-0.18 * rainMm));
     left -= washed;
     cum += washed;
-    if (r0 < 10) firstHalf += washed * Math.min(1, (10 - r0) / rainMm);
+    if (r0 < 10 && rainMm > 0) firstHalf += washed * Math.min(1, (10 - r0) / rainMm);
     const vol = (runoffC * rainMm * STREET.area) / 1000; // m³ en ese minuto
     t.push(m);
     conc.push(vol > 0 ? washed / vol : 0); // g/m³ = mg/L

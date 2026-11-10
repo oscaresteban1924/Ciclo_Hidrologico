@@ -257,8 +257,9 @@
   pointer-events: none;
 }
 .q3-toast {
+  /* abajo y al centro de la escena: arriba están la pregunta y los lugares para mirar */
   position: absolute;
-  top: 70px;
+  bottom: 14px;
   left: 50%;
   z-index: 6;
   transform: translateX(-50%);
@@ -288,7 +289,7 @@
 }
 @keyframes q3-pop {
   from {
-    transform: translate(-50%, -14px) scale(0.92);
+    transform: translate(-50%, 14px) scale(0.92);
     opacity: 0;
   }
   to {
@@ -690,6 +691,11 @@
   }
   .q3-question strong {
     font-size: 0.9rem;
+  }
+  /* la pregunta está abajo: el aviso de medalla va justo encima de ella */
+  .q3-toast {
+    bottom: calc(var(--q3-qh, 64px) + 18px);
+    max-width: calc(100% - 24px);
   }
   .q3-views {
     top: 8px;
@@ -1094,4 +1100,68 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
+}
+
+/* Panel «Medellín»: monitoreo real de quebradas */
+.q3-real h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+.q3-real h4 {
+  margin: 14px 0 6px;
+  font-size: 0.9rem;
+}
+.q3-findings {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.q3-field {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+.q3-field select {
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+}
+.q3-bars svg {
+  width: 100%;
+  height: auto;
+}
+.q3-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.q3-key.is-ok {
+  background: #2f8f63;
+}
+.q3-key.is-bad {
+  background: #c0462a;
+}
+.q3-tablewrap {
+  overflow-x: auto;
+}
+.q3-tablewrap .q3-table th small {
+  display: block;
+  font-weight: 400;
+  color: var(--ink-2);
+  font-size: 0.7rem;
+  white-space: normal;
+}
+.q3-tablewrap .q3-table {
+  min-width: 460px;
 }

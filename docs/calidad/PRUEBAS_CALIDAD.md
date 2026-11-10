@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**13 de 13 cumplen.**
+**17 de 17 cumplen.**
 
 ## Q1. Oxígeno disuelto de saturación y altitud de Medellín — cumple
 
@@ -19,10 +19,10 @@ Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes 
 - Tolerancia: con 300 casas (1 200 personas, 102 L/persona·día) el caudal vertido es 1,417 L/s; coliformes y conductividad justo después del vertimiento iguales al balance de masa a mano (error < 10⁻⁹)
 - Medido: vertimiento 1.417 L/s; quebrada 150 L/s; coliformes 93709 (a mano 93709); conductividad 77.77 µS/cm (a mano 77.77)
 
-## Q4. Curva de oxígeno de Streeter y Phelps con demanda del lodo — cumple
+## Q4. Curva de oxígeno de Streeter y Phelps con demanda del lodo y nitrificación — cumple
 
-- Tolerancia: la solución analítica coincide con la integración numérica fina de las ecuaciones (diferencia < 0,01 mg/L en 2 km); con 600 casas sin tratamiento, verano y cauce plano, el mínimo de oxígeno está aguas abajo del vertimiento y a 3 km el oxígeno es mayor que en el mínimo
-- Medido: diferencia máxima 2.6e-5 mg/L; mezcla 7.28 mg/L; mínimo 6.08 mg/L a 800 m; a 2 km 7.27 mg/L; a 3 km 7.44 mg/L (ka 39.5, kd 1.43 1/día)
+- Tolerancia: la solución analítica coincide con la integración numérica fina de las ecuaciones de DBO, amonio y oxígeno (diferencia < 0,01 mg/L en 2 km, en el oxígeno y en el amonio); con 600 casas sin tratamiento, verano y cauce plano, el mínimo de oxígeno está aguas abajo del vertimiento y a 3 km el oxígeno es mayor que en el mínimo
+- Medido: diferencia máxima 2.6e-5 mg/L de oxígeno y 9.1e-9 mg/L de amonio; amonio en la mezcla 1.37 mg/L de N (kn 0.41 1/día); mezcla 7.28 mg/L; mínimo 6.03 mg/L a 800 m; a 2 km 7.21 mg/L; a 3 km 7.38 mg/L (ka 39.5, kd 1.43 1/día)
 
 ## Q5. Respuesta del modelo a las decisiones del barrio — cumple
 
@@ -68,3 +68,23 @@ Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes 
 
 - Tolerancia: once procesos numerados del 1 al 11 sin repetir, cada uno con texto, mecanismo, criterios de diseño, fuente, fallas y mediciones, y con su lugar en la escena; sus valores «en el juego» existen y son números válidos para los tres ríos, tres dosis y dos dosis de cloro (ninguno NaN ni vacío); los procesos citan los artículos 55, 111, 112, 113, 114, 121 y 125 de la Resolución 0330 de 2017; el IRCA que muestra la llave es el calculado
 - Medido: orden correcto; completos 11 de 11; en la escena todos; valores revisados 468, inválidos 0; citas correctas; IRCA de la llave coincide (97.9 %)
+
+## Q14. Amoníaco libre (Emerson et al.) y nitrificación aguas abajo — cumple
+
+- Tolerancia: fracción de NH₃ libre igual a la tabla de Emerson et al. (1975) a 20 y 25 °C y pH 7, 8 y 9 (error relativo < 2 %); amonio de la mezcla = balance de masa (error < 10⁻⁹) y aguas abajo = N₀·e^(−kn·t) (error < 10⁻⁹); el amoníaco libre de la lectura es el amonio por su fracción libre; el amonio que llega baja con cada tratamiento (directo = séptico ≥ planta ≥ alcantarillado) y la demanda nitrogenada (4,57 g O₂/g N) es positiva
+- Medido: error máximo frente a la tabla 0.70 %; amonio en la mezcla 1.3691 frente a 1.3691 mg/L; a 1,5 km 1.3339 frente a 1.3339 mg/L; NH₃ libre 10.27 µg/L; amonio que llega (directo, séptico, planta, alcantarillado): 0.493 / 0.493 / 0.261 / 0.030 mg/L; demanda nitrogenada en la mezcla 6.26 mg/L de O₂ (50 % del amonio queda con la planta pequeña)
+
+## Q15. Datos reales de 18 quebradas de San Antonio de Prado y lo que dicen frente al modelo — cumple
+
+- Tolerancia: 68 sitios con medición en 18 microcuencas, todos con números válidos y medidos entre diciembre de 2017 y enero de 2018; los sitios de cada microcuenca, de la parte alta a la baja; el resumen del panel = un recuento independiente; el oxígeno y la saturación medidos son coherentes con la ecuación de Benson y Krause a la altitud del sitio (temperatura del agua implícita entre 10 y 26 °C en al menos 90 % de los sitios; ida y vuelta < 10⁻⁶ mg/L); el modelo y los datos coinciden en lo cualitativo: oxígeno de al menos 5 mg/L en la mayoría de los sitios reales y en la quebrada de montaña del modelo, y coliformes por encima del criterio para nadar en la mayoría de los sitios reales y en todo el tramo del modelo con 600 casas sin tratar
+- Medido: 68 sitios en 18 microcuencas (2017-12-19 a 2018-01-22); números válidos; fechas en el rango; orden correcto; oxígeno ≥ 5 mg/L: 64 (recuento 64) de 68, mediana 7.28 mg/L y 96.7 %; coliformes > 200: 60 (recuento 60) de 68; suben aguas abajo en 13 de 16 microcuencas; temperatura implícita 13.8–19.1 °C (5 % a 95 %), coherente en 68 de 68; modelo: oxígeno mínimo 7.53 mg/L, ¿se puede nadar en algún punto? no
+
+## Q16. Robustez ante miles de entradas al azar y entradas inválidas — cumple
+
+- Tolerancia: 6 000 barrios, 6 000 plantas y 2 000 calles al azar (8 % de los números son NaN, infinitos, negativos, enormes o de otro tipo, y algunas opciones no existen): ninguna excepción; ningún NaN ni infinito; oxígeno entre 0 y la saturación; DBO, coliformes, turbiedad y amonio ≥ 0; amoníaco libre ≤ amonio; pH entre 6 y 9; IRCA entre 0 y 100; cloro en la llave ≤ cloro a la salida; turbiedad filtrada entre 0 y la del río; masa lavada creciente y nunca mayor que la acumulada; primer lavado entre 0 y 100 %; las entradas saneadas quedan en sus límites
+- Medido: lecturas de la quebrada 36000 (fuera de rango 0); plantas 6000 (fuera de rango 0); calles 2000 (fuera de rango 0); excepciones 0; límites correctos
+
+## Q17. Coherencia de las respuestas en toda la malla de decisiones — cumple
+
+- Tolerancia: en 2 cauces × 3 temporadas × lluvia reciente o no × árboles o no: más casas nunca bajan la DBO, los coliformes ni el amonio ni suben el oxígeno; un mejor tratamiento nunca sube la DBO ni los coliformes; más caudal (verano → normal → lluvias) baja las concentraciones junto al tubo; en la planta, más cloro nunca deja menos cloro en la llave ni menos inactivación; en la calle, más días secos nunca lavan menos mugre y barrer nunca lava más; 0 violaciones
+- Medido: 11218 comprobaciones; violaciones 0

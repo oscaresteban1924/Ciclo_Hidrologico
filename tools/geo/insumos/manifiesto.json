@@ -901,6 +901,84 @@
    "encoding": "base64",
    "verified": true,
    "bundle": "medellin-valle-insumos-8.json"
+  },
+  {
+   "name": "calidad-quebradas/monitoreo-servicio.json",
+   "layer": "ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer",
+   "url": "https://www.medellin.gov.co/servidormapas/rest/services/ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer?f=json",
+   "status": 200,
+   "contentType": "application/json; charset=UTF-8",
+   "bytes": 3675,
+   "sha256": "1bf91788bd54f578995f58bc64527d59651c297ce934e4889786d8914d0b668a",
+   "receivedAt": "2026-11-10T19:17:04.974Z",
+   "encoding": "base64",
+   "verified": true,
+   "bundle": "medellin-calidad-insumos-9.json"
+  },
+  {
+   "name": "calidad-quebradas/sitios-muestreo-capa.json",
+   "layer": "ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/1",
+   "url": "https://www.medellin.gov.co/servidormapas/rest/services/ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/1?f=json",
+   "status": 200,
+   "contentType": "application/json; charset=UTF-8",
+   "bytes": 8305,
+   "sha256": "58927dbd80384cdb5429937850cccfd0cfeda1f37ac9a48a4d11163acf6b7b33",
+   "receivedAt": "2026-11-10T19:17:05.019Z",
+   "encoding": "base64",
+   "verified": true,
+   "bundle": "medellin-calidad-insumos-9.json"
+  },
+  {
+   "name": "calidad-quebradas/sitios-muestreo.geojson",
+   "layer": "ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/1",
+   "url": "https://www.medellin.gov.co/servidormapas/rest/services/ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/1/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
+   "status": 200,
+   "contentType": "application/geo+json; charset=UTF-8",
+   "bytes": 81466,
+   "sha256": "620358160fc3d1f7cb74d7794d5920f0d4cf60070618e9632cf335e188e5667a",
+   "receivedAt": "2026-11-10T19:17:05.299Z",
+   "encoding": "base64",
+   "verified": true,
+   "bundle": "medellin-calidad-insumos-9.json"
+  },
+  {
+   "name": "calidad-quebradas/calidad-retiros-capa.json",
+   "layer": "ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/2",
+   "url": "https://www.medellin.gov.co/servidormapas/rest/services/ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/2?f=json",
+   "status": 200,
+   "contentType": "application/json; charset=UTF-8",
+   "bytes": 6746,
+   "sha256": "8b43a9612e56777141250beb8e8620644c1813f12ea7c985c0fc1ed0bffa5171",
+   "receivedAt": "2026-11-10T19:17:05.403Z",
+   "encoding": "base64",
+   "verified": true,
+   "bundle": "medellin-calidad-insumos-9.json"
+  },
+  {
+   "name": "calidad-quebradas/calidad-retiros.geojson",
+   "layer": "ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/2",
+   "url": "https://www.medellin.gov.co/servidormapas/rest/services/ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/2/query?where=1%3D1&outFields=*&outSR=4326&geometryPrecision=6&f=geojson",
+   "status": 200,
+   "contentType": "application/geo+json; charset=UTF-8",
+   "bytes": 466004,
+   "sha256": "cb92220482daea08786a8e2f14b3dbb622b51298fa20f1549ec0405249b68dd3",
+   "receivedAt": "2026-11-10T19:17:05.776Z",
+   "encoding": "base64",
+   "verified": true,
+   "bundle": "medellin-calidad-insumos-9.json"
+  },
+  {
+   "name": "calidad-quebradas/bocatomas-veredales.geojson",
+   "layer": "ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/0",
+   "url": "https://www.medellin.gov.co/servidormapas/rest/services/ambiente_dllo_sost/VM_Monitoreo_Calidad_Agua/MapServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
+   "status": 200,
+   "contentType": "application/geo+json; charset=UTF-8",
+   "bytes": 30640,
+   "sha256": "9ce264068d13e5acda90b4daa3b168d4994560a729077ce3530ad37207e9fc9f",
+   "receivedAt": "2026-11-10T19:17:05.988Z",
+   "encoding": "base64",
+   "verified": true,
+   "bundle": "medellin-calidad-insumos-9.json"
   }
  ],
  "downloads": [
@@ -945,6 +1023,12 @@
    "createdAt": "2026-11-10T18:00:53.558Z",
    "sha256": "dfbf9b40bafa52f49eaeb90f399a52765f8c6e3eeb89f1de08651b79fa50ecdd",
    "note": "Octava descarga: comunas y corregimientos de Medellín (nombres y límites). Respuesta sin modificar; sha256 de los bytes recibidos."
+  },
+  {
+   "bundle": "medellin-calidad-insumos-9.json",
+   "createdAt": "2026-11-10T19:17:05.989Z",
+   "sha256": "1e24ccc47600f575ce59f472677be7e8a338e2fc8233937efe1903eb8598f2d9",
+   "note": "Novena descarga: monitoreo de calidad del agua de quebradas (Secretaría de Medio Ambiente de Medellín): sitios de muestreo, calidad de retiros y bocatomas veredales. Respuestas sin modificar; sha256 de los bytes recibidos."
   }
  ]
 }

@@ -20,8 +20,8 @@ export const STATIONS: { id: StationId; x: number; name: string }[] = [
  * flora y fauna en aguas dulces frías, Decreto 1594 de 1984, compilado en el Decreto 1076 de 2015) y materia
  * orgánica (DBO5) de 6 mg/L o menos (valor guía para aguas ciprinícolas de la Directiva 78/659/CEE).
  */
-export const FISH = { minDO: 5, maxDBO: 6 } as const;
-export const fishOk = (r: { dissolvedO2: number; dbo: number }) => r.dissolvedO2 >= FISH.minDO && r.dbo <= FISH.maxDBO;
+import { FISH, fishOk } from '../model';
+export { FISH, fishOk };
 
 /** Distancia real [m] (negativa aguas arriba del tubo) → posición a lo largo del dibujo. */
 export const uOf = (x: number) => (x < 0 ? x * 0.18 : 200 * Math.sqrt(x / 3000));

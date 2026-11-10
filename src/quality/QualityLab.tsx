@@ -51,7 +51,7 @@ export default function QualityLab() {
   const head = (
     <div className="q-head">
       <p className="q-disclaimer">
-        <strong>Calidad del agua.</strong> Laboratorio educativo con valores típicos de la literatura y normas colombianas; no es un monitoreo de una quebrada real.
+        <strong>Calidad del agua.</strong> Laboratorio educativo con valores típicos de la literatura y normas colombianas; las escenas no son un monitoreo real (la quebrada tiene una pestaña con mediciones reales de Medellín para comparar).
         {!gl && ' Tu equipo no tiene WebGL: se muestra la versión en dibujos planos, con el mismo cálculo.'}
       </p>
       <div className="q-tabs" role="tablist" aria-label="Partes del módulo">

@@ -142,6 +142,10 @@ def run(screens, shots):
             # Calidad del agua: las tres partes
             mode(pg, 'Calidad del agua'); pg.wait_for_timeout(6000)
             check(pg, screen, 'calidad-quebrada', shots, report)
+            # datos reales: la pestaña Medellín y la medalla que gana elegir una quebrada
+            pg.get_by_role('tab', name='Medellín', exact=True).last.click(); pg.wait_for_timeout(800)
+            pg.locator('.q3-field select').first.select_option('Cabuyala'); pg.wait_for_timeout(1200)
+            check(pg, screen, 'calidad-medellin', shots, report)
             pg.get_by_role('tab', name='Del río a la llave').click(); pg.wait_for_timeout(3500)
             check(pg, screen, 'calidad-planta', shots, report)
             pg.get_by_role('tab', name='La ciudad y la lluvia').click(); pg.wait_for_timeout(3500)
@@ -160,7 +164,14 @@ def run(screens, shots):
 
 if __name__ == '__main__':
     scr = list(SCREENS)
-    for a in sys.argv[1:]:
+    args = sys.argv[1:]
+    for i, a in enumerate(args):
+        # acepta «--pantallas tableta,telefono» y «--pantallas=tableta,telefono»
         if a.startswith('--pantallas'):
-            scr = a.split('=', 1)[1].split(',') if '=' in a else scr
+            val = a.split('=', 1)[1] if '=' in a else (args[i + 1] if i + 1 < len(args) else '')
+            pedidas = [x for x in val.split(',') if x]
+            malas = [x for x in pedidas if x not in SCREENS]
+            if malas:
+                sys.exit(f'Pantallas desconocidas: {", ".join(malas)} (hay: {", ".join(SCREENS)})')
+            scr = pedidas or scr
     sys.exit(run(scr, '--capturas' in sys.argv))

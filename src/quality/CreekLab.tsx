@@ -7,6 +7,7 @@ import { Microscope, StoneLens } from './experiments';
 import { BMWP_CLASSES, DEFAULT_CREEK, PERSONS_PER_HOUSE, SWIM, TREATMENTS, bmwp, canSwim, creekModel, stoneSample, type CreekInput, type Reading, type Season, type Treatment } from './model';
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from './shell';
 import { CreekWorld, FISH, STATIONS, fishOk, type StationId } from './three/creekWorld';
+import { RealCreeks, nadarEn, subeAguasAbajo } from './RealData';
 import { DO_CLASSES } from './three/kit';
 import { ProfileChart, fmt, fmtBig } from './ui';
 
@@ -17,6 +18,8 @@ interface Ctx {
   stations: Reading[];
   stones: Set<string>;
   micro: Set<string>;
+  /** Quebradas reales que se eligieron en la pestaña Medellín. */
+  real: Set<string>;
 }
 
 const RETOS: Reto<Ctx>[] = [
@@ -51,6 +54,21 @@ const RETOS: Reto<Ctx>[] = [
     check: (c) => c.micro.has('arriba') && c.micro.has('abajo'),
     progress: (c) => `Gotas: arriba ${c.micro.has('arriba') ? '✓' : '—'} · abajo ${c.micro.has('abajo') ? '✓' : '—'}`,
   },
+  {
+    id: 'q-real-sube',
+    title: 'Datos de verdad',
+    goal: 'En la pestaña Medellín, encuentra una quebrada real de San Antonio de Prado donde los coliformes suben de la parte alta a la baja.',
+    hint: 'Elige una quebrada en la lista y mira la gráfica de coliformes: la parte alta va arriba y la baja abajo.',
+    check: (c) => [...c.real].some((q) => subeAguasAbajo(q) === true),
+    progress: (c) => `${c.real.size} quebradas reales revisadas`,
+  },
+  {
+    id: 'q-real-nadar',
+    title: '¿Dónde se podría nadar de verdad?',
+    goal: 'En la pestaña Medellín, encuentra una quebrada real con algún sitio donde los coliformes estén por debajo del máximo para nadar.',
+    hint: 'Busca barras verdes en la gráfica de coliformes. ¿En qué parte de la quebrada aparecen?',
+    check: (c) => [...c.real].some((q) => nadarEn(q)),
+  },
 ];
 
 const TREAT_OPTS: { value: Treatment; label: string }[] = [
@@ -74,7 +92,13 @@ export function CreekLab({ head }: { head: ReactNode }) {
   const [stones, setStones] = useState<Set<string>>(new Set());
   const [micro, setMicro] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<string | null>(null);
-  const [param, setParam] = useState<'oxigeno' | 'dbo' | 'coliformes' | 'turbiedad'>('dbo');
+  const [param, setParam] = useState<'oxigeno' | 'dbo' | 'coliformes' | 'amonio' | 'turbiedad'>('dbo');
+  const [realPick, setRealPick] = useState('Barro Azul');
+  const [real, setReal] = useState<Set<string>>(new Set());
+  const pickReal = (name: string) => {
+    setRealPick(name);
+    setReal((s) => new Set(s).add(name));
+  };
   const world = useRef<CreekWorld | null>(null);
   const set = (p: Partial<CreekInput>) => setInp((s) => ({ ...s, ...p }));
   const m = useMemo(() => creekModel(inp), [inp]);
@@ -89,7 +113,7 @@ export function CreekLab({ head }: { head: ReactNode }) {
   useEffect(() => {
     world.current?.set(sync.current);
   }, [inp, m, probe, mode, station]);
-  const ctx = useMemo<Ctx>(() => ({ inp, probe, probeR: m.at(probe), stations, stones, micro }), [inp, m, probe, stations, stones, micro]);
+  const ctx = useMemo<Ctx>(() => ({ inp, probe, probeR: m.at(probe), stations, stones, micro, real }), [inp, m, probe, stations, stones, micro, real]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
 
   const lookStone = useCallback(
@@ -110,7 +134,8 @@ export function CreekLab({ head }: { head: ReactNode }) {
       }
     }
     if (x0 === null) return { tone: 'ok' as const, text: 'En toda la quebrada: hay oxígeno y poca materia orgánica.' };
-    const why = m.at(Math.max(0, x0)).dbo > FISH.maxDBO ? `demasiada materia orgánica (más de ${FISH.maxDBO} mg/L de DBO5)` : `poco oxígeno (menos de ${FISH.minDO} mg/L)`;
+    const r0 = m.at(Math.max(0, x0));
+    const why = r0.dbo > FISH.maxDBO ? `demasiada materia orgánica (más de ${FISH.maxDBO} mg/L de DBO5)` : r0.dissolvedO2 < FISH.minDO ? `poco oxígeno (menos de ${FISH.minDO} mg/L)` : `demasiado amoníaco libre (más de ${fmt(FISH.maxNH3 * 1000, 0)} µg/L)`;
     return { tone: 'bad' as const, text: `No hay peces desde el tubo hasta ${x1! >= 3000 ? 'el final del recorrido (2,5 km o más)' : where(x1!).replace(' del tubo', '')}: ${why}.` };
   }, [m]);
   const sample = useMemo(() => stoneSample(mDry.at(STATIONS.find((s) => s.id === station)!.x)), [mDry, station]);
@@ -150,6 +175,10 @@ export function CreekLab({ head }: { head: ReactNode }) {
           <li className={`is-${lev(r.dbo <= FISH.maxDBO, r.dbo <= 10)}`}>
             <span>Materia orgánica</span>
             <b>{fmt(r.dbo, 1)} mg/L</b>
+          </li>
+          <li className={`is-${lev(r.nh3 <= FISH.maxNH3, r.nh3 <= 2 * FISH.maxNH3)}`}>
+            <span>Amoníaco libre</span>
+            <b>{fmt(r.nh3 * 1000, 1)} µg/L</b>
           </li>
           <li className={`is-${lev(r.coliforms <= SWIM.coliformsFecal, r.coliforms <= 2000)}`}>
             <span>Coliformes</span>
@@ -218,6 +247,7 @@ export function CreekLab({ head }: { head: ReactNode }) {
     oxigeno: { title: 'Oxígeno disuelto', unit: 'mg/L', get: (q: Reading) => q.dissolvedO2, log: false, refs: [{ y: FISH.minDO, label: `mínimo para peces (${FISH.minDO})`, color: '#c0462a' }], fmtY: (v: number) => fmt(v, 1) },
     dbo: { title: 'Materia orgánica (DBO5)', unit: 'mg/L', get: (q: Reading) => q.dbo, log: false, refs: [{ y: FISH.maxDBO, label: `máximo para peces (${FISH.maxDBO})`, color: '#c0462a' }], fmtY: (v: number) => fmt(v, 1) },
     coliformes: { title: 'Coliformes fecales', unit: 'NMP/100 mL', get: (q: Reading) => q.coliforms, log: true, refs: [{ y: SWIM.coliformsFecal, label: `máximo para nadar (${SWIM.coliformsFecal})`, color: '#c0462a' }], fmtY: (v: number) => fmtBig(v) },
+    amonio: { title: 'Amoníaco libre (NH₃)', unit: 'µg/L', get: (q: Reading) => q.nh3 * 1000, log: false, refs: [{ y: FISH.maxNH3 * 1000, label: `máximo para peces (${fmt(FISH.maxNH3 * 1000, 0)} µg/L)`, color: '#c0462a' }], fmtY: (v: number) => fmt(v, 1) },
     turbiedad: { title: 'Turbiedad', unit: 'UNT', get: (q: Reading) => q.turbidity, log: false, refs: [], fmtY: (v: number) => fmt(v, 0) },
   }[param];
   const profile = useMemo(() => {
@@ -254,9 +284,9 @@ export function CreekLab({ head }: { head: ReactNode }) {
     datos: (
       <div className="q3-data">
         <div className="q3-seg" role="radiogroup" aria-label="Qué medir a lo largo de la quebrada">
-          {(['dbo', 'oxigeno', 'coliformes', 'turbiedad'] as const).map((p) => (
+          {(['dbo', 'oxigeno', 'coliformes', 'amonio', 'turbiedad'] as const).map((p) => (
             <button key={p} type="button" role="radio" aria-checked={param === p} className={param === p ? 'is-on' : ''} onClick={() => setParam(p)}>
-              {{ dbo: 'Materia orgánica', oxigeno: 'Oxígeno', coliformes: 'Coliformes', turbiedad: 'Turbiedad' }[p]}
+              {{ dbo: 'Materia orgánica', oxigeno: 'Oxígeno', coliformes: 'Coliformes', amonio: 'Amoníaco', turbiedad: 'Turbiedad' }[p]}
             </button>
           ))}
         </div>
@@ -318,16 +348,17 @@ export function CreekLab({ head }: { head: ReactNode }) {
         </button>
       </div>
     ),
+    medellin: <RealCreeks picked={realPick} onPick={pickReal} />,
     docente: (
       <div className="q3-teacher">
         <h3>Qué calcula la escena</h3>
         <p>
-          En el tubo, el agua usada del barrio se mezcla con la de la quebrada (balance de masa). Aguas abajo, la materia orgánica (DBO5) se descompone y gasta oxígeno; la quebrada lo recupera del aire (reaireación de Tsivoglou y Neal), y el lodo del fondo también consume oxígeno (ecuación de Streeter y Phelps con demanda del sedimento). Los coliformes mueren con el tiempo de viaje (Mancini) y la turbiedad se asienta. Los números están en <em>docs/calidad/MODELO_CALIDAD.md</em>.
+          En el tubo, el agua usada del barrio se mezcla con la de la quebrada (balance de masa). Aguas abajo, la materia orgánica (DBO5) se descompone y gasta oxígeno; el amonio del agua usada pasa a nitrato y también gasta oxígeno (4,57 g por gramo de nitrógeno); la quebrada lo recupera del aire (reaireación de Tsivoglou y Neal), y el lodo del fondo también consume oxígeno (ecuación de Streeter y Phelps con demanda del sedimento y nitrificación). Los coliformes mueren con el tiempo de viaje (Mancini), la turbiedad se asienta y la parte del amonio que está como amoníaco libre (la tóxica) depende del pH y de la temperatura (Emerson et al.). Los números están en <em>docs/calidad/MODELO_CALIDAD.md</em>.
         </p>
         <h3>Peces, bichos y nadar</h3>
         <ul>
           <li>
-            <strong>Peces</strong> (regla didáctica con dos criterios publicados): oxígeno de al menos {FISH.minDO} mg/L, criterio de preservación de flora y fauna para aguas dulces frías del Decreto 1594 de 1984 (compilado en el Decreto 1076 de 2015, artículo 2.2.3.3.9.10), y DBO5 de {FISH.maxDBO} mg/L o menos, valor guía para aguas de peces ciprinícolas de la Directiva europea 78/659/CEE. En una quebrada empinada el oxígeno se recupera rápido: lo que más pesa es la materia orgánica.
+            <strong>Peces</strong> (regla didáctica con criterios publicados): oxígeno de al menos {FISH.minDO} mg/L, criterio de preservación de flora y fauna para aguas dulces frías del Decreto 1594 de 1984 (compilado en el Decreto 1076 de 2015, artículo 2.2.3.3.9.10); DBO5 de {FISH.maxDBO} mg/L o menos, valor guía para aguas de peces ciprinícolas de la Directiva europea 78/659/CEE, y amoníaco libre de {fmt(FISH.maxNH3 * 1000, 0)} µg/L o menos, valor imperativo de la misma directiva. En una quebrada empinada el oxígeno se recupera rápido: lo que más pesa es la materia orgánica. Con el pH de la quebrada (cerca de 7,3) el amoníaco libre queda por debajo de su límite; subiría si el agua se volviera más alcalina.
           </li>
           <li>
             <strong>Bichos</strong>: índice BMWP/Col (Roldán, 2003). Clases: {BMWP_CLASSES.map((c) => `${c.cls} desde ${c.min}`).join(' · ')}.
@@ -346,11 +377,11 @@ export function CreekLab({ head }: { head: ReactNode }) {
           <li>Arriba del tubo hay bichos que necesitan agua muy limpia. ¿Cuáles desaparecen junto al tubo?</li>
         </ol>
         <p className="q3-small">
-          Dibujo esquemático: la distancia aguas abajo está comprimida (hay más espacio cerca del tubo). Peces y bichos son ilustrativos; los valores de la sonda, la tabla y la gráfica son los calculados. No es un monitoreo de una quebrada real de Medellín.
+          Dibujo esquemático: la distancia aguas abajo está comprimida (hay más espacio cerca del tubo). Peces y bichos son ilustrativos; los valores de la sonda, la tabla y la gráfica son los calculados. La quebrada de la escena no es una quebrada real; la pestaña Medellín muestra mediciones reales de 18 quebradas de San Antonio de Prado para comparar.
         </p>
       </div>
     ),
   };
 
-  return <Q3Layout head={head} stage={stage} dock={dock} panels={panels} tab={tab} setTab={setTab} />;
+  return <Q3Layout head={head} stage={stage} dock={dock} panels={panels} tab={tab} setTab={setTab} tabs={['retos', 'experimentos', 'datos', 'medellin', 'docente']} />;
 }

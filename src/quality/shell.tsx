@@ -96,8 +96,8 @@ export function Scene3D<W extends WorldLike>({
 
 // ------------------------------------------------------------------ distribución
 
-export type PanelTab = 'procesos' | 'retos' | 'experimentos' | 'datos' | 'docente';
-const TAB_LABEL: Record<PanelTab, string> = { procesos: 'Procesos', retos: 'Retos', experimentos: 'Experimentos', datos: 'Datos', docente: 'Docente' };
+export type PanelTab = 'procesos' | 'retos' | 'experimentos' | 'datos' | 'medellin' | 'docente';
+const TAB_LABEL: Record<PanelTab, string> = { procesos: 'Procesos', retos: 'Retos', experimentos: 'Experimentos', datos: 'Datos', medellin: 'Medellín', docente: 'Docente' };
 const DEFAULT_TABS: PanelTab[] = ['retos', 'experimentos', 'datos', 'docente'];
 
 export const PartTab = createContext('');
@@ -154,8 +154,20 @@ export function Q3Layout({ head, stage, dock, panels, tab, setTab, tabs = DEFAUL
 
 /** Pregunta de la escena, con la respuesta que se ve en el dibujo. */
 export function Question({ q, answer, tone }: { q: string; answer: ReactNode; tone: 'ok' | 'mid' | 'bad' }) {
+  // la altura de la tarjeta queda en --q3-qh de la escena: en el teléfono el aviso de medalla se pone encima de ella
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current, host = el?.parentElement;
+    if (!el || !host || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => host.style.setProperty('--q3-qh', `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      host.style.removeProperty('--q3-qh');
+    };
+  }, []);
   return (
-    <div className={`q3-question is-${tone}`} role="status" aria-live="polite">
+    <div ref={ref} className={`q3-question is-${tone}`} role="status" aria-live="polite">
       <strong>{q}</strong>
       <span>{answer}</span>
     </div>
