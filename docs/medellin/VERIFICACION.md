@@ -446,6 +446,26 @@ Pruebas:
 
 Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la creciente y tras el colapso; consola limpia).
 
+## 4 septdecies. Ningún elemento se monta sobre otro (ejecutada)
+
+**Pedido.** «Validar que ningún elemento colisione o superponga otro elemento; eso arruina la experiencia de usuario.»
+
+**Verificación automática.** `tools/verificacion/superposiciones.py` recorre 21 estados en cuatro pantallas: escritorio 1440 × 900, portátil 1280 × 720, tableta 820 × 1180 y teléfono 390 × 844.
+- Estados: recorrido, exploración y laboratorio del paisaje; el valle; tres sectores con las vistas general, de calle, de peligro y de resultados; la creciente con «Agua ×5»; el modo cine; y las tres partes de «Calidad del agua».
+- Qué mide en cada estado: las cajas de todos los elementos flotantes (rótulos de las escenas 3D, avisos, barras, leyendas, columna de cámara, tarjetas, preguntas y controles) e informa los pares que se cruzan, y los que quedan cortados por el borde.
+- Opciones: `--capturas` guarda una imagen con los choques marcados en rojo. El informe queda en `informe.json`.
+
+**Lo que encontró y se corrigió.**
+- El título del sector se montaba sobre las vistas y capas (hasta 2 057 px² en La Iguaná). Ahora su ancho máximo se ajusta al ancho medido de esa barra.
+- Los avisos quedaban bajo el título cuando este ocupaba dos o tres renglones. Ahora empiezan justo debajo de su borde medido.
+- La leyenda de peligro tapaba la columna de la cámara: en escritorio se corrió a su izquierda. En el teléfono queda encima de la fila de la cámara y se reduce a una fila de fichas H1–H6 (el texto queda en su título).
+- Los rótulos 3D medían su ancho una sola vez y, cuando su texto crecía (por ejemplo «0,8 m de agua · H4»), podían montarse sobre otro. Ahora se vuelven a medir.
+- Los rótulos de «Calidad del agua» no evitaban los controles de la escena (un rótulo quedaba bajo la cámara). Ahora los evitan.
+- En el paisaje, en el teléfono, la indicación «Arrastra para recorrer el paisaje» tapaba un rótulo. Ahora es una zona ocupada para los rótulos.
+- El verificador también señalaba contenedores de diseño sin fondo (la capa SVG superior y la franja inferior) como si fueran cajas: se miden sus hijos.
+
+**Resultado final.** 84 de 84 estados sin choques ni cortes: 21 de 21 en cada pantalla (escritorio, portátil, tableta y teléfono).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

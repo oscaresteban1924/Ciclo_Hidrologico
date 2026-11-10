@@ -38,6 +38,9 @@ export function hasWebGL(): boolean {
   }
 }
 
+/** Controles que flotan sobre la escena: los rótulos 3D los evitan. */
+const OVERLAY_SEL = '.q3-question, .q3-views, .q3-cam, .q3-card, .q3-toast, .q3-tourbar, .q3-hover';
+
 export class QStage {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -293,7 +296,17 @@ export class QStage {
   private layoutLabels(): void {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     const v = new THREE.Vector3();
+    // los rótulos no se ponen bajo los controles que flotan sobre la escena (pregunta, vistas, cámara, tarjetas)
     const placed: [number, number, number, number][] = [];
+    const host = this.container.parentElement;
+    if (host) {
+      const cr = this.container.getBoundingClientRect();
+      for (const o of host.querySelectorAll<HTMLElement>(OVERLAY_SEL)) {
+        if (o.offsetParent === null) continue;
+        const r = o.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) placed.push([r.left - cr.left - 4, r.top - cr.top - 4, r.right - cr.left + 4, r.bottom - cr.top + 4]);
+      }
+    }
     const sorted = [...this.labels].sort((a, b) => (b.prio ?? 0) - (a.prio ?? 0));
     for (const l of sorted) {
       const el = this.labelEls.get(l.id);

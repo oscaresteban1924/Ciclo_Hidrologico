@@ -410,16 +410,42 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
   const rainNow = ctrl.status === 'corriendo' ? sim.rainAt(sim.t) : 0;
   const phase = ctrl.status === 'listo' ? 'Listo para llover' : ctrl.status === 'terminado' ? 'Terminado' : state.paused ? 'En pausa' : rainNow > 0 ? 'Lloviendo' : 'Escurriendo';
   const slow = ctrl.status === 'corriendo' && !state.paused && ctrl.achievedSpeed > 0 && ctrl.achievedSpeed < ctrl.speed * 0.8;
+  // el título del sector (arriba a la izquierda) no debe montarse sobre las vistas y capas (arriba a la derecha):
+  // su ancho máximo se ajusta al ancho que ocupan ellas, que cambia con el número de capas y con el panel
+  // y los avisos empiezan justo debajo del título, que puede ocupar dos o tres renglones
+  const trRef = useRef<HTMLDivElement>(null);
+  const crumbRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = trRef.current, cr = crumbRef.current;
+    const stage = el?.parentElement;
+    if (!el || !cr || !stage || typeof ResizeObserver === 'undefined') return;
+    // y, en el teléfono, la leyenda de peligro se pone encima de la fila de la cámara (cuyo alto se mide aquí)
+    const rail = stage.querySelector<HTMLElement>('.city-camrail');
+    const ro = new ResizeObserver(() => {
+      stage.style.setProperty('--tr-w', `${Math.ceil(el.getBoundingClientRect().width)}px`);
+      stage.style.setProperty('--crumb-b', `${Math.ceil(cr.offsetTop + cr.offsetHeight)}px`);
+      if (rail) stage.style.setProperty('--rail-h', `${Math.ceil(rail.offsetHeight)}px`);
+    });
+    ro.observe(el);
+    ro.observe(cr);
+    if (rail) ro.observe(rail);
+    return () => {
+      ro.disconnect();
+      stage.style.removeProperty('--tr-w');
+      stage.style.removeProperty('--crumb-b');
+      stage.style.removeProperty('--rail-h');
+    };
+  }, []);
   return (
     <>
-      <div className="city-ov city-crumb">
+      <div className="city-ov city-crumb" ref={crumbRef}>
         <button type="button" className="link" onClick={() => void ctrl.showValley()}>
           ← Valle de Aburrá
         </button>
         <strong>{sc.shortTitle}</strong>
         <span className={`kind kind-${sc.provenance.kind}`}>{sc.provenance.badge ?? KIND_LABEL[sc.provenance.kind]}</span>
       </div>
-      <div className="city-topright">
+      <div className="city-topright" ref={trRef}>
         {api.panelHidden && <PanelPeek api={api} />}
         <ViewBar api={api} />
       </div>
@@ -831,9 +857,9 @@ function Legend({ api }: { api: LabApi }) {
         <strong>Peligro del agua (máximo alcanzado)</strong>
         <ul className="haz-list">
           {HAZARD.slice(1).map((h) => (
-            <li key={h.code}>
+            <li key={h.code} title={`${h.code}: ${h.short}`}>
               <span className="haz-chip" style={{ background: h.color, color: h.id >= 4 ? '#fff' : '#1f2933' }}>{h.code}</span>
-              {h.short}
+              <span className="haz-t">{h.short}</span>
             </li>
           ))}
         </ul>

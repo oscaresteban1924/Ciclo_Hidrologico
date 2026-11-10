@@ -255,6 +255,9 @@ export function SceneView({ spec, onCompare }: { spec: SceneSpec; onCompare?: (p
   ];
   if (state.mode === 'guided' && !state.tool && !state.detail && !stacked)
     blocked.push(compact ? { x: 0, y: 48, w: size.w, h: 74 } : { x: size.w - Math.max(312, Math.min(452, size.w - 458)), y: size.h - 118, w: 452, h: 118 });
+  // la indicación «Arrastra para recorrer el paisaje» (abajo, al centro) también es una zona ocupada mientras se ve
+  const hintOn = canPan && compact && !dragging && pan.x === 0;
+  if (hintOn) blocked.push({ x: size.w / 2 - 150, y: size.h - 66 - 36, w: 300, h: 40 });
   const showPins = !state.tool && !state.detail && ((state.mode === 'explore' && state.layersOn.preguntas) || (state.mode === 'guided' && spec.stepId === 'conexiones'));
   if (showPins) blocked.push(...pinBoxes(mapper.toScreen));
   const processLabel = detailDef ? detailDef.place : step && step.region !== 'all' ? step.title : null;
@@ -406,7 +409,7 @@ export function SceneView({ spec, onCompare }: { spec: SceneSpec; onCompare?: (p
         </button>
       </div>
       {state.legendOpen && <Legend onClose={() => dispatch({ type: 'legend', open: false })} />}
-      {canPan && compact && !dragging && pan.x === 0 && (
+      {hintOn && (
         <p className="scene-hint" key={`${focus.x}-${focus.y}`}>
           Arrastra para recorrer el paisaje
         </p>

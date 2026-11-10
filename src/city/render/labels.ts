@@ -83,6 +83,8 @@ export class LabelLayer {
   setSub(id: string, sub: string): void {
     const p = this.map.get(id);
     if (p && p.sub.textContent !== sub) {
+      // si cambia el largo del texto, la etiqueta se vuelve a medir: con el ancho viejo podía montarse sobre otra
+      if ((p.sub.textContent ?? '').length !== sub.length) p.w = 0;
       p.sub.textContent = sub;
       p.item.sub = sub;
     }
