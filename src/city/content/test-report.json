@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-10T02:48:47.309Z",
+  "generatedAt": "2026-11-10T05:17:39.232Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
   "passed": 48,
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 146 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 778 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 5787 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.23, drenado 49.67, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2326 pasos, 226 ms | dx 1 m: P 89.60 m³, salida 39.30, drenado 46.54, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3072 pasos, 839 ms | dx 0.5 m: P 89.60 m³, salida 42.36, drenado 43.49, infiltrado 3.45, esquina 0.47 cm, pico 36.0 L/s, área ≥ 5 cm 0 m², 6227 pasos, 6040 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.32 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -409,7 +409,7 @@
       "area": 8,
       "res": -2.5579538487363607e-13,
       "steps": 2326,
-      "ms": 146.4450080000006
+      "ms": 226.08025499999985
     },
     {
       "dx": 1,
@@ -422,7 +422,7 @@
       "area": 0,
       "res": -6.110667527536862e-13,
       "steps": 3072,
-      "ms": 778.3433190000005
+      "ms": 838.7417260000002
     },
     {
       "dx": 0.5,
@@ -435,7 +435,7 @@
       "area": 0,
       "res": -7.247535904753022e-13,
       "steps": 6227,
-      "ms": 5787.471111000001
+      "ms": 6040.223752000001
     }
   ],
   "froude": [

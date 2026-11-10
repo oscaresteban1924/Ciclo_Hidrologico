@@ -1,0 +1,866 @@
+/* Módulo «Calidad del agua» en 3D: escena con pregunta, controles al pie y panel con pestañas. */
+
+.layout-q3 {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 31vw, 470px);
+  background: var(--paper);
+}
+.q3-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.q3-view {
+  position: relative;
+  min-height: 0;
+  display: grid;
+}
+.q3-scene {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #cfe3ee;
+}
+.q3-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
+.q3-canvas:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--focus-color, #1f6fb2);
+}
+.q3-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.q3-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  gap: 1px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(23, 50, 77, 0.88);
+  color: #fff;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(10, 30, 50, 0.22);
+  will-change: transform;
+}
+.q3-label small {
+  font-size: 0.68rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+.q3-label.is-btn {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.q3-label.is-btn:hover {
+  filter: brightness(1.08);
+}
+.q3-label.is-btn:focus-visible {
+  outline: 3px solid #ffd23f;
+}
+.q3-label.is-dato {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--ink);
+}
+.q3-label.is-ok {
+  background: rgba(37, 112, 70, 0.92);
+}
+.q3-label.is-alerta {
+  background: rgba(170, 50, 40, 0.92);
+}
+.q3-label.is-sonda {
+  background: #ffd23f;
+  color: #3a2c00;
+}
+
+/* lugares para mirar y cámara */
+.q3-views {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(251, 253, 252, 0.92);
+  box-shadow: 0 4px 14px rgba(10, 30, 50, 0.14);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+}
+.q3-views button,
+.q3-cam button {
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.q3-views button:hover,
+.q3-cam button:hover {
+  background: var(--water-wash);
+}
+.q3-views button.is-on {
+  background: var(--ink);
+  color: #fff;
+}
+.q3-cam {
+  position: absolute;
+  right: 12px;
+  top: 58px;
+  z-index: 3;
+  display: grid;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(251, 253, 252, 0.92);
+  box-shadow: 0 4px 14px rgba(10, 30, 50, 0.14);
+}
+.q3-cam button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1rem;
+}
+
+/* pregunta, tarjetas y avisos sobre la escena */
+.q3-question {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: grid;
+  gap: 3px;
+  max-width: min(440px, calc(100% - 380px));
+  padding: 10px 14px;
+  border-radius: 12px;
+  border-left: 6px solid var(--line-2);
+  background: rgba(251, 253, 252, 0.95);
+  box-shadow: 0 6px 18px rgba(10, 30, 50, 0.16);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+.q3-question strong {
+  font-size: 1.02rem;
+}
+.q3-question.is-ok {
+  border-left-color: #2f8f55;
+}
+.q3-question.is-mid {
+  border-left-color: #d4a72c;
+}
+.q3-question.is-bad {
+  border-left-color: #c9372c;
+}
+.q3-card {
+  position: absolute;
+  z-index: 3;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(251, 253, 252, 0.95);
+  box-shadow: 0 6px 18px rgba(10, 30, 50, 0.16);
+  font-size: 0.8rem;
+}
+.q3-card ul {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.q3-probe {
+  left: 12px;
+  bottom: 12px;
+  width: 232px;
+}
+.q3-probe li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0 2px 16px;
+  position: relative;
+}
+.q3-probe li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #9aa9b5;
+}
+.q3-probe li.is-ok::before {
+  background: #2f8f55;
+}
+.q3-probe li.is-mid::before {
+  background: #d4a72c;
+}
+.q3-probe li.is-bad::before {
+  background: #c9372c;
+}
+.q3-probe li span {
+  color: var(--ink-2);
+}
+.q3-legend {
+  right: 12px;
+  bottom: 12px;
+}
+.q3-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.q3-legend i {
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+}
+.q3-hover {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  z-index: 3;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(23, 50, 77, 0.88);
+  color: #fff;
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+.q3-toast {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 14px;
+  background: #fffbea;
+  border: 1px solid #ecd27a;
+  box-shadow: 0 10px 28px rgba(10, 30, 50, 0.25);
+  animation: q3-pop 0.45s ease-out;
+}
+.q3-toast div {
+  display: grid;
+}
+.q3-toast .q3-medal {
+  width: 34px;
+  height: 42px;
+}
+.q3-toast .icon-close {
+  border: 0;
+  background: transparent;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+@keyframes q3-pop {
+  from {
+    transform: translate(-50%, -14px) scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* controles al pie de la escena */
+.q3-dock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 22px;
+  padding: 10px 16px 12px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.q3-dlabel {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  margin-bottom: 4px;
+}
+.q3-choice > div,
+.q3-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  background: rgba(20, 40, 60, 0.07);
+}
+.q3-choice button,
+.q3-seg button {
+  min-height: 34px;
+  padding: 2px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.q3-choice button:hover,
+.q3-seg button:hover {
+  background: #fff;
+}
+.q3-choice button.is-on,
+.q3-seg button.is-on {
+  background: var(--ink);
+  color: #fff;
+}
+.q3-range {
+  min-width: 210px;
+}
+.q3-range label {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.q3-range output {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--water-deep);
+}
+.q3-range input {
+  width: 100%;
+  accent-color: var(--ink);
+}
+.q3-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.q3-flag {
+  min-height: 34px;
+  padding: 2px 12px 2px 30px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+  position: relative;
+}
+.q3-flag::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 4px;
+  border: 2px solid var(--ink-2);
+}
+.q3-flag.is-on {
+  background: var(--water-wash);
+  border-color: var(--water-deep);
+}
+.q3-flag.is-on::before {
+  background: var(--ink);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 2px #fff;
+}
+.q3-choice button:focus-visible,
+.q3-seg button:focus-visible,
+.q3-flag:focus-visible,
+.q3-views button:focus-visible,
+.q3-cam button:focus-visible,
+.q3-ptabs button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* panel */
+.q3-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+.q3-ptabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.q3-ptabs button {
+  flex: 1;
+  min-height: 42px;
+  padding: 4px 6px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.q3-ptabs button.is-on {
+  color: var(--ink);
+  border-bottom-color: var(--water-deep);
+}
+.q3-pscroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+}
+.q3-intro {
+  margin: 0 0 10px;
+  color: var(--ink-2);
+  font-size: 0.86rem;
+}
+.q3-medals {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.q3-medals span {
+  margin-left: 6px;
+}
+.q3-retos ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.q3-retos li {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.q3-retos li.is-done {
+  background: #fffbea;
+  border-color: #ecd27a;
+}
+.q3-retos li p {
+  margin: 3px 0;
+  font-size: 0.86rem;
+}
+.q3-progress {
+  color: var(--water-deep);
+  font-weight: 650;
+}
+.q3-progress.is-ok {
+  color: #2f8f55;
+}
+.q3-hint {
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--water-wash);
+}
+.q3-medal.is-on {
+  filter: drop-shadow(0 2px 3px rgba(185, 138, 18, 0.45));
+}
+.q3-exps h3,
+.q3-teacher h3 {
+  margin: 14px 0 8px;
+  font-size: 1rem;
+}
+.q3-exps h3:first-child,
+.q3-teacher h3:first-child {
+  margin-top: 0;
+}
+.q3-exp {
+  margin-bottom: 8px;
+}
+.q3-exp-lead {
+  margin: 8px 0;
+  font-size: 0.86rem;
+  color: var(--ink-2);
+}
+.q3-big {
+  margin: 4px 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+.q3-small {
+  margin: 6px 0;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+.q3-lens-box {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.q3-lens {
+  width: 180px;
+  height: 180px;
+}
+.q3-critters {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.q3-critters li {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.84rem;
+}
+.q3-critters small {
+  display: block;
+  color: var(--ink-2);
+}
+.q3-micro {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.q3-micro canvas {
+  width: 170px;
+  height: 170px;
+}
+.q3-jars {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.q3-jar {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: 8px;
+}
+.q3-jar.is-picked {
+  background: var(--water-wash);
+}
+.q3-jar svg {
+  width: 100%;
+  max-width: 56px;
+}
+.q3-jar-dose {
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.q3-jar-res {
+  font-size: 0.72rem;
+  color: var(--water-deep);
+  font-weight: 700;
+}
+.q3-jar .btn.small {
+  padding: 2px 8px;
+  min-height: 28px;
+  font-size: 0.72rem;
+}
+.q3-jar-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 0.84rem;
+}
+.q3-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 0.8rem;
+}
+.q3-table caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 4px;
+}
+.q3-table th,
+.q3-table td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+.q3-table th:first-child {
+  text-align: left;
+}
+.q3-teacher p,
+.q3-teacher li {
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.q3-teacher ul,
+.q3-teacher ol {
+  padding-left: 18px;
+}
+.q3-data .q3-seg {
+  margin-bottom: 8px;
+}
+.q3-nogl {
+  margin: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff5d6;
+  font-size: 0.84rem;
+}
+
+/* pantallas medianas: la pregunta debajo de los lugares para mirar */
+@media (max-width: 1180px) {
+  .q3-question {
+    top: 54px;
+    max-width: calc(100% - 80px);
+  }
+}
+/* teléfonos y tabletas en vertical: escena arriba, controles y panel debajo */
+@media (max-width: 900px) {
+  .layout-q3 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow-y: auto;
+  }
+  .q3-stage {
+    grid-template-rows: auto auto;
+  }
+  .q3-scene {
+    height: min(68vh, 560px);
+    min-height: 380px;
+  }
+  .q3-panel {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .q3-pscroll {
+    overflow: visible;
+  }
+  .q3-question {
+    top: auto;
+    bottom: 10px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+  .q3-question strong {
+    font-size: 0.9rem;
+  }
+  .q3-views {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+  }
+  .q3-cam {
+    top: 52px;
+    right: 8px;
+  }
+  .q3-probe {
+    top: 52px;
+    bottom: auto;
+    left: 8px;
+    width: 188px;
+    padding: 7px 9px;
+    font-size: 0.74rem;
+  }
+  .q3-probe ul {
+    margin: 3px 0;
+  }
+  .q3-legend {
+    display: none;
+  }
+  .q3-dock {
+    gap: 10px 14px;
+    padding: 10px 12px;
+  }
+  .q3-range {
+    min-width: 0;
+    width: 100%;
+  }
+  .q3-lens-box,
+  .q3-micro {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .q3-jars {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* tarjeta de una parte de la planta y lista de la planta de aguas residuales */
+.q3-unit {
+  right: 60px;
+  bottom: 12px;
+  width: min(330px, calc(100% - 300px));
+}
+.q3-unit p {
+  margin: 4px 0;
+  font-size: 0.82rem;
+}
+.q3-unit .icon-close {
+  float: right;
+  border: 0;
+  background: transparent;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.q3-flag.is-action {
+  padding-left: 12px;
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.q3-flag.is-action::before {
+  display: none;
+}
+.q3-ptar {
+  list-style: none;
+  margin: 6px 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+.q3-ptar li {
+  display: grid;
+  grid-template-columns: 1fr 110px 74px;
+  gap: 8px;
+  align-items: center;
+}
+.q3-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.q3-bar i {
+  display: block;
+  height: 100%;
+  background: #8a5a2b;
+}
+@media (max-width: 900px) {
+  .q3-unit {
+    right: 8px;
+    left: 8px;
+    bottom: 64px;
+    width: auto;
+  }
+}
+
+/* casas de la prueba del colorante */
+.q3-houses {
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+}
+.q3-houses button {
+  width: 100%;
+  min-height: 34px;
+  border-radius: 7px;
+  border: 1px solid var(--line-2);
+  background: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.q3-houses li.is-bad button {
+  background: #f8d9d6;
+  border-color: #c9372c;
+  color: #8a1f17;
+}
+.q3-houses li.is-ok button {
+  background: #d9efe1;
+  border-color: #2f8f55;
+  color: #1d5a35;
+}
+.q3-houses button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.q3-flag:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.q3-probe .q3-small {
+  margin: 3px 0 4px;
+}
+.q3-flag.is-plain {
+  padding-left: 12px;
+}
+.q3-flag.is-plain::before {
+  display: none;
+}
+.q3-retos .link,
+.q3-probe .link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--water-deep);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .q3-probe {
+    width: 168px;
+    font-size: 0.7rem;
+  }
+  .q3-probe ul {
+    gap: 0;
+  }
+  .q3-probe .link,
+  .q3-probe .q3-small {
+    display: none;
+  }
+}

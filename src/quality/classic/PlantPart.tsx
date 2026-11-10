@@ -2,9 +2,9 @@
 // comparado con la Resolución 2115 de 2007 (IRCA). Al final, qué pasa con el agua después de usarla.
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { Disclosure, Segmented } from '../components/ui';
-import { PTAR_STAGES, RAW_WATER, settledTurbidity, treatPlant, type RawCase } from './model';
-import { QLayout, QRange, fmt } from './ui';
+import { Disclosure, Segmented } from '../../components/ui';
+import { PTAR_STAGES, RAW_WATER, settledTurbidity, treatPlant, type RawCase } from '../model';
+import { QLayout, QRange, fmt } from '../ui';
 
 const JARS = [0, 10, 20, 30, 45, 65];
 

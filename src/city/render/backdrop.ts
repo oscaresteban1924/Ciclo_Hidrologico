@@ -40,7 +40,16 @@ export interface BackdropOpts {
   sector: SectorFit;
   /** Punto del esquema del valle donde se ubica el sector [km] (x este, y norte). */
   spot: [number, number];
+  /**
+   * Estilo maqueta (sectores con datos reales): el entorno, que es solo dibujo, se vuelve volúmenes blancos y
+   * relieve claro con curvas de nivel, y queda un poco más bajo que el sector, que se lee como un bloque de
+   * terreno recortado. Así lo real (el sector) no compite con lo ilustrativo (el valle).
+   */
+  maqueta?: boolean;
 }
+
+/** Desnivel entre el borde del sector y el entorno en el estilo maqueta [m]. */
+export const MAQUETA_DROP = 2.6;
 
 /** Lugar lejano que se puede rotular para orientarse. */
 export interface Landmark {
@@ -137,10 +146,11 @@ function lowerBound(arr: number[], v: number): number {
 }
 
 // ---------------------------------------------------------------- material de edificios (ventanas y techos)
-export function buildingMaterial(night: { value: number }, opts: { windows?: boolean; light?: boolean } = {}): THREE.MeshStandardMaterial {
+export function buildingMaterial(night: { value: number }, opts: { windows?: boolean; light?: boolean; maqueta?: boolean } = {}): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 });
   m.defines = {};
-  if (opts.windows === false) m.defines.NO_WINDOWS = '';
+  if (opts.windows === false || opts.maqueta) m.defines.NO_WINDOWS = '';
+  if (opts.maqueta) m.defines.MAQUETA = '';
   // calidad ligera: sin hiladas, rejas, marcos ni balcones (cada píxel cuesta menos)
   if (opts.light) m.defines.LIGERA = '';
   m.onBeforeCompile = (sh) => {
@@ -240,6 +250,10 @@ export function buildingMaterial(night: { value: number }, opts: { windows?: boo
             diffuseColor.rgb *= 0.7;
           }
         }
+        #endif
+        #ifdef MAQUETA
+        // volumen blanco de maqueta: techos un poco más claros que los muros
+        diffuseColor.rgb = vec3(0.9, 0.89, 0.86) * (0.95 + 0.08 * vHouse.z) * (vNObj.y > 0.5 ? 1.04 : 1.0);
         #endif`,
       )
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.78, 0.45) * lit * uNight * 0.9;');
@@ -257,6 +271,8 @@ export function buildBackdrop(opts: BackdropOpts): Backdrop {
   const textures: THREE.Texture[] = [];
   const sec = opts.sector;
   const baseY = opts.baseY;
+  const MQ = !!opts.maqueta;
+  const drop = MQ ? MAQUETA_DROP : 0;
   const [sx, sy] = opts.spot;
   const zSpot = outerZ(sx, sy);
   // altura del plano del sector en su centro, sobre el nivel base: el valle se cuelga de ese punto
@@ -423,7 +439,9 @@ export function buildBackdrop(opts: BackdropOpts): Backdrop {
   const Rn = alta ? 650 : 340; // radio del barrio con casas
   const Rm = alta ? 5000 : 2400; // radio de la ciudad con volúmenes
   const floorMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
-  if (!alta) floorMat.defines = { LIGERA: '' };
+  floorMat.defines = {};
+  if (!alta) floorMat.defines.LIGERA = '';
+  if (MQ) floorMat.defines.MAQUETA = '';
   floorMat.onBeforeCompile = (sh) => {
     sh.uniforms.uWet = wet;
     sh.uniforms.uClear = { value: new THREE.Vector2(opts.clearX, opts.clearZ) };
@@ -506,7 +524,19 @@ ${CARPET_GLSL}`)
           outCol = mix(farCol, mix(green, urbanCol, urbW), nearW);
           urbW *= nearW;
         }
-        diffuseColor.rgb = outCol;`,
+        #ifdef MAQUETA
+        // relieve de maqueta: claro, con el verde apenas insinuado donde hay bosque y curvas de nivel cada 10 m
+        float lumM = dot(outCol, vec3(0.3, 0.59, 0.11));
+        vec3 mq = mix(vec3(0.88, 0.87, 0.84), vec3(0.77, 0.81, 0.72), clamp(vVeg * 1.15, 0.0, 1.0) * 0.85);
+        mq *= 0.95 + 0.1 * (lumM - 0.35);
+        float hC = vWP.y / 10.0;
+        float lineC = 1.0 - smoothstep(0.0, 1.4 * fwidth(hC), abs(fract(hC + 0.5) - 0.5));
+        mq *= 1.0 - 0.08 * lineC * (1.0 - smoothstep(0.35, 0.9, fwidth(hC)));
+        diffuseColor.rgb = mq;
+        urbW = 0.0;
+        #else
+        diffuseColor.rgb = outCol;
+        #endif`,
       )
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.45, uWet * urbW * 0.8);');
   };
@@ -614,6 +644,7 @@ ${CARPET_GLSL}`)
     }
     const mesh = new THREE.Mesh(g, mat);
     mesh.receiveShadow = true;
+    mesh.userData.ribbon = color;
     group.add(mesh);
   };
   const river: [number, number][] = [];
@@ -821,7 +852,7 @@ ${CARPET_GLSL}`)
   }
   const box = new THREE.BoxGeometry(1, 1, 1);
   box.translate(0, 0.5, 0);
-  const bMat = buildingMaterial(night, { light: !alta });
+  const bMat = buildingMaterial(night, { light: !alta, maqueta: MQ });
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   for (const b of bs) {
     if (b.base > 0) {
@@ -857,7 +888,8 @@ ${CARPET_GLSL}`)
   group.add(...houseMeshes);
   box.dispose();
   // tanques de agua sobre las azoteas (negros y algunos azules: rasgo muy común en los barrios)
-  if (tanks.length) {
+  // (en la maqueta no van: tanques, carros y varillas serían detalle inventado que distrae)
+  if (tanks.length && !MQ) {
     const tg2 = new THREE.CylinderGeometry(0.6, 0.65, 1.1, alta ? 12 : 8);
     tg2.translate(0, 0.55, 0);
     const tm = new THREE.InstancedMesh(tg2, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.55 }), tanks.length);
@@ -867,7 +899,7 @@ ${CARPET_GLSL}`)
     });
     group.add(tm);
   }
-  if (cars.length) {
+  if (cars.length && !MQ) {
     const cgeo = new THREE.BoxGeometry(1, 1, 1);
     cgeo.translate(0, 0.5, 0);
     const cm = new THREE.InstancedMesh(cgeo, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.35, metalness: 0.25 }), cars.length);
@@ -883,7 +915,7 @@ ${CARPET_GLSL}`)
     });
     group.add(cm, top);
   }
-  if (rebar.length) {
+  if (rebar.length && !MQ) {
     const rg = new THREE.BoxGeometry(0.07, 1.1, 0.07);
     rg.translate(0, 0.55, 0);
     const rm = new THREE.InstancedMesh(rg, new THREE.MeshStandardMaterial({ color: '#4a3b33', roughness: 0.7, metalness: 0.4 }), rebar.length * 4);
@@ -1232,11 +1264,49 @@ ${CARPET_GLSL}`)
     }
   }
 
+  if (MQ) {
+    // Maqueta: todo el entorno en tonos claros y sin brillo; el agua del río, azul grisáceo; la vegetación, salvia.
+    // El grupo baja `drop` metros: el borde del sector queda como un corte de terreno a la vista.
+    const white = new THREE.Color(0.9, 0.89, 0.86), sage = new THREE.Color(0.72, 0.79, 0.66), hsl = { h: 0, s: 0, l: 0 };
+    const tone = (c: THREE.Color) => {
+      c.getHSL(hsl);
+      const veg = hsl.h > 0.17 && hsl.h < 0.47 && hsl.s > 0.2;
+      return c.copy(veg ? sage : white).multiplyScalar(0.93 + 0.12 * hsl.l);
+    };
+    const ribbonTone: Record<string, string> = { '#6b7a62': '#a9bccb', '#a19e95': '#d8d6d0', '#5f8f45': '#c3cdb8', '#4c4d51': '#cfcecb', '#55585c': '#d3d2ce', '#7a8a6e': '#cbd0c4' };
+    group.traverse((o) => {
+      if (o === terrain || o === apron || (o as THREE.Sprite).isSprite) return;
+      const mesh = o as THREE.Mesh;
+      const mat = mesh.material as THREE.MeshStandardMaterial | THREE.LineBasicMaterial | undefined;
+      if (!mat || mat === bMat) return;
+      const im = o as THREE.InstancedMesh;
+      if (im.isInstancedMesh && im.instanceColor) {
+        const c = new THREE.Color();
+        for (let i = 0; i < im.count; i++) {
+          im.getColorAt(i, c);
+          im.setColorAt(i, tone(c));
+        }
+        im.instanceColor.needsUpdate = true;
+      }
+      if (o.userData.ribbon) (mat as THREE.MeshStandardMaterial).color.set(ribbonTone[o.userData.ribbon] ?? '#d3d2ce');
+      else if ((mat as THREE.LineBasicMaterial).isLineBasicMaterial) (mat as THREE.LineBasicMaterial).color.set('#9aa0a6');
+      else if (!(im.isInstancedMesh && im.instanceColor) && (mat as THREE.MeshStandardMaterial).color) tone((mat as THREE.MeshStandardMaterial).color);
+      const sm = mat as THREE.MeshStandardMaterial;
+      if (sm.isMeshStandardMaterial) {
+        sm.metalness = 0;
+        sm.roughness = Math.max(sm.roughness, 0.85);
+        if (sm.emissive) sm.emissive.setRGB(0, 0, 0);
+      }
+    });
+    trunkM.color.set('#b8b0a4');
+    group.position.y = -drop;
+  }
+
   const farObjs: THREE.Object3D[] = [...group.children.filter((o) => o.userData.far), ...clouds];
   let detail: 1 | 2 = 2;
   return {
     group,
-    groundY: gy,
+    groundY: (x: number, z: number) => gy(x, z) - drop,
     refreshApron: buildApron,
     landmarks,
     textures,

@@ -524,10 +524,26 @@ export class CityController {
       }
     }
     const nx = -uy, ny = ux;
-    const eye: [number, number] = [x + 33 * ux + 3 * nx, y + 33 * uy + 3 * ny];
+    const sv = v as SectorScene;
+    const W = sim!.c.nx * sim!.c.dx, H = sim!.c.ny * sim!.c.dx;
+    const clampIn = (px: number, py: number): [number, number] => [Math.min(W - 1, Math.max(1, px)), Math.max(1, Math.min(H - 1, py))];
+    const eye = clampIn(x + 33 * ux + 3 * nx, y + 33 * uy + 3 * ny);
+    const tgt: [number, number, number] = [x + 2 * ux + 6.5 * nx, y + 2 * uy + 6.5 * ny, cr.bankLevel + 0.6];
+    // altura de la cámara: la que deja ver la sección por encima del terreno y de los techos que hay en medio (en
+    // las quebradas encañonadas, a 12 m sobre la orilla la ladera de aguas abajo tapaba el cauce)
+    let ez = cr.bankLevel + 12;
+    const blocks = (z0: number) => {
+      for (let t = 0.08; t < 0.92; t += 0.04) {
+        const px = eye[0] + (tgt[0] - eye[0]) * t, py = eye[1] + (tgt[1] - eye[1]) * t;
+        const lz = z0 + (tgt[2] - z0) * t;
+        if (Math.max(sv.groundAt(px, py), sv.roofAt(px, py)) + 1.2 > lz) return true;
+      }
+      return false;
+    };
+    for (let k = 0; k < 20 && blocks(ez); k++) ez += 2;
     // los árboles entre la cámara y la sección se ocultan mientras dura esta vista
-    (v as SectorScene).setTreeCutaway([eye, [x - 4 * ux, y - 4 * uy]], 6);
-    (v as SectorScene).lookFrom([eye[0], eye[1], cr.bankLevel + 12], [x + 2 * ux + 6.5 * nx, y + 2 * uy + 6.5 * ny, cr.bankLevel + 0.6]);
+    sv.setTreeCutaway([eye, [x - 4 * ux, y - 4 * uy]], 6);
+    sv.lookFrom([eye[0], eye[1], ez], tgt);
     this.notify(true);
   }
   isFlying(): boolean {

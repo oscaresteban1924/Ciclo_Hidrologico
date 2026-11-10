@@ -3,11 +3,11 @@
 // los bichos que viven debajo.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Disclosure, Segmented, Toggle } from '../components/ui';
-import { useStore } from '../state/store';
-import { CritterGlyph } from './Glyphs';
-import { BMWP_CLASSES, DEFAULT_CREEK, PERSONS_PER_HOUSE, SWIM, TREATMENTS, bmwp, canSwim, creekModel, doSat, stoneSample, type CreekInput, type Reading, type Season, type Slope, type Treatment } from './model';
-import { ProfileChart, QLayout, QRange, fmt, fmtBig } from './ui';
+import { Disclosure, Segmented, Toggle } from '../../components/ui';
+import { useStore } from '../../state/store';
+import { CritterGlyph } from '../Glyphs';
+import { BMWP_CLASSES, DEFAULT_CREEK, PERSONS_PER_HOUSE, SWIM, TREATMENTS, bmwp, canSwim, creekModel, doSat, stoneSample, type CreekInput, type Reading, type Season, type Slope, type Treatment } from '../model';
+import { ProfileChart, QLayout, QRange, fmt, fmtBig } from '../ui';
 
 const X_MIN = -400, X_MAX = 3000, OUT_SX = 250;
 /** Posición en el dibujo (0–1000) para una distancia a lo largo de la quebrada [m]. */

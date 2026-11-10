@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**8 de 8 cumplen.**
+**12 de 12 cumplen.**
 
 ## Q1. Oxígeno disuelto de saturación y altitud de Medellín — cumple
 
@@ -43,3 +43,23 @@ Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes 
 
 - Tolerancia: con 7 días secos y 15 mm de lluvia, la masa arrastrada es B·(1 − e^(−0,18·15)) (error < 10⁻⁹ kg); la concentración baja minuto a minuto (primer lavado) y los primeros 10 mm llevan más de 80 %; el barrido reduce la mugre a la mitad; 3 casas con conexión errada vierten 1,224 m³ de agua residual al día
 - Medido: arrastrado 26.282 kg (a mano 26.282); primeros 10 mm: 89.5 %; concentración del minuto 1 al 30: 4491 → 330 mg/L; con barrido 13.141 kg; conexiones erradas 1.224 m³/día
+
+## Q9. Peces de la escena: oxígeno de al menos 5 mg/L y DBO5 de 6 mg/L o menos — cumple
+
+- Tolerancia: la regla acepta exactamente los bordes (5 mg/L y 6 mg/L) y rechaza lo que pasa de ellos; en verano con 600 casas: sin tratar y con tanque séptico no hay peces junto al tubo (B); con planta pequeña o alcantarillado hay peces en las cuatro estaciones; arriba del tubo (A) siempre hay
+- Medido: bordes correctos; estaciones con peces (de 4): directo 1, séptico 1, planta 4, alcantarillado 4; DBO5 en B: 17.5 / 11.1 / 3.0 / 1.5 mg/L
+
+## Q10. Escala del dibujo de la quebrada (comprimida aguas abajo) — cumple
+
+- Tolerancia: ida y vuelta entre metros y dibujo con error < 10⁻⁹ m en −400 a 3 000 m, y el orden de los puntos se conserva (las estaciones y la sonda caen donde corresponde)
+- Medido: error máximo 1.1e-13 m; orden conservado; 600 m → 89.4, 2 500 m → 182.6 unidades
+
+## Q11. Casas mal conectadas del juego del colorante — cumple
+
+- Tolerancia: con k casas pedidas hay exactamente k (de 0 a 20), siempre las mismas en cada visita, y al subir k se agregan casas sin cambiar las anteriores
+- Medido: tamaños correctos; anidadas sí; deterministas sí; con 3: casas 15, 13, 19
+
+## Q12. Partículas, bacterias y bastoncitos del dibujo — cumple
+
+- Tolerancia: el número dibujado nunca baja cuando sube la turbiedad o el conteo; sin bacterias no se dibuja ninguna; con la dosis justa y 1,3 mg/L de cloro el vaso de la llave queda sin bacterias y con 0 mg/L sí tiene
+- Medido: partículas no decrecientes; bacterias no decrecientes; bastoncitos no decrecientes; vaso con cloro justo: 0 (IRCA 0 %); sin cloro: 5

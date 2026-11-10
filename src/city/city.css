@@ -242,69 +242,161 @@
   color: var(--water-deep) !important;
 }
 
-.city-viewbar {
-  top: 12px;
-  right: 12px;
-  padding: 4px;
-  max-width: min(312px, 50%);
-}
-.city-viewbar > summary {
-  cursor: pointer;
-  font-weight: 700;
-  padding: 4px 8px;
-  list-style: none;
-}
-.vb-short {
-  display: none;
-}
-@media (max-width: 1180px) {
-  .vb-long {
-    display: none;
-  }
-  .vb-short {
-    display: inline;
-  }
-}
-.city-viewbar > summary::-webkit-details-marker {
-  display: none;
-}
-.city-viewbar > summary::after {
-  content: ' ▾';
-}
-.city-viewbar[open] > summary::after {
-  content: ' ▴';
-}
-.vb-group {
+/* Qué mostrar (vistas) y capas: una sola fila compacta arriba a la derecha */
+.city-modes {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 3px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
 }
-.vb-group + .vb-group {
-  border-top: 1px solid var(--line);
+.vm-group {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: calc(var(--r-s) + 2px);
+  background: rgba(20, 40, 60, 0.06);
 }
-.vb {
-  min-height: 32px;
-  min-width: 32px;
-  padding: 2px 8px;
+.vm {
+  min-height: 34px;
+  padding: 2px 10px;
   border-radius: var(--r-s);
-  border: 1px solid var(--line-2);
-  background: #fff;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
   cursor: pointer;
 }
-.vb:hover {
-  border-color: var(--ink-2);
+.vm:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--line-2);
 }
-.vb.is-on {
+.vm.is-on {
   background: var(--ink);
   color: #fff;
   border-color: var(--ink);
 }
-.vb:focus-visible,
+.vm-layers {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: var(--line-2);
+  background: #fff;
+}
+.vm-layers::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.vm-layers.is-open::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.vm-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--water-wash);
+  color: var(--water-deep);
+  font-size: 0.72rem;
+  line-height: 18px;
+  text-align: center;
+}
+.vm-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  gap: 2px;
+  width: 290px;
+  padding: 6px;
+  background: rgba(251, 253, 252, 0.98);
+  border: 1px solid var(--line);
+  border-radius: var(--r-m);
+  box-shadow: 0 10px 26px rgba(10, 30, 50, 0.2);
+}
+.vm-layer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--r-s);
+  cursor: pointer;
+}
+.vm-layer:hover {
+  background: var(--water-wash);
+}
+.vm-layer input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+  flex: none;
+}
+.vm-layer span {
+  display: grid;
+  gap: 1px;
+}
+.vm-layer strong {
+  font-size: 0.84rem;
+}
+.vm-layer small {
+  color: var(--ink-2);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+.vm-select {
+  display: none;
+  min-height: 34px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-s);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+/* Cámara: columna de íconos en el borde derecho */
+.city-camrail {
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+}
+.cam-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--r-s);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.cam-btn:hover {
+  background: var(--water-wash);
+}
+.cam-sep {
+  width: 22px;
+  height: 1px;
+  margin: 3px 0;
+  background: var(--line);
+}
+.vm:focus-visible,
+.cam-btn:focus-visible,
+.vm-layer:focus-within,
 .city-tabs button:focus-visible,
 .tool-card:focus-visible,
 .mission-card:focus-visible {
@@ -499,7 +591,7 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  z-index: 3;
+  z-index: 6;
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -511,9 +603,7 @@
   inset: auto;
   pointer-events: auto;
 }
-.city-topright > .city-viewbar {
-  max-width: 312px;
-}
+
 .city-peek {
   display: inline-flex;
   align-items: center;
@@ -1107,19 +1197,38 @@
   .city-crumb > span.kind {
     display: none;
   }
-  .city-viewbar {
-    top: 8px;
-    right: 8px;
-    max-width: calc(100% - 16px);
-  }
   .city-topright {
     top: 8px;
     right: 8px;
     max-width: calc(100% - 16px);
     gap: 6px;
   }
-  .city-topright > .city-viewbar {
-    max-width: calc(100vw - 72px);
+  /* en pantallas angostas las cuatro vistas pasan a una lista desplegable y la cámara a una fila abajo */
+  .vm-group {
+    display: none;
+  }
+  .vm-select {
+    display: block;
+  }
+  .vm-pop {
+    width: min(290px, calc(100vw - 24px));
+  }
+  .city-camrail {
+    left: 8px;
+    right: auto;
+    top: auto;
+    bottom: 84px;
+    transform: none;
+    flex-direction: row;
+  }
+  .cam-sep {
+    width: 1px;
+    height: 22px;
+    margin: 0 3px;
+  }
+  .cam-btn {
+    width: 34px;
+    height: 34px;
   }
   /* en el celular, «Mostrar panel» queda solo con su ícono */
   .city-peek {

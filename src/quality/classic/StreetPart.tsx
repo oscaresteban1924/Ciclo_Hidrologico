@@ -2,11 +2,11 @@
 // basura que llega a los sumideros y las conexiones erradas que llevan agua sucia a la quebrada.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Disclosure, Segmented, Toggle } from '../components/ui';
-import { setCityIntent } from '../city/intent';
-import { useStore } from '../state/store';
-import { STREET, buildup, washoff, type StreetInput } from './model';
-import { ProfileChart, QLayout, QRange, fmt } from './ui';
+import { Disclosure, Segmented, Toggle } from '../../components/ui';
+import { setCityIntent } from '../../city/intent';
+import { useStore } from '../../state/store';
+import { STREET, buildup, washoff, type StreetInput } from '../model';
+import { ProfileChart, QLayout, QRange, fmt } from '../ui';
 
 export function StreetPart({ head }: { head: ReactNode }) {
   const { state, dispatch } = useStore();

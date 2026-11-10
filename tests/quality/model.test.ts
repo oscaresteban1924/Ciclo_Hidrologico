@@ -24,6 +24,10 @@ import {
   washoff,
   type CreekInput,
 } from '../../src/quality/model';
+import { FISH, STATIONS, fishOk, uOf, xOf } from '../../src/quality/three/creekWorld';
+import { rodsFor } from '../../src/quality/three/kit';
+import { bugsFor, partsFor } from '../../src/quality/three/plantWorld';
+import { wrongSet } from '../../src/quality/three/streetWorld';
 
 interface Result { id: string; name: string; tolerance: string; measured: string; pass: boolean }
 const results: Result[] = [];
@@ -189,6 +193,65 @@ const f = (v: number, d = 2) => v.toFixed(d);
     tolerance: 'con 7 días secos y 15 mm de lluvia, la masa arrastrada es B·(1 − e^(−0,18·15)) (error < 10⁻⁹ kg); la concentración baja minuto a minuto (primer lavado) y los primeros 10 mm llevan más de 80 %; el barrido reduce la mugre a la mitad; 3 casas con conexión errada vierten 1,224 m³ de agua residual al día',
     measured: `arrastrado ${f(w.totalKg, 3)} kg (a mano ${f(hand, 3)}); primeros 10 mm: ${f(w.firstFlushPct, 1)} %; concentración del minuto 1 al 30: ${Math.round(w.conc[0])} → ${Math.round(w.conc[w.conc.length - 1])} mg/L; con barrido ${f(swept.totalKg, 3)} kg; conexiones erradas ${f(w.sewageM3, 3)} m³/día`,
     pass: Math.abs(w.totalKg - hand) < 1e-9 && decreasing && w.firstFlushPct > 80 && Math.abs(swept.totalKg / w.totalKg - 0.5) < 1e-9 && Math.abs(w.sewageM3 - 1.224) < 1e-9,
+  });
+}
+
+// Q9) Peces en la escena 3D: la regla y el reto «Que vuelvan los peces» tienen solución
+{
+  const at = (t: CreekInput['treatment'], season: CreekInput['season']) => STATIONS.map((s) => creekModel({ ...DEFAULT_CREEK, houses: 600, treatment: t, season }).at(s.x));
+  const edges = fishOk({ dissolvedO2: FISH.minDO, dbo: FISH.maxDBO }) && !fishOk({ dissolvedO2: FISH.minDO - 0.01, dbo: 1 }) && !fishOk({ dissolvedO2: 9, dbo: FISH.maxDBO + 0.01 });
+  const raw = at('ninguno', 'verano'), sep = at('septico', 'verano'), ptar = at('ptar', 'verano'), sew = at('alcantarillado', 'verano');
+  const cnt = (rs: ReturnType<typeof at>) => rs.filter(fishOk).length;
+  record({
+    id: 'Q9',
+    name: 'Peces de la escena: oxígeno de al menos 5 mg/L y DBO5 de 6 mg/L o menos',
+    tolerance: 'la regla acepta exactamente los bordes (5 mg/L y 6 mg/L) y rechaza lo que pasa de ellos; en verano con 600 casas: sin tratar y con tanque séptico no hay peces junto al tubo (B); con planta pequeña o alcantarillado hay peces en las cuatro estaciones; arriba del tubo (A) siempre hay',
+    measured: `bordes ${edges ? 'correctos' : 'INCORRECTOS'}; estaciones con peces (de 4): directo ${cnt(raw)}, séptico ${cnt(sep)}, planta ${cnt(ptar)}, alcantarillado ${cnt(sew)}; DBO5 en B: ${raw.map((r) => f(r.dbo, 1))[1]} / ${f(sep[1].dbo, 1)} / ${f(ptar[1].dbo, 1)} / ${f(sew[1].dbo, 1)} mg/L`,
+    pass: edges && !fishOk(raw[1]) && !fishOk(sep[1]) && cnt(ptar) === 4 && cnt(sew) === 4 && [raw, sep, ptar, sew].every((rs) => fishOk(rs[0])),
+  });
+}
+
+// Q10) Dibujo de la quebrada: la distancia comprimida se invierte sin error y conserva el orden
+{
+  const xs = [-400, -150, -1, 0, 1, 30, 350, 600, 2500, 3000];
+  const err = Math.max(...xs.map((x) => Math.abs(xOf(uOf(x)) - x)));
+  const mono = xs.every((x, i) => i === 0 || uOf(x) > uOf(xs[i - 1]));
+  record({
+    id: 'Q10',
+    name: 'Escala del dibujo de la quebrada (comprimida aguas abajo)',
+    tolerance: 'ida y vuelta entre metros y dibujo con error < 10⁻⁹ m en −400 a 3 000 m, y el orden de los puntos se conserva (las estaciones y la sonda caen donde corresponde)',
+    measured: `error máximo ${err.toExponential(1)} m; orden ${mono ? 'conservado' : 'ALTERADO'}; 600 m → ${f(uOf(600), 1)}, 2 500 m → ${f(uOf(2500), 1)} unidades`,
+    pass: err < 1e-9 && mono,
+  });
+}
+
+// Q11) Conexiones erradas del juego del colorante
+{
+  const sets = [...Array(21).keys()].map((k) => wrongSet(k));
+  const sizes = sets.every((s, k) => s.size === k);
+  const nested = sets.every((s, k) => k === 0 || [...sets[k - 1]].every((i) => s.has(i)));
+  const same = [...wrongSet(5)].join() === [...wrongSet(5)].join();
+  record({
+    id: 'Q11',
+    name: 'Casas mal conectadas del juego del colorante',
+    tolerance: 'con k casas pedidas hay exactamente k (de 0 a 20), siempre las mismas en cada visita, y al subir k se agregan casas sin cambiar las anteriores',
+    measured: `tamaños ${sizes ? 'correctos' : 'INCORRECTOS'}; anidadas ${nested ? 'sí' : 'NO'}; deterministas ${same ? 'sí' : 'NO'}; con 3: casas ${[...wrongSet(3)].map((i) => i + 1).join(', ')}`,
+    pass: sizes && nested && same,
+  });
+}
+
+// Q12) Partículas y bacterias dibujadas siguen el cálculo
+{
+  const grid = [0, 0.4, 1, 3, 10, 30, 100, 300, 1e3, 1e4, 1e5, 1e6];
+  const nd = (fn: (v: number) => number) => grid.every((v, i) => i === 0 || fn(v) >= fn(grid[i - 1]));
+  const best = treatPlant({ raw: 'lluvia', dose: optimumDose(RAW_WATER.lluvia.turbidity), chlorine: 1.3 });
+  const none = treatPlant({ raw: 'lluvia', dose: optimumDose(RAW_WATER.lluvia.turbidity), chlorine: 0 });
+  record({
+    id: 'Q12',
+    name: 'Partículas, bacterias y bastoncitos del dibujo',
+    tolerance: 'el número dibujado nunca baja cuando sube la turbiedad o el conteo; sin bacterias no se dibuja ninguna; con la dosis justa y 1,3 mg/L de cloro el vaso de la llave queda sin bacterias y con 0 mg/L sí tiene',
+    measured: `partículas ${nd(partsFor) ? 'no decrecientes' : 'DECRECEN'}; bacterias ${nd(bugsFor) ? 'no decrecientes' : 'DECRECEN'}; bastoncitos ${nd(rodsFor) ? 'no decrecientes' : 'DECRECEN'}; vaso con cloro justo: ${bugsFor(best.coliTotalTap)} (IRCA ${f(best.irca, 0)} %); sin cloro: ${bugsFor(none.coliTotalTap)}`,
+    pass: nd(partsFor) && nd(bugsFor) && nd(rodsFor) && bugsFor(0) === 0 && rodsFor(0) === 0 && bugsFor(best.coliTotalTap) === 0 && best.irca < 0.5 && bugsFor(none.coliTotalTap) > 0,
   });
 }
 

@@ -90,6 +90,7 @@ export class SectorScene {
   private cutOnly = new Set<string>();
   private gardenGroup = new THREE.Group();
   private arrows: THREE.InstancedMesh;
+  private arrowHalo: THREE.InstancedMesh;
   readonly fx: StormFx;
   private tracerFx = new TracerFx();
   private highlight: THREE.Mesh;
@@ -229,11 +230,12 @@ export class SectorScene {
       sh.uniforms.uOrtho = this.orthoU.uOrtho;
       sh.uniforms.uOrthoOn = this.orthoU.uOrthoOn;
       sh.uniforms.uOrthoBox = this.orthoU.uOrthoBox;
+      sh.uniforms.uReal = { value: this.sc.provenance.kind === 'datos-reales' ? 1 : 0 };
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute float aPat;\nattribute float aTop;\nvarying float vPat;\nvarying float vTop;\nvarying vec3 vWPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPat = aPat;\nvTop = aTop;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+        .replace('#include <common>', '#include <common>\nattribute float aPat;\nattribute float aTop;\nattribute float aCut;\nvarying float vPat;\nvarying float vTop;\nvarying float vCut;\nvarying vec3 vWPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPat = aPat;\nvTop = aTop;\nvCut = aCut;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uPat;\nuniform float uWet;\nuniform float uWetTrail;\nuniform sampler2D uField;\nuniform vec2 uHalf;\nuniform vec4 uRainGeo;\nuniform sampler2D uOrtho;\nuniform float uOrthoOn;\nuniform vec4 uOrthoBox;\nvarying float vPat;\nvarying float vTop;\nvarying vec3 vWPos;')
+        .replace('#include <common>', '#include <common>\nuniform float uPat;\nuniform float uWet;\nuniform float uWetTrail;\nuniform sampler2D uField;\nuniform vec2 uHalf;\nuniform vec4 uRainGeo;\nuniform sampler2D uOrtho;\nuniform float uOrthoOn;\nuniform vec4 uOrthoBox;\nuniform float uReal;\nvarying float vPat;\nvarying float vTop;\nvarying float vCut;\nvarying vec3 vWPos;\nfloat th21(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }')
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
@@ -241,7 +243,26 @@ export class SectorScene {
           // interiores, más oscuros; el corte del borde de la maqueta conserva el color del suelo
           if (uOrthoOn > 0.5 && vTop > 0.25) {
             vec2 ouv = (vec2(vWPos.x + uHalf.x, uHalf.y - vWPos.z) - uOrthoBox.xy) / (uOrthoBox.zw - uOrthoBox.xy);
-            if (ouv.x >= 0.0 && ouv.x <= 1.0 && ouv.y >= 0.0 && ouv.y <= 1.0) diffuseColor.rgb = texture2D(uOrtho, ouv).rgb * (vTop > 0.75 ? 1.0 : 0.7);
+            if (ouv.x >= 0.0 && ouv.x <= 1.0 && ouv.y >= 0.0 && ouv.y <= 1.0) {
+              // en los taludes muy empinados la foto (tomada desde arriba) se estira en vertical: allí se usa una versión
+              // suavizada y algo de tierra, en vez de rayas
+              vec3 nW = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
+              float steep = smoothstep(0.55, 0.85, 1.0 - abs(nW.y));
+              vec3 oc = mix(texture2D(uOrtho, ouv).rgb, texture2D(uOrtho, ouv, 3.0).rgb * vec3(0.95, 0.9, 0.85), steep);
+              diffuseColor.rgb = oc * (vTop > 0.75 ? 1.0 : 0.7);
+            }
+          }
+          // sector real: los pocos saltos que quedan como escalón (muros y taludes) se ven como tierra y concreto
+          // gastado, no como la foto aérea estirada en vertical
+          if (uReal > 0.5 && vTop > 0.25 && vTop < 0.75) diffuseColor.rgb = vec3(0.5, 0.47, 0.43) * (0.9 + 0.16 * th21(floor(vWPos.xz * 2.0 + vWPos.y)));
+          // corte de la maqueta: capas del suelo según la profundidad bajo la superficie (capa vegetal, suelo,
+          // suelo residual rojizo de las laderas del valle y roca meteorizada), con la arista superior marcada
+          if (vTop < 0.25) {
+            float dC = vCut + 0.12 * sin(vWPos.x * 0.83 + vWPos.z * 0.61) + 0.08 * sin(vWPos.x * 2.3 - vWPos.z * 1.7);
+            vec3 sl = dC < 0.3 ? vec3(0.36, 0.27, 0.19) : dC < 1.4 ? vec3(0.58, 0.42, 0.28) : dC < 3.6 ? vec3(0.74, 0.47, 0.3) : vec3(0.66, 0.58, 0.5);
+            float grain = 0.9 + 0.16 * th21(floor(vec2(vWPos.x + vWPos.z, vWPos.y) * vec2(3.0, 5.0)));
+            diffuseColor.rgb = sl * grain * mix(1.0, 0.86, smoothstep(0.0, 8.0, vCut));
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.84), 1.0 - smoothstep(0.0, 0.06, vCut));
           }
           if (uPat > 0.5) {
             vec2 p = vWPos.xz;
@@ -283,6 +304,15 @@ export class SectorScene {
     this.arrows.frustumCulled = false;
     this.arrows.renderOrder = 4;
     this.scene.add(this.arrows);
+    // contorno oscuro (la misma flecha, más grande, debajo): se lee sobre agua clara, foto aérea y concreto
+    const halo = ag.clone();
+    halo.scale(1.28, 1, 1.7);
+    this.arrowHalo = new THREE.InstancedMesh(halo, new THREE.MeshBasicMaterial({ color: '#0f2235', transparent: true, opacity: 0.55, depthWrite: false }), 900);
+    this.arrowHalo.count = 0;
+    this.arrowHalo.frustumCulled = false;
+    this.arrowHalo.renderOrder = 3;
+    this.arrowHalo.instanceMatrix = this.arrows.instanceMatrix;
+    this.scene.add(this.arrowHalo);
 
     // Trazadores (estelas, gotas y marcas de destino)
     this.scene.add(this.tracerFx.group);
@@ -297,6 +327,9 @@ export class SectorScene {
 
     this.scene.add(this.buildingsGroup, this.decorGroup, this.drainGroup, this.pipeGroup, this.probeGroup, this.gardenGroup, this.sewerOver, this.floodGroup);
     this.setCompiled(c);
+    // sectores reales: sobre la foto aérea el agua turbia (café) casi no se distingue del suelo; por eso empiezan
+    // con el agua en azul (se puede cambiar en «Capas»)
+    if (sc.provenance.kind === 'datos-reales') this.waterBlue = true;
     this.goto('general', false);
     this.resize();
   }
@@ -352,7 +385,11 @@ export class SectorScene {
       // su pendiente cerca y una franja de unión con la altura exacta de su borde, sin escalón.
       const fit = this.sectorFit();
       this.fitA = fit.sector.plane.a;
-      this.backdrop = buildBackdrop({ baseY: fit.baseY, clearX: this.W / 2 + 4, clearZ: this.H / 2 + 4, quality: this.quality, sector: fit.sector, spot: this.spot() });
+      // sectores con datos reales: entorno en estilo maqueta (volúmenes blancos, más bajo que el sector) y una
+      // franja libre de casas alrededor del bloque, para que el corte del terreno se lea
+      const real = this.sc.provenance.kind === 'datos-reales';
+      const m = real ? 14 : 4;
+      this.backdrop = buildBackdrop({ baseY: fit.baseY, clearX: this.W / 2 + m, clearZ: this.H / 2 + m, quality: this.quality, sector: fit.sector, spot: this.spot(), maqueta: real });
       this.scene.add(this.backdrop.group);
       this.textures.push(...this.backdrop.textures);
     } else this.backdrop?.refreshApron();
@@ -395,7 +432,7 @@ export class SectorScene {
     const rt = new THREE.WebGLCubeRenderTarget(res, { type: THREE.HalfFloatType });
     const cc = new THREE.CubeCamera(1, 9000, rt);
     cc.position.set(0, this.fitA + 2.5, 0);
-    const hide: THREE.Object3D[] = [this.water, this.arrows, this.tracerFx.group, this.highlight, this.pipeGroup];
+    const hide: THREE.Object3D[] = [this.water, this.arrows, this.arrowHalo, this.tracerFx.group, this.highlight, this.pipeGroup];
     const was = hide.map((o) => o.visible);
     hide.forEach((o) => (o.visible = false));
     this.fx.setCaptureMode(true);
@@ -442,8 +479,14 @@ export class SectorScene {
     const N = nx * ny;
     const off = new Float64Array(N);
     for (let k = 0; k < N; k++) off[k] = c.z[k] - c.zGround[k];
-    const wallTol = 0.35 * Math.max(1, c.dx);
-    const conn = (k: number, n: number) => !c.solid[n] && Math.abs(c.zGround[k] - c.zGround[n]) < wallTol && Math.abs(off[k] - off[n]) < 0.02 && (c.garden[k] >= 0) === (c.garden[n] >= 0);
+    // En los sectores didácticos los bordillos, lotes y muros (desniveles de pocos centímetros) se conservan como
+    // escalones. En los sectores reales el terreno viene de un modelo de elevación de 1 m sobre laderas empinadas:
+    // dos celdas vecinas difieren a menudo en más de medio metro sin que haya un muro, y dibujarlas como escalones
+    // convertía la ladera en una escalera de bloques. Allí solo se conservan como escalones los saltos mayores
+    // que una pendiente de ≈ 60° (muros y taludes cortados).
+    const real = this.sc.provenance.kind === 'datos-reales';
+    const wallTol = (real ? 1.7 : 0.35) * Math.max(1, c.dx);
+    const conn = (k: number, n: number, diag: boolean) => !c.solid[n] && Math.abs(c.zGround[k] - c.zGround[n]) < wallTol * (diag ? 1.45 : 1) && Math.abs(off[k] - off[n]) < 0.02 && (c.garden[k] >= 0) === (c.garden[n] >= 0);
     // esquinas: 0 = (x0,y0), 1 = (x1,y0), 2 = (x1,y1), 3 = (x0,y1)
     const nb = new Int32Array(N * 16).fill(-1);
     const cz = new Float32Array(N * 4);
@@ -462,7 +505,7 @@ export class SectorScene {
           const ii = i + di, jj = j + dj;
           if (ii < 0 || jj < 0 || ii >= nx || jj >= ny) continue;
           const n = jj * nx + ii;
-          if (c.solid[k] || !conn(k, n)) continue;
+          if (c.solid[k] || !conn(k, n, di !== 0 && dj !== 0)) continue;
           sz += c.zGround[n];
           cnt++;
           nb[k * 16 + q * 4 + m++] = n;
@@ -484,13 +527,15 @@ export class SectorScene {
     const mat: number[] = [];
     const pat: number[] = [];
     const top: number[] = [];
+    const cut: number[] = [];
     const idx: number[] = [];
     const coverRgb = COVER_LIST.map((id) => hexToRgb(COVERS[id].color));
     const matRgb = COVER_LIST.map((id) => hexToRgb(COVERS[id].matColor));
     const patOf = COVER_LIST.map((id) => PATTERN_ID[COVERS[id].pattern]);
-    const quad = (a: THREE.Vector3, b: THREE.Vector3, cc: THREE.Vector3, d: THREE.Vector3, rgb: number[], mrgb: number[], p: number, shade: number, bottomShade = shade, isTop = 0) => {
+    const quad = (a: THREE.Vector3, b: THREE.Vector3, cc: THREE.Vector3, d: THREE.Vector3, rgb: number[], mrgb: number[], p: number, shade: number, bottomShade = shade, isTop = 0, cuts: number[] = [0, 0, 0, 0]) => {
       const base = pos.length / 3;
       for (const q of [a, b, cc, d]) pos.push(q.x, q.y, q.z);
+      cut.push(...cuts);
       for (let q = 0; q < 4; q++) {
         const sh = q < 2 ? shade : bottomShade;
         col.push(rgb[0] * sh, rgb[1] * sh, rgb[2] * sh);
@@ -543,7 +588,8 @@ export class SectorScene {
           // escalón interior: cara hacia la celda vecina más baja (orden antihorario visto desde afuera; antes
           // quedaba al revés y se descartaba, y por el hueco se veía el cielo); el corte del borde de la maqueta
           // conserva su orden
-          if (edge) quad(P[qa], P[qb], this.w(bx, by, zb), this.w(ax, ay, za), wrgb, soil, 0, 0.95, 0.45, 0);
+          // corte del borde: profundidad bajo la superficie en cada vértice (capas del suelo en el sombreador)
+          if (edge) quad(P[qa], P[qb], this.w(bx, by, zb), this.w(ax, ay, za), wrgb, soil, 0, 0.95, 0.45, 0, [0, 0, cz[k * 4 + qb] - zb, cz[k * 4 + qa] - za]);
           else quad(P[qb], P[qa], this.w(ax, ay, za), this.w(bx, by, zb), wrgb, mrgb, 0, 0.78, 0.7, 0.5);
         }
       }
@@ -554,6 +600,7 @@ export class SectorScene {
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     g.setAttribute('aPat', new THREE.Float32BufferAttribute(pat, 1));
     g.setAttribute('aTop', new THREE.Float32BufferAttribute(top, 1));
+    g.setAttribute('aCut', new THREE.Float32BufferAttribute(cut, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
     this.terrainColors = { real: Float32Array.from(colors), mat: new Float32Array(mat) };
@@ -808,6 +855,7 @@ export class SectorScene {
       };
     }
     const atlas = this.atlas!;
+    const realSector = sc.provenance.kind === 'datos-reales';
     type Geo = { pos: number[]; uv: number[]; col: number[]; nrm: number[]; idx: number[] };
     const geo = (): Geo => ({ pos: [], uv: [], col: [], nrm: [], idx: [] });
     const walls: Geo[] = [geo(), geo(), geo()]; // 0 fachadas de barrio · 1 pañete (institucional) · 2 vidrio (torres)
@@ -938,7 +986,10 @@ export class SectorScene {
               } else if (f === 0) {
                 if (m === doorAt) id = `${P}Door` as TileId;
                 else {
-                  const opts: TileId[] = P === 'b' ? ['bShopA', 'bShopB', 'bShutA', 'bShutB', 'bGarage', 'bWinLow', 'bDoor'] : ['pShopA', 'pShopB', 'pShopC', 'pShutA', 'pShutB', 'pGarage', 'pWinLow', 'pDoor'];
+                  // en los sectores reales no se pintan locales con nombre (serían negocios inventados en casas reales)
+                  const opts: TileId[] = realSector
+                    ? P === 'b' ? ['bGarage', 'bWinLow', 'bWinLow', 'bDoor'] : ['pGarage', 'pWinLow', 'pWinLow', 'pDoor']
+                    : P === 'b' ? ['bShopA', 'bShopB', 'bShutA', 'bShutB', 'bGarage', 'bWinLow', 'bDoor'] : ['pShopA', 'pShopB', 'pShopC', 'pShutA', 'pShutB', 'pGarage', 'pWinLow', 'pDoor'];
                   id = opts[Math.floor(rnd() * opts.length)];
                 }
               } else {
@@ -1898,6 +1949,7 @@ export class SectorScene {
       this.lastArrowT = sim.t;
     }
     this.arrows.visible = this.showArrows && this.view !== 'resultados' && this.view !== 'peligro';
+    this.arrowHalo.visible = this.arrows.visible;
     if ((this.view === 'resultados' || this.view === 'peligro') && (this.lastResultsT < 0 || Math.abs(sim.t - this.lastResultsT) > 5)) {
       this.updateResults(sim);
       this.lastResultsT = sim.t;
@@ -1995,8 +2047,10 @@ export class SectorScene {
   }
 
   private updateArrows(sim: CitySim): void {
-    const stride = Math.max(2, Math.round(2.5 / sim.c.dx));
-    const arrows = flowArrows(sim, stride, 0.003, 0.03);
+    // flechas solo donde el agua corre de verdad (lámina de ≥ 6 mm y ≥ 0,1 m/s), cada ≈ 3 m: la película fina
+    // que cubre la ladera con la lluvia no lleva flecha (eran cientos de rayitas que no decían nada)
+    const stride = Math.max(2, Math.round(3 / sim.c.dx));
+    const arrows = flowArrows(sim, stride, 0.006, 0.1);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
     let n = 0;
@@ -2012,6 +2066,7 @@ export class SectorScene {
       this.arrows.setMatrixAt(n++, m4);
     }
     this.arrows.count = n;
+    this.arrowHalo.count = n;
     this.arrows.instanceMatrix.needsUpdate = true;
   }
 
@@ -2049,7 +2104,10 @@ export class SectorScene {
       // desde el oriente (ladera abajo), mirando hacia la montaña: se ven el sector completo y el barrio
       // que sube detrás, como se ven las laderas de Medellín desde el valle
       // la cámara mira poco inclinada: arriba se ven la ladera que sube detrás y las montañas del valle
-      to = { p: new THREE.Vector3(span * 1.25, this.fitA + span * 0.42, span * 0.68), t: new THREE.Vector3(-span * 0.12, this.fitA + span * 0.08, -span * 0.05) };
+      // en los sectores reales (maqueta recortada) la cámara se acerca: el bloque llena la vista y el entorno blanco
+      // queda como marco
+      if (this.sc.provenance.kind === 'datos-reales') to = { p: new THREE.Vector3(span * 0.86, this.fitA + span * 0.56, span * 0.6), t: new THREE.Vector3(-span * 0.04, this.fitA - span * 0.02, -span * 0.02) };
+      else to = { p: new THREE.Vector3(span * 1.25, this.fitA + span * 0.42, span * 0.68), t: new THREE.Vector3(-span * 0.12, this.fitA + span * 0.08, -span * 0.05) };
     }
     if (!this.home) this.home = { p: to.p.clone(), t: to.t.clone() };
     if (!animate || this.reducedMotion) {

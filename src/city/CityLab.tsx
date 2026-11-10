@@ -422,6 +422,7 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
         {api.panelHidden && <PanelPeek api={api} />}
         <ViewBar api={api} />
       </div>
+      <CameraRail api={api} />
       <div className="city-ov city-simbar" role="group" aria-label="Control de la simulación">
         {ctrl.status !== 'corriendo' ? (
           <button
@@ -520,55 +521,180 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
   );
 }
 
+/** Íconos de la barra de cámara (trazos simples, 20×20). */
+function CamIcon({ name }: { name: 'mas' | 'menos' | 'izq' | 'der' | 'arriba' | 'calle' | 'valle' | 'inicio' }) {
+  const st = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  const d: Record<typeof name, ReactNode> = {
+    mas: <path d="M10 4.5 V15.5 M4.5 10 H15.5" {...st} strokeWidth={2.3} />,
+    menos: <path d="M4.5 10 H15.5" {...st} strokeWidth={2.3} />,
+    izq: (
+      <g {...st}>
+        <path d="M15.5 10 A5.5 5.5 0 1 1 10 4.5 H12" />
+        <path d="M10.5 2.5 L12.5 4.5 L10.5 6.5" />
+      </g>
+    ),
+    der: (
+      <g {...st}>
+        <path d="M4.5 10 A5.5 5.5 0 1 0 10 4.5 H8" />
+        <path d="M9.5 2.5 L7.5 4.5 L9.5 6.5" />
+      </g>
+    ),
+    arriba: (
+      <g {...st}>
+        <rect x="4" y="4" width="12" height="12" rx="1.5" />
+        <path d="M4 10 H16 M10 4 V16" strokeWidth={1.2} />
+      </g>
+    ),
+    calle: (
+      <g {...st}>
+        <circle cx="10" cy="4.6" r="1.8" />
+        <path d="M10 7.5 V12.5 M10 12.5 L7.5 17 M10 12.5 L12.5 17 M6.5 9.5 L10 8.3 L13.5 9.5" />
+      </g>
+    ),
+    valle: (
+      <g {...st}>
+        <path d="M2.5 15.5 L7.5 7 L10.5 11.5 L12.8 8.5 L17.5 15.5 Z" />
+      </g>
+    ),
+    inicio: (
+      <g {...st}>
+        <path d="M3.5 9.5 L10 4 L16.5 9.5 M5.5 8 V16 H14.5 V8" />
+      </g>
+    ),
+  };
+  return (
+    <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
+      {d[name]}
+    </svg>
+  );
+}
+
+/**
+ * Controles de la maqueta: arriba a la derecha, qué se muestra (cuatro vistas) y las capas, en una lista que se
+ * abre; en el borde derecho, la cámara con íconos. Antes eran quince botones de texto en un recuadro que tapaba
+ * buena parte del sector.
+ */
 function ViewBar({ api }: { api: LabApi }) {
   const { ctrl } = api;
   const v = ctrl.viewMode();
-  const btn = (label: string, on: boolean, f: () => void, aria?: string): ReactNode => (
-    <button type="button" className={`vb${on ? ' is-on' : ''}`} aria-pressed={on} aria-label={aria} onClick={f}>
-      {label}
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const modes: [typeof v, string, string][] = [
+    ['realista', 'Realista', 'Vista realista: el agua con su color'],
+    ['materiales', 'Materiales', 'Materiales del suelo: asfalto, concreto, grama…'],
+    ['resultados', 'Resultados', 'Profundidad máxima alcanzada hasta ahora'],
+    ['peligro', 'Peligro', 'Peligro del agua: clase máxima según profundidad y velocidad'],
+  ];
+  const webgl = api.renderer === 'webgl';
+  const layers: { id: string; label: string; hint: string; on: boolean; set: () => void }[] = [];
+  if (webgl)
+    layers.push({
+      id: 'etiquetas',
+      label: 'Etiquetas',
+      hint: 'Lugares, medidores, daños y redes',
+      on: ctrl.labelsOn(),
+      set: () => {
+        const on = !ctrl.labelsOn();
+        ctrl.setLabels(on);
+        api.setSaved((s) => ({ ...s, labels: on ? undefined : false }));
+      },
+    });
+  if (ctrl.hasOrtho() && v === 'realista')
+    layers.push({
+      id: 'foto',
+      label: 'Foto aérea',
+      hint: 'Ortofoto de 2024 de la Alcaldía de Medellín sobre el terreno y los techos',
+      on: ctrl.orthoOn(),
+      set: () => {
+        const on = !ctrl.orthoOn();
+        ctrl.setOrtho(on);
+        api.setSaved((s) => ({ ...s, ortho: on ? undefined : false }));
+      },
+    });
+  layers.push({ id: 'flechas', label: 'Flechas', hint: 'Dirección del agua donde corre', on: ctrl.arrowsOn(), set: () => ctrl.setArrows(!ctrl.arrowsOn()) });
+  if (webgl && v === 'realista') layers.push({ id: 'azul', label: 'Agua en azul', hint: 'Colorear el agua según su profundidad', on: ctrl.waterBlue(), set: () => ctrl.setWaterBlue(!ctrl.waterBlue()) });
+  if (webgl) layers.push({ id: 'x5', label: 'Agua ×5', hint: 'Dibujar el agua cinco veces más gruesa (solo el dibujo)', on: ctrl.amplify() > 1, set: () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5) });
+  layers.push({
+    id: 'bajo',
+    label: 'Bajo la calle',
+    hint: ctrl.displayed()?.sewer ? 'Redes de aguas lluvias y de aguas residuales' : 'Tuberías esquemáticas',
+    on: ctrl.cutOn(),
+    set: () => ctrl.setCut(!ctrl.cutOn()),
+  });
+  const nOn = layers.filter((l) => l.on).length;
+  return (
+    <div className="city-ov city-modes" ref={boxRef}>
+      <div className="vm-group" role="radiogroup" aria-label="Qué mostrar">
+        {modes.map(([id, label, hint]) => (
+          <button key={id} type="button" role="radio" aria-checked={v === id} className={`vm${v === id ? ' is-on' : ''}`} title={hint} onClick={() => ctrl.setView(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <select className="vm-select" aria-label="Qué mostrar" value={v} onChange={(e) => ctrl.setView(e.target.value as typeof v)}>
+        {modes.map(([id, label]) => (
+          <option key={id} value={id}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <button type="button" className={`vm vm-layers${open ? ' is-open' : ''}`} aria-expanded={open} aria-controls="city-layers" onClick={() => setOpen(!open)}>
+        Capas <span className="vm-count">{nOn}</span>
+      </button>
+      {open && (
+        <div className="vm-pop" id="city-layers" role="group" aria-label="Capas de la maqueta">
+          {layers.map((l) => (
+            <label key={l.id} className="vm-layer">
+              <input type="checkbox" checked={l.on} onChange={l.set} />
+              <span>
+                <strong>{l.label}</strong>
+                <small>{l.hint}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Cámara: columna de botones con ícono en el borde derecho de la maqueta. */
+function CameraRail({ api }: { api: LabApi }) {
+  const { ctrl } = api;
+  if (api.renderer !== 'webgl') return null;
+  const b = (icon: Parameters<typeof CamIcon>[0]['name'], label: string, f: () => void) => (
+    <button type="button" className="cam-btn" aria-label={label} title={label} onClick={f}>
+      <CamIcon name={icon} />
     </button>
   );
   return (
-    <details className="city-ov city-viewbar" open={typeof window !== 'undefined' && window.innerWidth > 1180}>
-      <summary>
-        <span className="vb-long">Vista y cámara</span>
-        <span className="vb-short">Vista</span>
-      </summary>
-      <div className="vb-group" role="group" aria-label="Qué mostrar">
-        {btn('Realista', v === 'realista', () => ctrl.setView('realista'))}
-        {btn('Materiales', v === 'materiales', () => ctrl.setView('materiales'))}
-        {btn('Resultados', v === 'resultados', () => ctrl.setView('resultados'))}
-        {btn('Peligro', v === 'peligro', () => ctrl.setView('peligro'), 'Peligro del agua: clase máxima según profundidad y velocidad')}
-      </div>
-      <div className="vb-group" role="group" aria-label="Capas">
-        {api.renderer === 'webgl' &&
-          btn('Etiquetas', ctrl.labelsOn(), () => {
-            const on = !ctrl.labelsOn();
-            ctrl.setLabels(on);
-            api.setSaved((s) => ({ ...s, labels: on ? undefined : false }));
-          }, 'Etiquetas de la maqueta: lugares, medidores, daños y redes')}
-        {ctrl.hasOrtho() && v === 'realista' &&
-          btn('Foto aérea', ctrl.orthoOn(), () => {
-            const on = !ctrl.orthoOn();
-            ctrl.setOrtho(on);
-            api.setSaved((s) => ({ ...s, ortho: on ? undefined : false }));
-          }, 'Foto aérea de 2024 sobre el terreno y los techos (ortofoto de la Alcaldía de Medellín)')}
-        {btn('Flechas', ctrl.arrowsOn(), () => ctrl.setArrows(!ctrl.arrowsOn()), 'Flechas de dirección del flujo')}
-        {btn('Bajo la calle', ctrl.cutOn(), () => ctrl.setCut(!ctrl.cutOn()), ctrl.displayed()?.sewer ? 'Ver bajo la calle: redes de aguas lluvias y de aguas residuales' : 'Ver bajo la calle: tuberías esquemáticas')}
-        {api.renderer === 'webgl' && btn('Agua ×5', ctrl.amplify() > 1, () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5), 'Dibujar el agua cinco veces más gruesa (solo el dibujo)')}
-        {api.renderer === 'webgl' && v === 'realista' && btn('Agua en azul', ctrl.waterBlue(), () => ctrl.setWaterBlue(!ctrl.waterBlue()), 'Colorear el agua en azul según su profundidad, en vez de su color natural')}
-      </div>
-      {api.renderer === 'webgl' && <div className="vb-group" role="group" aria-label="Cámara">
-        {btn('Calle', false, () => ctrl.camera('calle'), 'Vista a nivel de calle')}
-        {btn('Valle', false, () => ctrl.camera('valle'), 'Mirar el valle desde la ladera, con el sector adelante')}
-        {btn('Arriba', false, () => ctrl.camera('arriba'), 'Vista desde arriba')}
-        {btn('⟲', false, () => ctrl.camera('izq'), 'Girar a la izquierda')}
-        {btn('⟳', false, () => ctrl.camera('der'), 'Girar a la derecha')}
-        {btn('+', false, () => ctrl.camera('acercar'), 'Acercar')}
-        {btn('−', false, () => ctrl.camera('alejar'), 'Alejar')}
-        {btn('Restablecer', false, () => ctrl.camera('general'), 'Restablecer la vista general')}
-      </div>}
-    </details>
+    <div className="city-ov city-camrail" role="group" aria-label="Cámara">
+      {b('mas', 'Acercar', () => ctrl.camera('acercar'))}
+      {b('menos', 'Alejar', () => ctrl.camera('alejar'))}
+      <span className="cam-sep" aria-hidden="true" />
+      {b('izq', 'Girar a la izquierda', () => ctrl.camera('izq'))}
+      {b('der', 'Girar a la derecha', () => ctrl.camera('der'))}
+      <span className="cam-sep" aria-hidden="true" />
+      {b('arriba', 'Vista desde arriba', () => ctrl.camera('arriba'))}
+      {b('calle', 'Vista a nivel de calle', () => ctrl.camera('calle'))}
+      {b('valle', 'Mirar el valle desde la ladera, con el sector adelante', () => ctrl.camera('valle'))}
+      {b('inicio', 'Volver a la vista general', () => ctrl.camera('general'))}
+    </div>
   );
 }
 

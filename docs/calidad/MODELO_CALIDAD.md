@@ -80,13 +80,34 @@ El **primer lavado** sale de la ecuación: con un aguacero de 15 mm, los primero
 
 Dos botones abren el laboratorio de lluvia de Medellín directamente en las misiones «sumidero obstruido» y «conexiones erradas». La segunda muestra el error contrario al de esta parte: techos conectados a la red de aguas residuales.
 
-## 4. Accesibilidad
+## 4. Escenas 3D, retos y experimentos
 
-Pestañas con teclado (flechas), escenas con descripción textual y controles equivalentes (la sonda se mueve con el control deslizante o con las estaciones), gráficas navegables con flechas, colores con texto (bien, bajo, muy bajo; cumple o no cumple), movimiento reducido respetado en la lluvia de la calle.
+Cada parte es una escena 3D (Three.js) alimentada por las mismas funciones de este documento; si el equipo no tiene WebGL se muestra la versión en dibujos planos (`src/quality/classic`), con el mismo cálculo. Lo que se dibuja y de dónde sale:
 
-## 5. Referencias
+**La quebrada.** El color de cada tramo de agua mezcla un agua de montaña clara con café según la turbiedad y con gris verdoso según la DBO5 calculadas en ese punto; la espuma aparece cerca del tubo según la DBO5; con «Ver el oxígeno» el agua toma el color de su clase de oxígeno disuelto (7 o más, 5 a 7, 3 a 5, 1 a 3, menos de 1 mg/L). La distancia se comprime aguas abajo (u = 200·√(x/3 000) unidades del dibujo; aguas arriba, 0,18 por metro), con más espacio cerca del tubo (prueba Q10). Cada casa del barrio representa 10.
+
+**Regla de los peces** (didáctica, con dos criterios publicados): hay peces donde el oxígeno disuelto es de al menos 5 mg/L —criterio de preservación de flora y fauna en aguas dulces frías del Decreto 1594 de 1984, compilado en el Decreto 1076 de 2015, artículo 2.2.3.3.9.10— y la DBO5 es de 6 mg/L o menos —valor guía para aguas ciprinícolas de la Directiva 78/659/CEE (hoy 2006/44/CE)—. En una quebrada de montaña la reaireación es tan rápida que el oxígeno casi no baja; lo que aleja a los peces es la materia orgánica. En verano y con 600 casas, ni sin tratar ni con tanque séptico hay peces junto al tubo; con planta pequeña o alcantarillado vuelven a las cuatro estaciones (prueba Q9).
+
+**Vigencia de los criterios.** Los criterios de calidad por uso del Decreto 1076 de 2015 (artículos 2.2.3.3.9.2 a 2.2.3.3.9.13) siguen vigentes de manera transitoria: la Resolución 0565 de 2026 del Ministerio de Ambiente, publicada el 21 de mayo de 2026, define los nuevos criterios y rige desde el 21 de mayo de 2027. Habrá que revisar entonces los criterios de nadar y de los peces.
+
+**La planta.** Los tanques tienen el frente de vidrio. El color del agua de cada tanque sigue la turbiedad de esa etapa; el número de partículas dibujadas es 13·log₁₀(T + 1) (hasta 46) y el de bacterias, 4·log₁₀(C + 1) (hasta 26), con C los coliformes totales por 100 mL de esa etapa: crecen con el cálculo, pero no son un conteo (prueba Q12). El lodo del sedimentador y la costra de los filtros crecen con el logaritmo de lo retenido.
+
+**La calle.** Las manchas de mugre son 4 por cada g/m² acumulado (hasta 110) y los papeles y plásticos, los objetos calculados (hasta 90). Cada uno sale de la calle cuando la fracción lavada (masa arrastrada sobre lo acumulado) alcanza su turno; lo que la lluvia no alcanza a lavar se queda. La animación dura 0,4 s por minuto de lluvia. La prueba del colorante sigue el desagüe de la casa por su tubo: las casas mal conectadas son las primeras k de un orden fijo, siempre las mismas (prueba Q11). La tierra se dibuja transparente para ver los tubos.
+
+**Microscopio.** El número de bastoncitos es 6·log₁₀(C + 1) (10 → 6, mil → 18, un millón → 36; hasta 48).
+
+**Retos.** Se revisan con el estado de la escena; al cumplirse se guarda la medalla en el equipo y se anota en la bitácora. La quebrada: que vuelvan los peces (verano, 600 casas o más, peces en las cuatro estaciones), detective de bichos (piedras en A y B con el tubo sin tratar), ¿se puede nadar? (un punto abajo del tubo que cumpla el criterio de contacto primario con 300 casas o más) y bacterias en una gota. La planta: la jarra más clara, agua segura después de la lluvia (IRCA 0 %), el cloro justo (IRCA 0 % con 1,4 mg/L o menos), la creciente (acercarse a la mejor dosis; ni así baja de 2 UNT) y bacterias en el vaso. La calle: detective de conexiones erradas, el primer lavado (10 días secos o más, con y sin barrido) y una quebrada que no recibe mugre (5 kg o menos con un aguacero fuerte).
+
+## 5. Accesibilidad
+
+Pestañas con teclado (flechas), escenas con descripción textual, rótulos que también son botones (las estaciones de la quebrada), controles equivalentes fuera de la escena (estaciones, casas del colorante y jarras como botones), gráficas navegables con flechas, colores con texto (cumple o no cumple, hay peces o no), movimiento reducido respetado (sin animación, la lluvia y el colorante dan su resultado de una vez).
+
+## 6. Referencias
 
 - APHA, AWWA, WEF. *Standard Methods for the Examination of Water and Wastewater*, 4500-O.
+- Consejo de las Comunidades Europeas. Directiva 78/659/CEE, relativa a la calidad de las aguas continentales que requieren protección o mejora para ser aptas para la vida de los peces (codificada como 2006/44/CE). Anexo I: DBO5 ≤ 3 mg/L (salmonícolas) y ≤ 6 mg/L (ciprinícolas), valores guía.
+- Ministerio de Ambiente y Desarrollo Sostenible. Resolución 0565 de 2026, por la cual se definen los criterios de calidad para el uso de las aguas superficiales, subterráneas y marinas (Diario Oficial 53.497, 21 de mayo de 2026; rige desde el 21 de mayo de 2027).
+- DANE, Sistema de Información del Medio Ambiente. Ficha técnica «Oxígeno disuelto» (criterios del Decreto 1594 de 1984: 5,0 mg/L en aguas dulces frías y 4,0 mg/L en cálidas para preservación de flora y fauna).
 - Chapra, S. C. (1997). *Surface Water-Quality Modeling*. McGraw-Hill.
 - Decreto 1076 de 2015, Ministerio de Ambiente y Desarrollo Sostenible, art. 2.2.3.3.9.7.
 - EPM (2025–2026), comunicados sobre las plantas San Fernando y Aguas Claras y sobre las fuentes de abastecimiento; Superservicios, informe de acueducto y alcantarillado (capacidades de las plantas de EPM).

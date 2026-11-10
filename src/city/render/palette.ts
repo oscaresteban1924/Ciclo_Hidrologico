@@ -14,9 +14,11 @@ export interface DepthStop {
 }
 
 /** Paradas de la escala de profundidad [m]. */
+// La lámina de pocos milímetros cubre toda la ladera cuando llueve: se tiñe apenas (casi transparente) para que
+// el azul fuerte quede donde el agua se junta y corre (calles, canales, la quebrada).
 export const DEPTH_STOPS: DepthStop[] = [
-  { depth: 0.001, color: '#8fd3f7', alpha: 0.66, label: '1 mm' },
-  { depth: 0.005, color: '#5cb8ee', alpha: 0.76, label: '5 mm' },
+  { depth: 0.001, color: '#8fd3f7', alpha: 0.16, label: '1 mm' },
+  { depth: 0.005, color: '#5cb8ee', alpha: 0.42, label: '5 mm' },
   { depth: 0.02, color: '#3592d6', alpha: 0.84, label: '2 cm' },
   { depth: 0.05, color: '#2a78c4', alpha: 0.84, label: '5 cm' },
   { depth: 0.15, color: '#16509b', alpha: 0.9, label: '15 cm' },
@@ -64,13 +66,13 @@ export function depthColor(h: number, out: Float32Array, o: number, natural = fa
 }
 
 export function cssDepthGradient(natural = false): string {
-  if (!natural) return `linear-gradient(90deg, ${DEPTH_STOPS.map((s, i) => `${s.color} ${(i / (DEPTH_STOPS.length - 1)) * 100}%`).join(', ')})`;
-  // la escala natural se muestra sobre asfalto: la película fina deja ver el suelo, el agua honda no
+  // cada escala se muestra sobre un suelo: la película fina deja ver el suelo, el agua honda no
   const rgba = (s: DepthStop) => {
     const [r, g, b] = hex(s.color).map((v) => Math.round(v * 255));
     return `rgba(${r}, ${g}, ${b}, ${s.alpha})`;
   };
-  return `linear-gradient(90deg, ${NATURAL_STOPS.map((s, i) => `${rgba(s)} ${(i / (NATURAL_STOPS.length - 1)) * 100}%`).join(', ')}), #55585c`;
+  const stops = natural ? NATURAL_STOPS : DEPTH_STOPS;
+  return `linear-gradient(90deg, ${stops.map((s, i) => `${rgba(s)} ${(i / (stops.length - 1)) * 100}%`).join(', ')}), ${natural ? '#55585c' : '#b9b4aa'}`;
 }
 
 export const hexToRgb = hex;

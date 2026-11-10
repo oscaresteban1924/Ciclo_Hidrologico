@@ -385,6 +385,18 @@ Los tres sectores reales (`docs/medellin/DATOS_REALES.md`) usan el mismo motor c
 
 **Aviso temprano en los sectores reales.** La cuenca es la delineada sobre el modelo de elevación; la estación queda a la mitad de la longitud hidráulica. En La Iguaná (42,7 km², retardo de 60 min) la creciente llega más de una hora después de la lluvia del barrio; en Juan Bobo (0,13 km², retardo de 8 min) la creciente es pequeña y lo que moja las casas es la lluvia del barrio.
 
+### 6.9 Cómo se dibujan los sectores reales (maqueta)
+
+El cálculo no cambia: estas reglas son solo del dibujo.
+
+- **Terreno continuo.** El terreno se dibuja interpolando, en cada esquina de celda, las cotas de las celdas vecinas «conectadas». En los sectores didácticos se conectan las que difieren menos de 0,35 m (los bordillos, lotes y muros quedan como escalones). En los sectores reales, cuyo terreno viene de un modelo de elevación de 1 m sobre laderas empinadas, se conectan las que difieren menos de 1,7 m (2,5 m en diagonal, ≈ 60°): antes cada celda era un bloque y la ladera se veía como una escalera, con rayas oscuras en cada escalón. Los saltos mayores (muros y taludes cortados) quedan como caras verticales en tono de tierra y concreto, no con la foto aérea estirada. En los taludes muy empinados la foto se suaviza y se mezcla con tierra.
+- **Lámina de agua.** Sigue la misma superficie: en cada esquina, terreno interpolado más el promedio de la profundidad calculada de las celdas conectadas. No se exagera: la amplificación ×5 sigue siendo opcional y avisada.
+- **Maqueta.** El sector se dibuja como un bloque de terreno recortado: el corte muestra capas de suelo según la profundidad (capa vegetal, suelo, suelo residual rojizo y roca meteorizada; ilustrativas). El entorno (que es solo dibujo) se vuelve volúmenes blancos y relieve claro con curvas de nivel cada 10 m, sin tanques, carros, varillas ni colores de fachada, y queda 2,6 m más bajo, con una franja de 14 m sin casas alrededor del bloque. Así lo real (el sector) no compite con lo ilustrativo.
+- **Sin negocios inventados.** En los sectores reales las fachadas no llevan locales con nombre (tienda, panadería, droguería…): solo puertas, garajes y ventanas.
+- **Agua en azul por defecto.** Sobre la foto aérea el agua turbia casi no se distingue del suelo; los sectores reales empiezan con la escala azul (se cambia en «Capas»). En esa escala, la película de 1 a 5 mm que cubre la ladera durante la lluvia se tiñe apenas (opacidad 0,16 a 0,42) y el azul fuerte queda donde el agua se junta y corre.
+- **Flechas.** Solo donde la lámina tiene 6 mm o más y la velocidad 0,1 m/s o más, cada ≈ 3 m, con un contorno oscuro que las hace legibles sobre agua clara, foto o concreto.
+- **Controles.** Las cuatro vistas (realista, materiales, resultados, peligro) están en una fila arriba a la derecha; las capas (etiquetas, foto aérea, flechas, agua en azul, agua ×5, bajo la calle), en una lista que se abre con «Capas»; la cámara, en una columna de íconos en el borde derecho (en pantallas angostas, una fila abajo y las vistas en una lista desplegable).
+
 ## 7. Tiempo, pausa y reproducibilidad
 
 - El tiempo de simulación es independiente del tiempo de dibujo.

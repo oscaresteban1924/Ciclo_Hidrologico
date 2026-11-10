@@ -1,12 +1,20 @@
-// Módulo «Calidad del agua»: tres partes con la misma distribución (escena y panel). Se carga aparte del resto
-// de la aplicación.
+// Módulo «Calidad del agua»: tres partes (la quebrada, del río a la llave, la ciudad y la lluvia), cada una con
+// una escena 3D, su pregunta, controles al pie, retos con medalla, experimentos animados, datos y notas para el
+// docente. Sin WebGL se muestra la versión en dibujos planos (carpeta classic), con el mismo modelo. Se carga
+// aparte del resto de la aplicación.
 
-import { useEffect, useRef, useState } from 'react';
-import { CreekPart } from './CreekPart';
-import { PlantPart } from './PlantPart';
-import { StreetPart } from './StreetPart';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CreekPart } from './classic/CreekPart';
+import { PlantPart } from './classic/PlantPart';
+import { StreetPart } from './classic/StreetPart';
+import { CreekLab } from './CreekLab';
+import { PlantLab } from './PlantLab';
+import { StreetLab } from './StreetLab';
+import { PartTab } from './shell';
+import { hasWebGL } from './three/stage';
 import { ActiveTab } from './ui';
 import './quality.css';
+import './quality3d.css';
 
 type PartId = 'quebrada' | 'llave' | 'ciudad';
 
@@ -35,6 +43,7 @@ export default function QualityLab() {
       /* almacenamiento no disponible: no se recuerda la parte */
     }
   }, [part]);
+  const gl = useMemo(() => hasWebGL(), []);
   const go = (p: PartId, focus = false) => {
     setPart(p);
     if (focus) window.setTimeout(() => tabRefs.current[p]?.focus(), 0);
@@ -43,6 +52,7 @@ export default function QualityLab() {
     <div className="q-head">
       <p className="q-disclaimer">
         <strong>Calidad del agua.</strong> Laboratorio educativo con valores típicos de la literatura y normas colombianas; no es un monitoreo de una quebrada real.
+        {!gl && ' Tu equipo no tiene WebGL: se muestra la versión en dibujos planos, con el mismo cálculo.'}
       </p>
       <div className="q-tabs" role="tablist" aria-label="Partes del módulo">
         {PARTS.map((p, k) => (
@@ -74,7 +84,17 @@ export default function QualityLab() {
   );
   return (
     <ActiveTab.Provider value={`q-tab-${part}`}>
-      {part === 'quebrada' ? <CreekPart head={head} goStreet={() => go('ciudad')} /> : part === 'llave' ? <PlantPart head={head} /> : <StreetPart head={head} />}
+      <PartTab.Provider value={`q-tab-${part}`}>
+        {gl ? (
+          part === 'quebrada' ? <CreekLab key="q3c" head={head} /> : part === 'llave' ? <PlantLab key="q3p" head={head} /> : <StreetLab key="q3s" head={head} />
+        ) : part === 'quebrada' ? (
+          <CreekPart head={head} goStreet={() => go('ciudad')} />
+        ) : part === 'llave' ? (
+          <PlantPart head={head} />
+        ) : (
+          <StreetPart head={head} />
+        )}
+      </PartTab.Provider>
     </ActiveTab.Provider>
   );
 }

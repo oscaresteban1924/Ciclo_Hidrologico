@@ -23,9 +23,12 @@ with sync_playwright() as p:
     # módulo «Calidad del agua» en el mismo archivo
     pg.get_by_role('button', name='Calidad del agua').click()
     pg.wait_for_selector('.q-tabs', timeout=30000)
-    pg.get_by_role('button', name='Levantar una piedra').click()
-    print('calidad:', pg.locator('.q-bmwp').inner_text().replace('\n', ' '))
-    pg.locator('.city-pick, .q-tabs').first.wait_for()
+    pg.wait_for_selector('canvas.q3-canvas', timeout=30000)
+    pg.get_by_role('tab', name='Experimentos').click()
+    pg.get_by_role('button', name='Levantar la piedra').click()
+    pg.wait_for_timeout(1500)
+    pg.screenshot(path='/home/claude/shots/city/single-file-calidad.png')
+    print('calidad:', pg.locator('.q3-lens-side .q3-big').inner_text().replace('\n', ' '))
     # sector real con foto aérea
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
     pg.wait_for_selector('.city-pick, .city-simbar', timeout=60000)

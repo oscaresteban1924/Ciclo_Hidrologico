@@ -359,6 +359,27 @@ La procedencia de los sectores reales escribe ahora los decimales con coma, como
 
 `npm run test:city`: **48 de 48** (nueva D2; D1 cambia a los nuevos sectores y separa la lluvia del sector del agua de las laderas). `npm run test:quality`: **8 de 8** (`docs/calidad/PRUEBAS_CALIDAD.md`).
 
+## 4 duodecies. Sector Ana Díaz como maqueta y módulo de calidad en 3D (ejecutada)
+
+**Pedido.** «Esto se ve re feo y poco práctico» (vista general de Ana Díaz con lluvia de 60 mm/h y agua en azul) y «el módulo de calidad puede ser muchísimo mejor». Para el entorno se eligió la maqueta (sector recortado y entorno en volúmenes blancos); para calidad, las cuatro direcciones propuestas: escenas 3D recorribles, retos con medalla, experimentos animados y una pregunta clara por escena.
+
+**Qué se encontró en el sector.**
+- Las rayas negras eran las caras verticales de una escalera: el terreno de 1 m se dibujaba como bloques porque la regla que conserva los bordillos (0,35 m) partía cada celda de la ladera. Ahora el terreno real es continuo salvo saltos de más de 1,7 m (MODELO, 6.9).
+- Las casas de colores alrededor eran dibujo y competían con el sector; los avisos de tienda o droguería en casas reales eran inventados.
+- Con el agua en azul, la película de 1 a 2 mm de la lluvia cubría toda la ladera de celeste, y había cientos de flechas sobre ella.
+- El recuadro «Vista y cámara» tenía quince botones de texto sobre la maqueta.
+- La cámara de la sección de control quedaba detrás de la ladera de aguas abajo en Ana Díaz: ahora sube hasta ver la sección por encima del terreno y de los techos.
+
+**Capturas** (`tools/verificacion/sectores_maqueta.py`, escritorio 1408 × 745 con el panel recogido y teléfono 390 × 844): los tres sectores reales con lluvia de 60 mm/h a los 16 min, vista general, sección de control, calle y valle; la calle de prueba y la ladera conservan su aspecto. Consola sin errores.
+
+**Módulo «Calidad del agua» en 3D** (`tools/verificacion/calidad3d.py`, escritorio 1440 × 860 y teléfono 390 × 844):
+- *La quebrada*: con 600 casas sin tratar no hay peces desde el tubo hasta 2,5 km (DBO5 de 7 mg/L o más); en verano y con planta pequeña vuelven a las cuatro estaciones y se gana la medalla. La piedra junto al tubo da BMWP/Col 11 (clase V).
+- *Del río a la llave*: la prueba de jarras animada con el río después de llover deja 3,1 UNT en la jarra de 30 mg/L (la más clara); al usarla se gana la medalla.
+- *La ciudad y la lluvia*: el aguacero de 15 mm lleva 26,3 kg de mugre a la quebrada (89 % con los primeros 10 mm); la prueba del colorante en las 20 casas encuentra las 3 mal conectadas (medalla).
+- Sin WebGL se muestra la versión anterior en dibujos planos, con el mismo modelo.
+
+`npm run test:city`: **48 de 48**. `npm run test:quality`: **12 de 12** (nuevas Q9 a Q12: regla de los peces y solución del reto, escala del dibujo de la quebrada, casas del juego del colorante, partículas y bacterias dibujadas).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
