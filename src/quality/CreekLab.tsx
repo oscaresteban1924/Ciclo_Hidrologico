@@ -227,7 +227,7 @@ export function CreekLab({ head }: { head: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m, param]);
 
-  const panels: Record<PanelTab, ReactNode> = {
+  const panels: Partial<Record<PanelTab, ReactNode>> = {
     retos: <RetosList retos={RETOS} ctx={ctx} done={done} intro="Cambia el barrio con los controles de abajo y mira la quebrada. Cada reto cumplido gana una medalla (se guarda en este equipo)." />,
     experimentos: (
       <div className="q3-exps">

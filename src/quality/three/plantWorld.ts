@@ -1,27 +1,23 @@
-// Planta de potabilización en 3D: el agua del río entra, recibe coagulante, forma grumos (flocs) que se asientan,
-// pasa por filtros de arena, recibe cloro, se guarda en un tanque y llega por la red a la llave de una casa.
-// Los tanques tienen el frente de vidrio: se ve el color del agua (turbiedad calculada en cada etapa), las
+// Planta de potabilización convencional en 3D, con sus once procesos: captación y rejilla, desarenador, mezcla
+// rápida, floculación en tres zonas, sedimentación de alta tasa, filtración rápida (con retrolavado), tanque de
+// contacto de cloro, estabilización del pH, almacenamiento, red con la llave de una casa y tratamiento de lodos.
+// Los tanques tienen frente de vidrio: se ve el color del agua (turbiedad calculada en cada etapa), las
 // partículas y las bacterias, cuyo número sigue el cálculo en escala logarítmica.
 
 import * as THREE from 'three';
 import type { PlantInput, PlantResult } from '../model';
+import { PROCESSES, type ProcessId } from '../processes';
 import { houses, rng, tank, trees, type TreeSpot } from './kit';
 import type { QStage, StageLabel, StageView } from './stage';
 
-export type UnitId = 'rio' | 'mezcla' | 'floc' | 'sedim' | 'filtro' | 'cloro' | 'tanque' | 'llave';
+export type UnitId = ProcessId;
 
-export const UNITS: { id: UnitId; name: string; what: string }[] = [
-  { id: 'rio', name: 'Río y bocatoma', what: 'El agua entra a la planta por una rejilla que deja afuera ramas y basura grande.' },
-  { id: 'mezcla', name: 'Mezcla rápida', what: 'Se agrega el coagulante (sulfato de aluminio) y se revuelve muy rápido para que llegue a todas las partículas.' },
-  { id: 'floc', name: 'Floculadores', what: 'Paletas que giran despacio: las partículas se pegan y forman grumos (flocs) cada vez más grandes.' },
-  { id: 'sedim', name: 'Sedimentador', what: 'El agua casi quieta deja caer los flocs al fondo (lodo). Arriba sale el agua clara.' },
-  { id: 'filtro', name: 'Filtros de arena', what: 'Capas de arena y grava atrapan las partículas que quedaban. Si llega mucha turbiedad, se tapan.' },
-  { id: 'cloro', name: 'Desinfección con cloro', what: 'El cloro mata los microbios que pasaron los filtros. Necesita tiempo y agua clara: las partículas los esconden.' },
-  { id: 'tanque', name: 'Tanque de almacenamiento', what: 'Guarda el agua tratada. Debe quedar algo de cloro (cloro residual) para cuidar el agua en la red.' },
-  { id: 'llave', name: 'La llave de la casa', what: 'El agua llega por la red de tuberías. Aquí se mide si cumple la norma colombiana (Resolución 2115 de 2007).' },
-];
-
-const X: Record<UnitId, number> = { rio: -66, mezcla: -42, floc: -26, sedim: -4, filtro: 18, cloro: 34, tanque: 47, llave: 64 };
+/** Centro de cada proceso en el dibujo (x a lo largo de la planta; los lodos van detrás, en z negativo). */
+export const UNIT_X: Record<ProcessId, number> = { rio: -84, desarenador: -68, mezcla: -52, floc: -36, sedim: -14, filtro: 8, cloro: 26, ph: 37, tanque: 49, llave: 67, lodos: -6 };
+const X = UNIT_X;
+const Z: Partial<Record<ProcessId, number>> = { lodos: -19 };
+/** Nombre corto de cada proceso para las etiquetas de la escena (el nombre completo está en el panel). */
+const TAG: Record<ProcessId, string> = { rio: 'Rejilla', desarenador: 'Desarenador', mezcla: 'Mezcla rápida', floc: 'Floculación', sedim: 'Sedimentación', filtro: 'Filtros', cloro: 'Cloro', ph: 'pH', tanque: 'Tanque', llave: 'La llave', lodos: 'Lodos' };
 
 function turbColor(t: number, out = new THREE.Color()): THREE.Color {
   const clear = new THREE.Color(0.55, 0.78, 0.86), brown = new THREE.Color(0.56, 0.42, 0.25);
@@ -32,9 +28,13 @@ function turbColor(t: number, out = new THREE.Color()): THREE.Color {
 export const partsFor = (t: number) => Math.round(Math.min(46, Math.max(0, 13 * Math.log10(t + 1))));
 export const bugsFor = (c: number) => (c < 0.5 ? 0 : Math.round(Math.min(26, 4 * Math.log10(c + 1))));
 
+/** Duración del retrolavado en la animación [s]. */
+export const WASH_S = 7;
+
 interface Box {
-  id: UnitId;
+  id: ProcessId;
   x: number;
+  z: number;
   w: number;
   d: number;
   h: number;
@@ -44,7 +44,7 @@ interface Box {
 export interface PlantView {
   inp: PlantInput;
   r: PlantResult;
-  unit: UnitId | null;
+  unit: ProcessId | null;
 }
 
 export class PlantWorld {
@@ -57,74 +57,117 @@ export class PlantWorld {
   private flocWheels: THREE.Group[] = [];
   private mixer = new THREE.Group();
   private sludge: THREE.Mesh;
+  private sand: THREE.Mesh;
   private cake: THREE.Mesh;
   private drip: THREE.InstancedMesh;
+  private bubbles: THREE.InstancedMesh;
+  private litter: THREE.InstancedMesh;
+  private thick: THREE.Mesh;
   private ring: THREE.Mesh;
   private v: PlantView | null = null;
-  private slots: { unit: UnitId; kind: 'p' | 'b'; a: number; b: number; c: number; ph: number }[] = [];
-  readonly views: Record<'general' | 'entrada' | 'tanques' | 'llave', StageView> = {
-    general: { eye: [-4, 78, 138], target: [-4, 0, -4] },
-    entrada: { eye: [-50, 15, 24], target: [-32, 2, 0] },
-    tanques: { eye: [8, 14, 25], target: [8, 2, 0] },
-    llave: { eye: [56, 7, 15], target: [64, 2.6, 0] },
-  };
+  private wash: { t0: number } | null = null;
+  /** Fracción de la costra de los filtros (1 = la que corresponde al cálculo; baja con el retrolavado y vuelve a crecer). */
+  private cakeK = 1;
+  private slots: { unit: ProcessId; kind: 'p' | 'b'; a: number; b: number; c: number; ph: number }[] = [];
+  readonly views: Record<string, StageView>;
 
-  constructor(stage: QStage, cb: { onUnit: (id: UnitId) => void }) {
+  constructor(stage: QStage, cb: { onUnit: (id: ProcessId) => void }) {
     this.stage = stage;
     const sc = stage.scene;
-    stage.setShadowSpan(70);
+    stage.setShadowSpan(84);
+    // vistas: la planta completa, tres tramos y una por proceso (para el recorrido guiado)
+    this.views = {
+      general: { eye: [-14, 92, 168], target: [-12, 0, -8] },
+      entrada: { eye: [-66, 17, 30], target: [-58, 1.5, 0] },
+      tanques: { eye: [-4, 15, 30], target: [-4, 2, -2] },
+      salida: { eye: [40, 14, 30], target: [38, 2, -2] },
+      lodos: { eye: [2, 22, 8], target: [-4, 0.5, -19] },
+      llave: { eye: [58, 7, 16], target: [66, 2.6, 0] },
+    };
+    for (const p of PROCESSES) {
+      const x = X[p.id], z = Z[p.id] ?? 0;
+      this.views[`p-${p.id}`] =
+        p.id === 'llave'
+          ? this.views.llave
+          : p.id === 'lodos'
+            ? { eye: [x + 6, 16, z + 24], target: [x - 1, 1, z] }
+            : p.id === 'sedim' || p.id === 'filtro'
+              ? { eye: [x + 6, 12, z + 25], target: [x, 1.8, z] }
+              : { eye: [x + 5, 9, z + 18], target: [x, 1.6, z] };
+    }
+
     // ---- suelo: prado alrededor y patio de concreto de la planta
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(420, 260), new THREE.MeshStandardMaterial({ color: '#5e8f3c', roughness: 1 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(480, 300), new THREE.MeshStandardMaterial({ color: '#5e8f3c', roughness: 1 }));
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     sc.add(ground);
-    const yard = new THREE.Mesh(new THREE.PlaneGeometry(122, 34), new THREE.MeshStandardMaterial({ color: '#c9c5bb', roughness: 0.95 }));
+    const yard = new THREE.Mesh(new THREE.PlaneGeometry(166, 44), new THREE.MeshStandardMaterial({ color: '#c9c5bb', roughness: 0.95 }));
     yard.rotation.x = -Math.PI / 2;
-    yard.position.set(10, 0.02, 0);
+    yard.position.set(-8, 0.02, -6);
     yard.receiveShadow = true;
     sc.add(yard);
-    // ---- río
-    const rg = new THREE.PlaneGeometry(16, 260, 1, 40);
+    // ---- río, bocatoma y rejilla
+    const rg = new THREE.PlaneGeometry(16, 300, 1, 40);
     this.river = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: '#8a6a44', roughness: 0.25, transparent: true, opacity: 0.92 }));
     this.river.rotation.x = -Math.PI / 2;
-    this.river.position.set(X.rio - 8, 0.05, 0);
+    this.river.position.set(X.rio - 12, 0.05, 0);
     sc.add(this.river);
     const bankM = new THREE.MeshStandardMaterial({ color: '#7d6a52', roughness: 1 });
     for (const s of [-1, 1]) {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 260), bankM);
-      b.position.set(X.rio - 8 + s * 8.4, 0.2, 0);
+      const b = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 300), bankM);
+      b.position.set(X.rio - 12 + s * 8.4, 0.2, 0);
       sc.add(b);
     }
-    const intake = new THREE.Mesh(new THREE.BoxGeometry(4, 2.4, 5), new THREE.MeshStandardMaterial({ color: '#b8b4ab' }));
+    const intake = new THREE.Mesh(new THREE.BoxGeometry(5, 2.4, 6), new THREE.MeshStandardMaterial({ color: '#b8b4ab' }));
     intake.position.set(X.rio, 1.2, 0);
     intake.castShadow = true;
     sc.add(intake);
-    stage.addPick(intake, () => cb.onUnit('rio'), 'Bocatoma: toca para ver qué pasa aquí');
+    const barM = new THREE.MeshStandardMaterial({ color: '#4d565e', metalness: 0.4, roughness: 0.5 });
+    for (let k = 0; k < 11; k++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.2, 0.12), barM);
+      bar.position.set(X.rio - 2.6, 1.2, -2.5 + k * 0.5);
+      bar.rotation.z = 0.25;
+      sc.add(bar);
+    }
+    // hojas y palos detenidos en la rejilla (más con la creciente)
+    this.litter = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.06, 0.18), new THREE.MeshStandardMaterial({ color: '#4f6b2c', roughness: 0.9 }), 30);
+    this.litter.frustumCulled = false;
+    sc.add(this.litter);
+    stage.addPick(intake, () => cb.onUnit('rio'), 'Captación y rejilla: toca para ver qué pasa aquí');
     stage.addPick(this.river, () => cb.onUnit('rio'), 'El río: toca para ver qué pasa aquí');
 
     // ---- tanques con frente de vidrio
     const wm = (op: number) => new THREE.MeshStandardMaterial({ color: '#88b9c9', transparent: true, opacity: op, roughness: 0.2, depthWrite: false });
-    const mk = (id: UnitId, w: number, d: number, h: number) => {
+    const mk = (id: ProcessId, w: number, d: number, h: number) => {
+      const z = Z[id] ?? 0;
       const g = tank(w, h, d, { glassFront: true });
-      g.position.set(X[id], 0, 0);
+      g.position.set(X[id], 0, z);
       g.traverse((o) => {
         o.castShadow = true;
         o.receiveShadow = true;
       });
       sc.add(g);
-      const water = new THREE.Mesh(new THREE.BoxGeometry(w - 0.8, h - 0.75, d - 0.8), wm(0.62));
-      water.position.set(X[id], (h - 0.75) / 2 + 0.36, 0);
+      // en el filtro el agua visible es la que está sobre el lecho, para que se vean sus capas
+      const y0 = id === 'filtro' ? 2.12 : 0.36, wh = h - 0.39 - y0;
+      const water = new THREE.Mesh(new THREE.BoxGeometry(w - 0.8, wh, d - 0.8), wm(0.62));
+      water.position.set(X[id], y0 + wh / 2, z);
       water.renderOrder = 5;
       sc.add(water);
-      this.boxes.push({ id, x: X[id], w, d, h, water });
-      stage.addPick(g, () => cb.onUnit(id), `${UNITS.find((u) => u.id === id)!.name}: toca para ver qué pasa aquí`);
+      this.boxes.push({ id, x: X[id], z, w, d, h, water });
+      const name = PROCESSES.find((p) => p.id === id)!.name;
+      stage.addPick(g, () => cb.onUnit(id), `${name}: toca para ver qué pasa aquí`);
       return g;
     };
+    mk('desarenador', 12, 5, 2.6);
     mk('mezcla', 6, 7, 3.6);
     mk('floc', 14, 9, 3.6);
     mk('sedim', 20, 10, 4.4);
     mk('filtro', 15, 9, 4.4);
-    mk('cloro', 8, 8, 3.6);
+    mk('cloro', 10, 8, 3.2);
+    // arena en el fondo del desarenador
+    this.sand = new THREE.Mesh(new THREE.BoxGeometry(11.2, 1, 4.2), new THREE.MeshStandardMaterial({ color: '#d2b47c', roughness: 1 }));
+    this.sand.position.set(X.desarenador, 0.4, 0);
+    sc.add(this.sand);
     // mezclador vertical
     const steel = new THREE.MeshStandardMaterial({ color: '#7e8a92', metalness: 0.5, roughness: 0.4 });
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4), steel);
@@ -143,7 +186,7 @@ export class PlantWorld {
     const stand = new THREE.Mesh(new THREE.BoxGeometry(2.8, 4.4, 2.8), new THREE.MeshStandardMaterial({ color: '#9aa0a3' }));
     stand.position.set(X.mezcla - 1.5, 2.2, -5.6);
     sc.add(coag, stand);
-    // paletas de los floculadores
+    // paletas de los floculadores: tres zonas separadas por muros, cada una más lenta (G de 70 a 10 s⁻¹)
     for (const dx of [-4.5, 0, 4.5]) {
       const g = new THREE.Group();
       const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 8.4), steel);
@@ -158,7 +201,13 @@ export class PlantWorld {
       this.flocWheels.push(g);
       sc.add(g);
     }
-    // placas inclinadas del sedimentador
+    const divM = new THREE.MeshStandardMaterial({ color: '#c9c6bf', transparent: true, opacity: 0.6, depthWrite: false });
+    for (const dx of [-2.25, 2.25]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3, 8.2), divM);
+      wall.position.set(X.floc + dx, 1.8, 0);
+      sc.add(wall);
+    }
+    // placas inclinadas del sedimentador y lodo en el fondo
     const plateM = new THREE.MeshStandardMaterial({ color: '#e8e6df', transparent: true, opacity: 0.55, depthWrite: false });
     for (let k = 0; k < 9; k++) {
       const p = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.6, 8.8), plateM);
@@ -169,83 +218,153 @@ export class PlantWorld {
     this.sludge = new THREE.Mesh(new THREE.BoxGeometry(19.2, 1, 9.2), new THREE.MeshStandardMaterial({ color: '#6b5134', roughness: 1 }));
     this.sludge.position.set(X.sedim, 0.4, 0);
     sc.add(this.sludge);
-    // capas del filtro: grava, arena y la costra de mugre que se acumula arriba
+    // capas del filtro: grava, arena, antracita y la costra de mugre que se acumula arriba; tres filtros
     const layer = (y: number, h: number, col: string) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(14.2, h, 8.2), new THREE.MeshStandardMaterial({ color: col, roughness: 1 }));
       m.position.set(X.filtro, y + h / 2, 0);
       sc.add(m);
       return m;
     };
-    layer(0.35, 0.6, '#8e8a83');
-    layer(0.95, 1.1, '#d8c79b');
+    layer(0.35, 0.5, '#8e8a83');
+    layer(0.85, 0.5, '#d8c79b');
+    layer(1.35, 0.7, '#3b3b3b');
     this.cake = layer(2.05, 0.1, '#7a5a35');
-    // cloro: cilindros de gas y tubo de dosificación
+    for (const dx of [-2.5, 2.5]) {
+      const div = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 8.2), new THREE.MeshStandardMaterial({ color: '#c9c6bf' }));
+      div.position.set(X.filtro + dx, 2.1, 0);
+      sc.add(div);
+    }
+    this.bubbles = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 6, 4), new THREE.MeshStandardMaterial({ color: '#f2f7fa', transparent: true, opacity: 0.8 }), 60);
+    this.bubbles.frustumCulled = false;
+    this.bubbles.renderOrder = 7;
+    sc.add(this.bubbles);
+    // tanque de contacto: pantallas en zigzag y cilindros de cloro
+    const baffleM = new THREE.MeshStandardMaterial({ color: '#d9d6cf' });
+    for (let k = 0; k < 4; k++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.6, 5.6), baffleM);
+      b.position.set(X.cloro - 3.2 + k * 2.1, 1.6, k % 2 ? 1.0 : -1.0);
+      sc.add(b);
+    }
     for (const dz of [-0.9, 0.9]) {
       const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 2.6, 14), new THREE.MeshStandardMaterial({ color: '#b9c63a', roughness: 0.5 }));
-      cyl.position.set(X.cloro + dz * 1.5, 1.3, -6.4);
+      cyl.position.set(X.cloro + dz * 1.5, 1.3, -6.6);
       cyl.castShadow = true;
       sc.add(cyl);
     }
+    // silo de cal (estabilización del pH)
+    const siloM = new THREE.MeshStandardMaterial({ color: '#efece4', roughness: 0.8 });
+    const silo = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 5, 18), siloM);
+    silo.position.set(X.ph, 4.6, -4.8);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.6, 18), siloM);
+    cone.rotation.x = Math.PI;
+    cone.position.set(X.ph, 1.3, -4.8);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 2.4), new THREE.MeshStandardMaterial({ color: '#8f969b' }));
+    base.position.set(X.ph, 0.3, -4.8);
+    for (const o of [silo, cone]) o.castShadow = true;
+    sc.add(silo, cone, base);
+    // cámara de mezcla de la cal sobre la tubería
+    const phBox = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2, 2.6), new THREE.MeshStandardMaterial({ color: '#cfccc4' }));
+    phBox.position.set(X.ph, 1, 0);
+    phBox.castShadow = true;
+    sc.add(phBox);
+    const limeLine = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 4), steel);
+    limeLine.rotation.x = Math.PI / 2;
+    limeLine.position.set(X.ph, 1.9, -2.6);
+    sc.add(limeLine);
+    for (const o of [silo, phBox]) stage.addPick(o, () => cb.onUnit('ph'), 'Estabilización del pH: toca para ver qué pasa aquí');
     // tanque de almacenamiento
     const st = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 5.4, 28), new THREE.MeshStandardMaterial({ color: '#d7d3c9', roughness: 0.85 }));
     st.position.set(X.tanque, 2.7, 0);
     st.castShadow = true;
     st.receiveShadow = true;
     sc.add(st);
-    stage.addPick(st, () => cb.onUnit('tanque'), 'Tanque de almacenamiento: toca para ver qué pasa aquí');
-    // tuberías entre las etapas y la red hasta la casa
+    stage.addPick(st, () => cb.onUnit('tanque'), 'Almacenamiento: toca para ver qué pasa aquí');
+    // lodos: espesador y cuatro lechos de secado, detrás del sedimentador
+    const zl = Z.lodos!;
+    const thickT = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 3, 28, 1, true), new THREE.MeshStandardMaterial({ color: '#c9c6bf', side: THREE.DoubleSide }));
+    thickT.position.set(X.lodos - 8, 1.5, zl);
+    thickT.castShadow = true;
+    this.thick = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 1, 28), new THREE.MeshStandardMaterial({ color: '#6b5134', roughness: 1 }));
+    this.thick.position.set(X.lodos - 8, 0.5, zl);
+    const thickW = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 0.1, 28), new THREE.MeshStandardMaterial({ color: '#9db3ad', roughness: 0.3 }));
+    thickW.position.set(X.lodos - 8, 2.6, zl);
+    sc.add(thickT, this.thick, thickW);
+    for (let k = 0; k < 4; k++) {
+      const frame = tank(4.6, 0.8, 5, { wall: 0.25 });
+      frame.position.set(X.lodos + k * 5, 0, zl);
+      sc.add(frame);
+      // celdas en distinto momento del ciclo: lodo húmedo (oscuro) a seco y agrietado (claro)
+      const bed = new THREE.Mesh(new THREE.BoxGeometry(4.1, 0.3, 4.5), new THREE.MeshStandardMaterial({ color: ['#5a4129', '#6f5436', '#8f7553', '#b39c7b'][k], roughness: 1 }));
+      bed.position.set(X.lodos + k * 5, 0.4, zl);
+      sc.add(bed);
+      stage.addPick(frame, () => cb.onUnit('lodos'), 'Tratamiento de lodos: toca para ver qué pasa aquí');
+    }
+    stage.addPick(thickT, () => cb.onUnit('lodos'), 'Tratamiento de lodos: toca para ver qué pasa aquí');
+    // tuberías entre las etapas, la red hasta la casa y la línea de lodos (café)
     const pipeM = new THREE.MeshStandardMaterial({ color: '#4f6d86', roughness: 0.5 });
-    const pipe = (x0: number, x1: number, y: number) => {
-      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, x1 - x0, 10), pipeM);
+    const sludgeM = new THREE.MeshStandardMaterial({ color: '#6b5134', roughness: 0.6 });
+    const pipe = (x0: number, x1: number, y: number, z = 0, m = pipeM) => {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, Math.abs(x1 - x0), 10), m);
       p.rotation.z = Math.PI / 2;
-      p.position.set((x0 + x1) / 2, y, 0);
+      p.position.set((x0 + x1) / 2, y, z);
       p.castShadow = true;
       sc.add(p);
     };
-    pipe(X.rio + 2, X.mezcla - 3, 1.6);
+    const pipeZ = (x: number, z0: number, z1: number, y: number, m = sludgeM) => {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, Math.abs(z1 - z0), 10), m);
+      p.rotation.x = Math.PI / 2;
+      p.position.set(x, y, (z0 + z1) / 2);
+      sc.add(p);
+    };
+    pipe(X.rio + 2.5, X.desarenador - 6, 1.4);
+    pipe(X.desarenador + 6, X.mezcla - 3, 1.8);
     pipe(X.mezcla + 3, X.floc - 7, 2.8);
     pipe(X.floc + 7, X.sedim - 10, 2.8);
     pipe(X.sedim + 10, X.filtro - 7.5, 3.4);
-    pipe(X.filtro + 7.5, X.cloro - 4, 1.2);
-    pipe(X.cloro + 4, X.tanque - 5, 1.2);
+    pipe(X.filtro + 7.5, X.cloro - 5, 1.2);
+    pipe(X.cloro + 5, X.ph - 1.3, 1.2);
+    pipe(X.ph + 1.3, X.tanque - 5, 1.2);
     pipe(X.tanque + 5, X.llave - 2.6, 0.6);
+    pipeZ(X.sedim - 6, -5, zl, 0.4);
+    pipe(X.sedim - 6, X.lodos - 8 + 3.4, 0.4, zl, sludgeM);
+    pipeZ(X.filtro, -4.5, zl + 2.6, 0.5);
     // la casa con la llave (frente abierto) y el vaso
     const hs = houses([{ x: X.llave + 1.5, y: 0.6, z: -1.8, w: 6, d: 3, h: 4.2, rot: 0, wall: '#efe0c0' }]);
     sc.add(hs);
     const table = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 1.4), new THREE.MeshStandardMaterial({ color: '#8a5a3a' }));
     table.position.set(X.llave, 1.05, 0.6);
-    const legs = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1, 1.2), new THREE.MeshStandardMaterial({ color: '#6d462d' }));
-    legs.position.set(X.llave, 0.5, 0.6);
+    const tlegs = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1, 1.2), new THREE.MeshStandardMaterial({ color: '#6d462d' }));
+    tlegs.position.set(X.llave, 0.5, 0.6);
     const tap = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.07, 8, 12, Math.PI), steel);
     tap.position.set(X.llave - 0.4, 2.3, -0.2);
     this.glass = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.28, 0.8, 18), new THREE.MeshStandardMaterial({ color: '#a8d8e8', transparent: true, opacity: 0.85, roughness: 0.1 }));
     this.glass.position.set(X.llave + 0.4, 1.53, 0.6);
-    sc.add(table, legs, tap, this.glass);
+    sc.add(table, tlegs, tap, this.glass);
     stage.addPick(this.glass, () => cb.onUnit('llave'), 'La llave: toca para ver si el agua es segura');
     stage.addPick(hs, () => cb.onUnit('llave'), 'La llave: toca para ver si el agua es segura');
     // árboles alrededor
     const R = rng(4);
     const ts: TreeSpot[] = [];
-    for (let k = 0; k < 160; k++) {
-      const x = -150 + R() * 300, z = -120 + R() * 240;
-      if (Math.abs(z) < 22 && x > -60 && x < 76) continue;
-      if (Math.abs(x - (X.rio - 8)) < 11) continue;
+    for (let k = 0; k < 190; k++) {
+      const x = -170 + R() * 340, z = -140 + R() * 280;
+      if (z > -32 && z < 22 && x > -94 && x < 80) continue;
+      if (Math.abs(x - (X.rio - 12)) < 11) continue;
       ts.push({ x, y: 0, z, r: 1.6 + R() * 1.8 });
     }
     sc.add(trees(ts, 6));
 
     // ---- partículas, bacterias y goteo de coagulante
-    this.parts = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.13, 0), new THREE.MeshStandardMaterial({ color: '#6d5236', roughness: 0.8 }), 6 * 46);
-    this.bugs = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.06, 0.22, 2, 6), new THREE.MeshStandardMaterial({ color: '#8c3fb3', emissive: new THREE.Color('#3a0f55'), roughness: 0.6 }), 7 * 26);
+    const pUnits: ProcessId[] = ['desarenador', 'mezcla', 'floc', 'sedim', 'filtro', 'cloro'];
+    const bUnits: ProcessId[] = ['desarenador', 'mezcla', 'floc', 'sedim', 'filtro', 'cloro', 'llave'];
+    this.parts = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.13, 0), new THREE.MeshStandardMaterial({ color: '#6d5236', roughness: 0.8 }), pUnits.length * 46);
+    this.bugs = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.06, 0.22, 2, 6), new THREE.MeshStandardMaterial({ color: '#8c3fb3', emissive: new THREE.Color('#3a0f55'), roughness: 0.6 }), bUnits.length * 26);
     for (const m of [this.parts, this.bugs]) {
       m.frustumCulled = false;
       m.renderOrder = 6;
       sc.add(m);
     }
     const Rp = rng(77);
-    const pUnits: UnitId[] = ['mezcla', 'floc', 'sedim', 'filtro', 'cloro', 'tanque'];
     for (const u of pUnits) for (let k = 0; k < 46; k++) this.slots.push({ unit: u, kind: 'p', a: Rp(), b: Rp(), c: Rp(), ph: Rp() * 6.28 });
-    const bUnits: UnitId[] = ['mezcla', 'floc', 'sedim', 'filtro', 'cloro', 'tanque', 'llave'];
     for (const u of bUnits) for (let k = 0; k < 26; k++) this.slots.push({ unit: u, kind: 'b', a: Rp(), b: Rp(), c: Rp(), ph: Rp() * 6.28 });
     this.drip = new THREE.InstancedMesh(new THREE.SphereGeometry(0.1, 6, 4), new THREE.MeshStandardMaterial({ color: '#d9e6f2' }), 12);
     this.drip.frustumCulled = false;
@@ -260,19 +379,39 @@ export class PlantWorld {
   }
 
   /** Turbiedad del agua en cada etapa [UNT] y bacterias [coliformes totales por 100 mL]. */
-  private stageValues(r: PlantResult): Record<UnitId, { t: number; c: number }> {
+  private stageValues(r: PlantResult): Record<ProcessId, { t: number; c: number }> {
     const raw = r.raw.turbidity, c0 = r.raw.coliTotal;
-    const removal = r.coliTotalTap / Math.max(1e-9, Math.pow(10, -r.logKill) * c0);
+    const removal = r.coliTotalTap / Math.max(1e-12, Math.pow(10, -r.logKill) * c0);
+    const out = { t: r.filtered, c: r.coliTotalTap };
     return {
       rio: { t: raw, c: c0 },
+      desarenador: { t: raw, c: c0 },
       mezcla: { t: raw, c: c0 },
       floc: { t: raw, c: c0 },
       sedim: { t: r.settled, c: c0 * Math.max(0.1, r.settled / raw) },
       filtro: { t: r.filtered, c: c0 * removal },
-      cloro: { t: r.filtered, c: r.coliTotalTap },
-      tanque: { t: r.filtered, c: r.coliTotalTap },
-      llave: { t: r.filtered, c: r.coliTotalTap },
+      cloro: out,
+      ph: out,
+      tanque: out,
+      llave: out,
+      lodos: { t: Math.max(0, raw - r.filtered), c: 0 },
     };
+  }
+
+  /** ¿Se están lavando los filtros en este momento? */
+  get washing(): boolean {
+    return this.wash !== null;
+  }
+
+  /** Lava los filtros al revés: el agua sube, el lecho se expande y la costra sale hacia los lodos. */
+  backwash(): void {
+    if (this.stage.reducedMotion) {
+      this.cakeK = 0;
+      this.setCake();
+      this.stage.renderNow();
+      return;
+    }
+    this.wash = { t0: this.stage.t };
   }
 
   set(v: PlantView): void {
@@ -286,57 +425,113 @@ export class PlantWorld {
       m.color.copy(turbColor(val, c));
       m.opacity = 0.45 + 0.4 * Math.min(1, Math.sqrt(val / 160));
     }
-    const gm = this.glass.material as THREE.MeshStandardMaterial;
-    gm.color.copy(turbColor(v.r.filtered, c));
-    // lodo del sedimentador y costra de los filtros: crecen con lo que retienen
+    (this.glass.material as THREE.MeshStandardMaterial).color.copy(turbColor(v.r.filtered, c));
+    // arena del desarenador, lodo del sedimentador, costra de los filtros y lodo del espesador
+    const sandH = { verano: 0.2, lluvia: 0.5, creciente: 0.9 }[v.inp.raw];
+    this.sand.scale.y = sandH;
+    this.sand.position.y = 0.35 + sandH / 2;
     const removed = Math.max(0, v.r.raw.turbidity - v.r.settled);
     const sh = 0.15 + Math.min(1.4, 0.35 * Math.log10(removed + 1));
     this.sludge.scale.y = sh;
     this.sludge.position.y = 0.35 + sh / 2;
-    const ck = 0.05 + Math.min(0.9, 0.3 * Math.log10(Math.max(0, v.r.settled - v.r.filtered) + 1));
-    this.cake.scale.y = ck / 0.1;
-    this.cake.position.y = 2.05 + ck / 2;
+    const th = 0.3 + Math.min(1.6, 0.4 * Math.log10(Math.max(0, v.r.raw.turbidity - v.r.filtered) + 1));
+    this.thick.scale.y = th;
+    this.thick.position.y = 0.2 + th / 2;
+    this.setCake();
     (this.cake.material as THREE.MeshStandardMaterial).color.set(v.r.clogged ? '#5a3a1f' : '#7a5a35');
+    // basura atajada por la rejilla
+    const nL = { verano: 6, lluvia: 14, creciente: 30 }[v.inp.raw];
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const Rl = rng(31);
+    for (let k = 0; k < this.litter.count; k++) {
+      const yy = 0.3 + Rl() * 1.6, zz = -2.5 + Rl() * 5, rot = Rl() * 3;
+      if (k >= nL) this.litter.setMatrixAt(k, m4.makeScale(0, 0, 0));
+      else {
+        q.setFromEuler(new THREE.Euler(rot, 0.3, rot * 0.5));
+        this.litter.setMatrixAt(k, m4.compose(p.set(X.rio - 2.9, yy, zz), q, s));
+      }
+    }
+    this.litter.instanceMatrix.needsUpdate = true;
     if (v.unit) {
-      this.ring.position.x = X[v.unit];
+      this.ring.position.set(X[v.unit], 0.1, Z[v.unit] ?? 0);
       this.ring.visible = true;
     } else this.ring.visible = false;
     this.stage.setLabels(this.labels(vals));
   }
 
-  private labels(vals: Record<UnitId, { t: number; c: number }>): StageLabel[] {
+  private setCake(): void {
+    const v = this.v;
+    if (!v) return;
+    const full = 0.05 + Math.min(0.9, 0.3 * Math.log10(Math.max(0, v.r.settled - v.r.filtered) + 1));
+    const ck = 0.02 + full * this.cakeK;
+    this.cake.scale.y = ck / 0.1;
+    this.cake.position.y = 2.05 + ck / 2;
+  }
+
+  private labels(vals: Record<ProcessId, { t: number; c: number }>): StageLabel[] {
     const v = this.v!;
     const f = (t: number) => `${t.toLocaleString('es-CO', { maximumFractionDigits: t < 10 ? 1 : 0 })} UNT`;
-    const out: StageLabel[] = UNITS.map((u) => {
+    const H: Partial<Record<ProcessId, number>> = { rio: 4, desarenador: 4.2, tanque: 6.8, llave: 5.6, ph: 8.2, lodos: v.unit === 'lodos' ? 4.5 : 24 };
+    return PROCESSES.map((u, i) => {
       const box = this.boxes.find((b) => b.id === u.id);
-      const y = u.id === 'tanque' ? 6.8 : u.id === 'llave' ? 5.6 : u.id === 'rio' ? 4 : (box?.h ?? 4) + 1.9;
+      // las etiquetas se alternan en dos alturas para que las once quepan en la vista general (la del proceso
+      // elegido se queda abajo, para que se vea en su vista de cerca)
+      const y = (H[u.id] ?? (box?.h ?? 4) + 1.9) + (i % 2 && u.id !== 'lodos' && v.unit !== u.id ? 11 : 0);
       let sub = f(vals[u.id].t);
       let kind: StageLabel['kind'] = 'dato';
       if (u.id === 'filtro' && v.r.clogged) {
         sub = `${f(vals.filtro.t)} · ¡se tapan!`;
         kind = 'alerta';
       }
-      if (u.id === 'cloro') sub = `${v.inp.chlorine.toLocaleString('es-CO', { maximumFractionDigits: 1 })} mg/L de cloro`;
-      if (u.id === 'mezcla') sub = `${v.inp.dose} mg/L de coagulante`;
+      if (u.id === 'desarenador') sub = `arena: ${{ verano: 'poca', lluvia: 'bastante', creciente: 'mucha' }[v.inp.raw]}`;
+      if (u.id === 'cloro') sub = `${v.inp.chlorine.toLocaleString('es-CO', { maximumFractionDigits: 1 })} mg/L`;
+      if (u.id === 'mezcla') sub = `${v.inp.dose} mg/L`;
+      if (u.id === 'ph') sub = `pH ${v.r.pH.toLocaleString('es-CO', { maximumFractionDigits: 1 })}`;
+      if (u.id === 'lodos') sub = 'espesador y lechos';
+      if (u.id === 'tanque') sub = `cloro ${v.r.clExit.toLocaleString('es-CO', { maximumFractionDigits: 2 })} mg/L`;
       if (u.id === 'llave') {
-        sub = `IRCA ${Math.round(v.r.irca)} %: ${v.r.risk.toLowerCase()}`;
+        sub = `IRCA ${Math.round(v.r.irca)} %`;
         kind = v.r.irca <= 5 ? 'ok' : 'alerta';
       }
-      return { id: u.id, text: u.name, sub, at: new THREE.Vector3(X[u.id], y, u.id === 'llave' ? 0.6 : 0), kind, prio: u.id === 'llave' ? 8 : 4 };
+      const x = u.id === 'ph' ? X.ph : X[u.id];
+      const z = u.id === 'llave' ? 0.6 : u.id === 'ph' ? -4.8 : Z[u.id] ?? 0;
+      return { id: u.id, text: `${u.n}. ${TAG[u.id]}`, sub, at: new THREE.Vector3(x, y, z), kind, prio: v.unit === u.id ? 9 : u.id === 'llave' ? 8 : 4 };
     });
-    return out;
   }
 
   update(dt: number, t: number): void {
     const v = this.v;
     if (!v) return;
-    // movimiento de las máquinas
+    // máquinas: las paletas de cada zona del floculador giran más despacio (G de 70 a 10 s⁻¹)
     this.mixer.rotation.y = t * 5;
-    this.flocWheels.forEach((w, i) => (w.rotation.z = t * 0.5 * (i % 2 ? -1 : 1)));
+    const sp = [0.9, 0.55, 0.22];
+    this.flocWheels.forEach((w, i) => (w.rotation.z = t * sp[i]));
     const vals = this.stageValues(v.r);
     const eff = 1 - v.r.settled / v.r.raw.turbidity;
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
     const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    // retrolavado: la costra sale en la primera mitad y suben burbujas; después el filtro se vuelve a ensuciar
+    let washK = 0;
+    if (this.wash) {
+      const el = t - this.wash.t0;
+      washK = el < WASH_S ? Math.sin((el / WASH_S) * Math.PI) : 0;
+      this.cakeK = Math.max(0, 1 - el / (WASH_S / 2));
+      if (el >= WASH_S) this.wash = null;
+    } else if (this.cakeK < 1 && dt > 0) {
+      this.cakeK = Math.min(1, this.cakeK + dt / 45);
+    }
+    this.setCake();
+    for (let k = 0; k < this.bubbles.count; k++) {
+      if (washK <= 0.02) {
+        this.bubbles.setMatrixAt(k, zero);
+        continue;
+      }
+      const ph = (t * 0.6 + k / this.bubbles.count) % 1;
+      const x = X.filtro + (((k * 37) % 100) / 100 - 0.5) * 13;
+      const z = (((k * 53) % 100) / 100 - 0.5) * 7.5;
+      this.bubbles.setMatrixAt(k, m4.compose(p.set(x, 2.1 + ph * 2 * washK, z), q.identity(), s.setScalar(washK)));
+    }
+    this.bubbles.instanceMatrix.needsUpdate = true;
     let ip = 0, ib = 0;
     const counts: Record<string, number> = {};
     for (const sl of this.slots) {
@@ -360,27 +555,34 @@ export class PlantWorld {
       } else if (b) {
         const hw = b.w / 2 - 0.7, hd = b.d / 2 - 0.7, top = b.h - 0.5;
         x = b.x + (sl.a - 0.5) * 2 * hw;
-        z = (sl.c - 0.5) * 2 * hd;
+        z = b.z + (sl.c - 0.5) * 2 * hd;
         y = 0.6 + sl.b * (top - 0.8);
         if (sl.unit === 'mezcla') {
           const ang = t * 3 + sl.ph, rr = 0.6 + sl.a * 2.2;
           x = b.x + Math.cos(ang) * rr;
           z = Math.sin(ang) * rr;
+        } else if (sl.unit === 'desarenador' && sl.kind === 'p') {
+          // la arcilla, finísima, viaja con el agua de un extremo al otro sin caer
+          x = b.x - hw + ((t * 0.25 + sl.a) % 1) * 2 * hw;
+          y = 1.2 + sl.b * 1.0;
         } else if (sl.unit === 'floc' && sl.kind === 'p') {
-          // grumos: se agrupan y crecen según la eficiencia de la dosis
+          // grumos: se agrupan según la eficiencia de la dosis y crecen de una zona a la siguiente
           const g = Math.floor(sl.a * 6);
-          const cx = b.x - 5 + g * 2, cz = (g % 2 ? 1.6 : -1.6);
+          const cx = b.x - 5 + g * 2, cz = g % 2 ? 1.6 : -1.6;
           x += (cx - x) * eff * 0.85 + 0.25 * Math.sin(t + sl.ph);
           z += (cz - z) * eff * 0.85;
-          sc = 1 + eff * 1.6;
+          sc = 1 + eff * 1.6 * (0.4 + Math.max(0, Math.min(1, (x - b.x + 7) / 14)));
         } else if (sl.unit === 'sedim' && sl.kind === 'p') {
           // lo que queda (turbiedad del agua decantada) flota cerca de la salida
           x = b.x + 4 + sl.a * 5;
           y = top - 0.6 - sl.b * 1.2 + 0.1 * Math.sin(t * 0.8 + sl.ph);
         } else if (sl.unit === 'filtro' && sl.kind === 'p') {
-          // las partículas que llegan bajan y se quedan sobre la arena
-          const fall = (t * 0.25 + sl.b) % 1;
-          y = Math.max(2.15, top - 0.3 - fall * (top - 2.4));
+          if (washK > 0.02) y = 2.2 + sl.b * 2 * washK;
+          else {
+            // las partículas que llegan bajan y se quedan sobre el lecho
+            const fall = (t * 0.25 + sl.b) % 1;
+            y = Math.max(2.15, top - 0.3 - fall * (top - 2.4));
+          }
         } else {
           x += 0.25 * Math.sin(t * 0.7 + sl.ph);
           y += 0.15 * Math.sin(t * 0.9 + sl.ph * 2);

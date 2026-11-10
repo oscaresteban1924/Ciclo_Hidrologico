@@ -1,5 +1,5 @@
 // Distribución común de las tres partes en 3D: escena con su pregunta, controles al pie de la escena y panel
-// con pestañas (Retos, Experimentos, Datos, Docente). También el puente React ↔ escena 3D y los retos con medalla.
+// con pestañas (Retos, Experimentos, Datos, Docente; la planta agrega Procesos). También el puente React ↔ escena 3D y los retos con medalla.
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../state/store';
@@ -16,7 +16,22 @@ export interface WorldLike {
  * Crea el escenario y el mundo una sola vez (al montar) y los libera al desmontar. `onReady` entrega el mundo para
  * que la parte le pase su estado con `set(...)`.
  */
-export function Scene3D<W extends WorldLike>({ make, onReady, label, viewNames, onHover }: { make: (s: QStage) => W; onReady: (w: W, s: QStage) => void; label: string; viewNames: { id: string; label: string }[]; onHover?: (hint: string | null) => void }) {
+export function Scene3D<W extends WorldLike>({
+  make,
+  onReady,
+  label,
+  viewNames,
+  onHover,
+  flyTo,
+}: {
+  make: (s: QStage) => W;
+  onReady: (w: W, s: QStage) => void;
+  label: string;
+  viewNames: { id: string; label: string }[];
+  onHover?: (hint: string | null) => void;
+  /** Vista pedida desde afuera (por ejemplo el recorrido guiado); `n` cambia en cada pedido. */
+  flyTo?: { id: string; n: number } | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const stageRef = useRef<QStage | null>(null);
   const worldRef = useRef<W | null>(null);
@@ -43,9 +58,14 @@ export function Scene3D<W extends WorldLike>({ make, onReady, label, viewNames, 
   const go = (id: string) => {
     const w = worldRef.current, st = stageRef.current;
     if (!w || !st || !w.views[id]) return;
-    setView(id);
+    setView(viewNames.some((v) => v.id === id) ? id : '');
     st.view(w.views[id]);
   };
+  useEffect(() => {
+    if (flyTo) go(flyTo.id);
+    // solo cuando llega un pedido nuevo
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flyTo?.n]);
   const cam = (f: (s: QStage) => void) => () => stageRef.current && f(stageRef.current);
   return (
     <div className="q3-scene" ref={ref}>
@@ -76,18 +96,15 @@ export function Scene3D<W extends WorldLike>({ make, onReady, label, viewNames, 
 
 // ------------------------------------------------------------------ distribución
 
-export type PanelTab = 'retos' | 'experimentos' | 'datos' | 'docente';
-const TABS: { id: PanelTab; label: string }[] = [
-  { id: 'retos', label: 'Retos' },
-  { id: 'experimentos', label: 'Experimentos' },
-  { id: 'datos', label: 'Datos' },
-  { id: 'docente', label: 'Docente' },
-];
+export type PanelTab = 'procesos' | 'retos' | 'experimentos' | 'datos' | 'docente';
+const TAB_LABEL: Record<PanelTab, string> = { procesos: 'Procesos', retos: 'Retos', experimentos: 'Experimentos', datos: 'Datos', docente: 'Docente' };
+const DEFAULT_TABS: PanelTab[] = ['retos', 'experimentos', 'datos', 'docente'];
 
 export const PartTab = createContext('');
 
-export function Q3Layout({ head, stage, dock, panels, tab, setTab }: { head: ReactNode; stage: ReactNode; dock: ReactNode; panels: Record<PanelTab, ReactNode>; tab: PanelTab; setTab: (t: PanelTab) => void }) {
+export function Q3Layout({ head, stage, dock, panels, tab, setTab, tabs = DEFAULT_TABS }: { head: ReactNode; stage: ReactNode; dock: ReactNode; panels: Partial<Record<PanelTab, ReactNode>>; tab: PanelTab; setTab: (t: PanelTab) => void; tabs?: PanelTab[] }) {
   const id = useId();
+  const TABS = tabs.map((t) => ({ id: t, label: TAB_LABEL[t] }));
   const partTab = useContext(PartTab);
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
   return (

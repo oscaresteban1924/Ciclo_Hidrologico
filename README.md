@@ -51,7 +51,7 @@ Cada vista de detalle es una secuencia con inicio, desarrollo y resultado. Tiene
 | **Gota trazadora** | Sigue una porción de agua por rutas ramificadas elegidas en cada bifurcación, con su estado y el tiempo de permanencia aproximado en cada reservorio. |
 | **Retos** | Sin cronómetros ni penalizaciones: cada respuesta no esperada recibe una pista y la opción de observar de nuevo. |
 | **Bitácora** | Registra observaciones (al completar vistas de detalle), predicciones e hipótesis, comparaciones y explicaciones escritas por el niño. Los niveles (Observación, Exploración, Investigación, Hidrología) premian observar, comparar y explicar, no hacer clics. Se puede descargar como texto. |
-| **Calidad del agua** | Tres escenas 3D con una pregunta cada una, retos con medalla y experimentos animados: una quebrada con peces, sonda, lupa y microscopio (índice BMWP/Col); una planta de potabilización con tanques de vidrio, prueba de jarras en tiempo real, cloro y la Resolución 2115 de 2007 (IRCA); y una cuadra con el aguacero, el primer lavado y la prueba del colorante para hallar conexiones erradas. Sin WebGL, versión en dibujos planos. Ver `docs/calidad/MODELO_CALIDAD.md`. |
+| **Calidad del agua** | Tres escenas 3D con una pregunta cada una, retos con medalla y experimentos animados: una quebrada con peces, sonda, lupa y microscopio (índice BMWP/Col); una planta de potabilización convencional con sus once procesos (pestaña Procesos con animación «con lupa», valores del juego y criterios de la Resolución 0330 de 2017, y recorrido por la planta), tanques de vidrio, prueba de jarras en tiempo real, cloro y la Resolución 2115 de 2007 (IRCA); y una cuadra con el aguacero, el primer lavado y la prueba del colorante para hallar conexiones erradas. Sin WebGL, versión en dibujos planos. Ver `docs/calidad/MODELO_CALIDAD.md`. |
 | **Glosario** | 109 términos con búsqueda; cada uno puede iluminar su lugar en el paisaje. |
 
 Una sola **pausa** controla toda la experiencia: paisaje, subtítulos, vistas de detalle y laboratorio. La **velocidad** de reproducción cambia el ritmo de las animaciones, nunca las condiciones ni los resultados. El panel lateral puede **contraerse** para ampliar el paisaje. La ayuda («Cómo explorar») resume los controles.
@@ -161,7 +161,7 @@ src/city/
   controller.ts  Une cálculo, dibujo y tiempo real; libera todos los recursos al salir
   CityLab.tsx    Componente del modo
 tests/city/    Pruebas obligatorias, rendimiento y verificación de escenarios externos
-src/quality/   Módulo «Calidad del agua»: modelo puro (model.ts), escenas 3D (three/), retos y experimentos; classic/ sin WebGL
+src/quality/   Módulo «Calidad del agua»: modelo puro (model.ts), procesos de la planta (processes.ts), escenas 3D (three/), retos y experimentos; classic/ sin WebGL
 tests/quality/ Pruebas del modelo de calidad del agua
 tools/geo/     Pipeline de datos reales y su prueba sin red
 ```

@@ -26,7 +26,8 @@ import {
 } from '../../src/quality/model';
 import { FISH, STATIONS, fishOk, uOf, xOf } from '../../src/quality/three/creekWorld';
 import { rodsFor } from '../../src/quality/three/kit';
-import { bugsFor, partsFor } from '../../src/quality/three/plantWorld';
+import { PROCESSES, processComplete } from '../../src/quality/processes';
+import { UNIT_X, bugsFor, partsFor } from '../../src/quality/three/plantWorld';
 import { wrongSet } from '../../src/quality/three/streetWorld';
 
 interface Result { id: string; name: string; tolerance: string; measured: string; pass: boolean }
@@ -252,6 +253,44 @@ const f = (v: number, d = 2) => v.toFixed(d);
     tolerance: 'el número dibujado nunca baja cuando sube la turbiedad o el conteo; sin bacterias no se dibuja ninguna; con la dosis justa y 1,3 mg/L de cloro el vaso de la llave queda sin bacterias y con 0 mg/L sí tiene',
     measured: `partículas ${nd(partsFor) ? 'no decrecientes' : 'DECRECEN'}; bacterias ${nd(bugsFor) ? 'no decrecientes' : 'DECRECEN'}; bastoncitos ${nd(rodsFor) ? 'no decrecientes' : 'DECRECEN'}; vaso con cloro justo: ${bugsFor(best.coliTotalTap)} (IRCA ${f(best.irca, 0)} %); sin cloro: ${bugsFor(none.coliTotalTap)}`,
     pass: nd(partsFor) && nd(bugsFor) && nd(rodsFor) && bugsFor(0) === 0 && rodsFor(0) === 0 && bugsFor(best.coliTotalTap) === 0 && best.irca < 0.5 && bugsFor(none.coliTotalTap) > 0,
+  });
+}
+
+// Q13) Los once procesos de la planta: completos, en orden, dibujados y con valores del modelo
+{
+  const ids = PROCESSES.map((p) => p.id);
+  const order = PROCESSES.every((p, i) => p.n === i + 1) && new Set(ids).size === ids.length && ids.length === 11;
+  const complete = PROCESSES.filter(processComplete).length;
+  const drawn = ids.every((id) => Number.isFinite(UNIT_X[id]));
+  // los once valores «en el juego» para los tres ríos, con dosis baja, justa y alta, y cloro 0 y 1,3 mg/L
+  let cells = 0, bad = 0;
+  for (const raw of ['verano', 'lluvia', 'creciente'] as const)
+    for (const k of [0, 1, 3])
+      for (const chlorine of [0, 1.3]) {
+        const inp = { raw, dose: Math.round(k * optimumDose(RAW_WATER[raw].turbidity)), chlorine };
+        const r = treatPlant(inp);
+        for (const p of PROCESSES)
+          for (const x of p.inOut(r, inp)) {
+            cells++;
+            if (!x.value || /NaN|undefined|Infinity/.test(x.value) || !x.label) bad++;
+          }
+      }
+  // los artículos de la Resolución 0330 de 2017 citados por los procesos de la línea de agua y de lodos
+  const cites: Record<string, string> = { desarenador: '55', mezcla: '111', floc: '112', sedim: '113', filtro: '114', cloro: '121', lodos: '125' };
+  const cited = Object.entries(cites).every(([id, art]) => {
+    const src = PROCESSES.find((p) => p.id === id)!.source;
+    return src.includes('0330 de 2017') && src.includes(`artículo${id === 'lodos' ? 's' : ''} ${art}`);
+  });
+  // lo que dice el proceso de la llave coincide con el cálculo del IRCA
+  const rr = treatPlant({ raw: 'lluvia', dose: 10, chlorine: 0.8 });
+  const tap = PROCESSES.find((p) => p.id === 'llave')!.inOut(rr, { raw: 'lluvia', dose: 10, chlorine: 0.8 });
+  const sameIrca = tap.some((x) => x.label === 'IRCA' && x.value.startsWith(rr.irca.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })));
+  record({
+    id: 'Q13',
+    name: 'Los once procesos de la planta convencional',
+    tolerance: 'once procesos numerados del 1 al 11 sin repetir, cada uno con texto, mecanismo, criterios de diseño, fuente, fallas y mediciones, y con su lugar en la escena; sus valores «en el juego» existen y son números válidos para los tres ríos, tres dosis y dos dosis de cloro (ninguno NaN ni vacío); los procesos citan los artículos 55, 111, 112, 113, 114, 121 y 125 de la Resolución 0330 de 2017; el IRCA que muestra la llave es el calculado',
+    measured: `orden ${order ? 'correcto' : 'INCORRECTO'}; completos ${complete} de ${PROCESSES.length}; en la escena ${drawn ? 'todos' : 'FALTAN'}; valores revisados ${cells}, inválidos ${bad}; citas ${cited ? 'correctas' : 'INCORRECTAS'}; IRCA de la llave ${sameIrca ? 'coincide' : 'NO coincide'} (${f(rr.irca, 1)} %)`,
+    pass: order && complete === PROCESSES.length && drawn && bad === 0 && cells > 0 && cited && sameIrca,
   });
 }
 

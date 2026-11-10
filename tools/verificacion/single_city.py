@@ -29,6 +29,12 @@ with sync_playwright() as p:
     pg.wait_for_timeout(1500)
     pg.screenshot(path='/home/claude/shots/city/single-file-calidad.png')
     print('calidad:', pg.locator('.q3-lens-side .q3-big').inner_text().replace('\n', ' '))
+    # planta: pestaña Procesos
+    pg.get_by_role('tab', name='Del río a la llave').click()
+    pg.wait_for_selector('#q3-proc-h', timeout=30000)
+    pg.locator('.q3-steps button', has_text='Filtración rápida').click()
+    pg.wait_for_timeout(1500)
+    print('planta, paso:', pg.locator('.q3-proc-n').inner_text(), '·', pg.locator('#q3-proc-h').inner_text())
     # sector real con foto aérea
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
     pg.wait_for_selector('.city-pick, .city-simbar', timeout=60000)

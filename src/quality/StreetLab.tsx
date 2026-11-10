@@ -205,7 +205,7 @@ export function StreetLab({ head }: { head: ReactNode }) {
   );
 
   const shown = rain.state === 'seco' ? -1 : rain.minute;
-  const panels: Record<PanelTab, ReactNode> = {
+  const panels: Partial<Record<PanelTab, ReactNode>> = {
     retos: <RetosList retos={RETOS} ctx={ctx} done={done} intro="Cambia la cuadra con los controles de abajo, haz llover y busca las casas mal conectadas. Cada reto cumplido gana una medalla (se guarda en este equipo)." />,
     experimentos: (
       <div className="q3-exps">

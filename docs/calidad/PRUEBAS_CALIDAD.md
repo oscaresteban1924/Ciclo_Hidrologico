@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**12 de 12 cumplen.**
+**13 de 13 cumplen.**
 
 ## Q1. Oxígeno disuelto de saturación y altitud de Medellín — cumple
 
@@ -63,3 +63,8 @@ Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes 
 
 - Tolerancia: el número dibujado nunca baja cuando sube la turbiedad o el conteo; sin bacterias no se dibuja ninguna; con la dosis justa y 1,3 mg/L de cloro el vaso de la llave queda sin bacterias y con 0 mg/L sí tiene
 - Medido: partículas no decrecientes; bacterias no decrecientes; bastoncitos no decrecientes; vaso con cloro justo: 0 (IRCA 0 %); sin cloro: 5
+
+## Q13. Los once procesos de la planta convencional — cumple
+
+- Tolerancia: once procesos numerados del 1 al 11 sin repetir, cada uno con texto, mecanismo, criterios de diseño, fuente, fallas y mediciones, y con su lugar en la escena; sus valores «en el juego» existen y son números válidos para los tres ríos, tres dosis y dos dosis de cloro (ninguno NaN ni vacío); los procesos citan los artículos 55, 111, 112, 113, 114, 121 y 125 de la Resolución 0330 de 2017; el IRCA que muestra la llave es el calculado
+- Medido: orden correcto; completos 11 de 11; en la escena todos; valores revisados 468, inválidos 0; citas correctas; IRCA de la llave coincide (97.9 %)

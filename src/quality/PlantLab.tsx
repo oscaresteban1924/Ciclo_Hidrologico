@@ -1,13 +1,16 @@
-// «Del río a la llave» en 3D: una planta de potabilización con tanques de frente de vidrio. La pregunta de la
-// escena: ¿el agua de la llave es segura para tomar? La respuesta se ve en el vaso, en los tanques y en el IRCA.
+// «Del río a la llave» en 3D: una planta de potabilización convencional con sus once procesos y tanques de frente
+// de vidrio. La pregunta de la escena: ¿el agua de la llave es segura para tomar? La respuesta se ve en el vaso,
+// en los tanques y en el IRCA. La pestaña Procesos explica cada paso y tiene un recorrido guiado.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../state/store';
 import { JarTest, Microscope } from './experiments';
 import { PTAR_STAGES, RAW_WATER, treatPlant, type PlantInput, type RawCase } from './model';
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from './shell';
-import { PlantWorld, UNITS, type UnitId } from './three/plantWorld';
-import { fmt, fmtBig } from './ui';
+import { ProcessPanel, TOUR_S } from './ProcessPanel';
+import { PROCESSES, processById, type ProcessId } from './processes';
+import { PlantWorld, WASH_S } from './three/plantWorld';
+import { fmt } from './ui';
 
 interface Ctx {
   inp: PlantInput;
@@ -16,9 +19,18 @@ interface Ctx {
   optimum: number;
   jarBest: boolean;
   micro: Set<string>;
+  seen: ReadonlySet<ProcessId>;
 }
 
 const RETOS: Reto<Ctx>[] = [
+  {
+    id: 'p-recorrido',
+    title: 'Los once pasos',
+    goal: 'Mira los once pasos de la planta, del río a la llave, en la pestaña Procesos.',
+    hint: 'Usa «Recorrer la planta» o toca cada parte de la planta en la escena.',
+    check: (c) => c.seen.size >= PROCESSES.length,
+    progress: (c) => `Pasos vistos: ${c.seen.size} de ${PROCESSES.length}`,
+  },
   {
     id: 'p-jarras',
     title: 'La jarra más clara',
@@ -61,10 +73,17 @@ const RETOS: Reto<Ctx>[] = [
 ];
 
 export function PlantLab({ head }: { head: ReactNode }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const [inp, setInp] = useState<PlantInput>({ raw: 'lluvia', dose: 10, chlorine: 0.8 });
-  const [unit, setUnit] = useState<UnitId | null>(null);
-  const [tab, setTab] = useState<PanelTab>('retos');
+  const reduced = state.prefs.reducedMotion;
+  const [unit, setUnit] = useState<ProcessId | null>(null);
+  const [card, setCard] = useState(false);
+  // el primer paso se muestra al entrar: cuenta como visto
+  const [seen, setSeen] = useState<Set<ProcessId>>(() => new Set<ProcessId>(['rio']));
+  const [touring, setTouring] = useState(false);
+  const [washing, setWashing] = useState(false);
+  const [fly, setFly] = useState<{ id: string; n: number } | null>(null);
+  const [tab, setTab] = useState<PanelTab>('procesos');
   const [jarBest, setJarBest] = useState(false);
   const [micro, setMicro] = useState<Set<string>>(new Set());
   const [sample, setSample] = useState<'llave' | 'rio'>('llave');
@@ -78,27 +97,80 @@ export function PlantLab({ head }: { head: ReactNode }) {
   useEffect(() => {
     world.current?.set(sync.current);
   }, [inp, r, unit]);
-  const ctx = useMemo<Ctx>(() => ({ inp, irca: r.irca, settled: r.settled, optimum: r.optimum, jarBest, micro }), [inp, r, jarBest, micro]);
+  const ctx = useMemo<Ctx>(() => ({ inp, irca: r.irca, settled: r.settled, optimum: r.optimum, jarBest, micro, seen }), [inp, r, jarBest, micro, seen]);
+  const flyN = useRef(0);
+  const look = (id: string) => setFly({ id, n: ++flyN.current });
+  /** «Ver en la planta»: vuela la cámara y, en el teléfono (escena arriba del panel), sube hasta la escena. */
+  const showInScene = (id: string) => {
+    look(id);
+    const el = document.querySelector('.q3-scene');
+    if (el && el.getBoundingClientRect().bottom < 80) el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  };
+  /** Elige un proceso: desde el panel o el recorrido la cámara vuela hasta él; desde la escena se abre su tarjeta. */
+  const pick = (id: ProcessId, from: 'panel' | 'escena' | 'recorrido') => {
+    setUnit(id);
+    setSeen((s) => (s.has(id) ? s : new Set(s).add(id)));
+    if (from === 'escena') {
+      setCard(true);
+      setTab('procesos');
+    } else {
+      setCard(false);
+      look(`p-${id}`);
+    }
+  };
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  const cur: ProcessId = unit ?? 'rio';
+  // recorrido guiado: avanza solo cada TOUR_S segundos; al terminar vuelve a la vista general
+  useEffect(() => {
+    if (!touring) return;
+    const h = window.setTimeout(() => {
+      const i = PROCESSES.findIndex((p) => p.id === cur);
+      if (i >= PROCESSES.length - 1) {
+        setTouring(false);
+        look('general');
+      } else pick(PROCESSES[i + 1].id, 'recorrido');
+    }, TOUR_S * 1000);
+    return () => window.clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [touring, cur]);
+  const toggleTour = () => {
+    if (touring) {
+      setTouring(false);
+      return;
+    }
+    setTab('procesos');
+    pick(unit && unit !== 'lodos' ? unit : 'rio', 'recorrido');
+    setTouring(true);
+  };
+  const wash = () => {
+    world.current?.backwash();
+    look('p-filtro');
+    setWashing(true);
+    window.setTimeout(() => setWashing(false), WASH_S * 1000);
+  };
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const ok = r.irca < 0.5;
   const fails = r.checks.filter((c) => !c.ok).map((c) => c.name.toLowerCase());
   const answer = ok
     ? 'Sí: cumple los cinco análisis de la norma (IRCA 0 %, sin riesgo).'
     : `Todavía no: falla ${fails.join(', ')}. IRCA ${fmt(r.irca, 0)} %: ${r.risk.toLowerCase()}.`;
-  const u = unit ? UNITS.find((x) => x.id === unit)! : null;
+  const u = unit && card ? processById(unit) : null;
   const rw = RAW_WATER[inp.raw];
 
   const stage = (
     <>
       <Scene3D
-        label="Planta de potabilización en 3D: río, mezcla, floculadores, sedimentador, filtros, cloro, tanque y la llave de una casa. Toca cada parte para ver qué pasa allí."
+        label="Planta de potabilización convencional en 3D: captación y rejilla, desarenador, mezcla rápida, floculadores, sedimentador, filtros, tanque de contacto de cloro, estabilización del pH, almacenamiento, tratamiento de lodos y la llave de una casa. Toca cada parte para ver qué pasa allí."
         viewNames={[
           { id: 'general', label: 'Toda la planta' },
-          { id: 'entrada', label: 'Coagulante y flocs' },
-          { id: 'tanques', label: 'Sedimentador y filtros' },
+          { id: 'entrada', label: 'Entrada' },
+          { id: 'tanques', label: 'Tanques' },
+          { id: 'salida', label: 'Salida' },
           { id: 'llave', label: 'La llave' },
         ]}
-        make={(st) => new PlantWorld(st, { onUnit: setUnit })}
+        make={(st) => new PlantWorld(st, { onUnit: (id) => pickRef.current(id, 'escena') })}
+        flyTo={fly}
         onReady={(w) => {
           world.current = w;
           w.set(sync.current);
@@ -122,20 +194,26 @@ export function PlantLab({ head }: { head: ReactNode }) {
       </div>
       {u && (
         <div className="q3-card q3-unit" role="dialog" aria-label={u.name}>
-          <button type="button" className="icon-close" aria-label="Cerrar" onClick={() => setUnit(null)}>
+          <button type="button" className="icon-close" aria-label="Cerrar" onClick={() => setCard(false)}>
             ×
           </button>
-          <strong>{u.name}</strong>
-          <p>{u.what}</p>
+          <strong>
+            {u.n}. {u.name}
+          </strong>
+          <p>{u.short}</p>
           <p className="q3-small">
-            {unit === 'rio' && `${rw.note} Turbiedad ${fmt(rw.turbidity, 0)} UNT; coliformes totales ${fmtBig(rw.coliTotal)} por 100 mL.`}
-            {unit === 'mezcla' && `Dosis: ${inp.dose} mg/L. La dosis justa para este río está cerca de ${fmt(r.optimum, 0)} mg/L (la prueba de jarras la encuentra).`}
-            {unit === 'floc' && `Con esta dosis los grumos atrapan el ${fmt(100 * (1 - r.settled / rw.turbidity), 0)} % de la turbiedad.`}
-            {unit === 'sedim' && `Sale agua con ${fmt(r.settled, r.settled < 10 ? 1 : 0)} UNT; lo demás queda en el fondo como lodo.`}
-            {unit === 'filtro' && (r.clogged ? `Llegan ${fmt(r.settled, 0)} UNT: demasiado. Los filtros se tapan y dejan pasar ${fmt(r.filtered, 1)} UNT.` : `Llegan ${fmt(r.settled, 1)} UNT y salen ${fmt(r.filtered, 2)} UNT.`)}
-            {unit === 'cloro' && `Se agregan ${fmt(inp.chlorine, 1)} mg/L; el agua gasta ${fmt(r.demand, 2)} mg/L reaccionando y quedan ${fmt(r.clExit, 2)} mg/L libres.`}
-            {unit === 'tanque' && `Después de 12 horas en la red quedan ${fmt(r.clTap, 2)} mg/L de cloro (la norma pide entre 0,3 y 2,0).`}
-            {unit === 'llave' && `IRCA ${fmt(r.irca, 1)} %: ${r.risk.toLowerCase()}. Coliformes totales: ${r.coliTotalTap < 0.5 ? '0' : fmtBig(r.coliTotalTap)} por 100 mL.`}
+            {u.inOut(r, inp)
+              .slice(0, 3)
+              .map((x) => `${x.label}: ${x.value}`)
+              .join(' · ')}
+          </p>
+          <p className="q3-unit-actions">
+            <button type="button" className="link" onClick={() => look(`p-${u.id}`)}>
+              Acercarse
+            </button>
+            <button type="button" className="link" onClick={() => setTab('procesos')}>
+              Cómo funciona, en el panel
+            </button>
           </p>
         </div>
       )}
@@ -167,7 +245,22 @@ export function PlantLab({ head }: { head: ReactNode }) {
   );
 
   const tapCount = sample === 'llave' ? r.coliTotalTap : rw.coliTotal;
-  const panels: Record<PanelTab, ReactNode> = {
+  const panels: Partial<Record<PanelTab, ReactNode>> = {
+    procesos: (
+      <ProcessPanel
+        cur={cur}
+        r={r}
+        inp={inp}
+        seen={seen}
+        touring={touring}
+        washing={washing}
+        reduced={reduced}
+        onPick={(id) => pick(id, 'panel')}
+        onTour={toggleTour}
+        onWash={wash}
+        onLook={(id) => showInScene(`p-${id}`)}
+      />
+    ),
     retos: <RetosList retos={RETOS} ctx={ctx} done={done} intro="Mueve las dosis con los controles de abajo y mira los tanques y el vaso. Cada reto cumplido gana una medalla (se guarda en este equipo)." />,
     experimentos: (
       <div className="q3-exps">
@@ -287,6 +380,13 @@ export function PlantLab({ head }: { head: ReactNode }) {
         <p className="q3-small">
           En la escena, el número de partículas y de bacterias crece con el logaritmo de la turbiedad y del conteo calculados: es un dibujo que sigue el cálculo, no un conteo real.
         </p>
+        <h3>Los once procesos</h3>
+        <p>
+          La pestaña Procesos describe una planta convencional de filtración rápida: captación y rejilla, desarenador, mezcla rápida, floculación, sedimentación de alta tasa, filtración, desinfección, estabilización del pH, almacenamiento, red y tratamiento de lodos. Los criterios de diseño citados vienen de la Resolución 0330 de 2017 del Ministerio de Vivienda, Ciudad y Territorio (artículos 55, 111 a 114, 121, 122, 125 y 133, con las modificaciones de las Resoluciones 799 y 908 de 2021, según el texto compilado de la CRA) y, para la calidad en la red, de la Resolución 2115 de 2007. Son rangos generales de diseño: no describen una planta de EPM ni reemplazan un diseño de ingeniería.
+        </p>
+        <p className="q3-small">
+          El cálculo del juego usa la coagulación, la sedimentación, la filtración, el cloro y la red. El desarenador, la estabilización del pH, el almacenamiento y los lodos se dibujan y se explican, pero no cambian el resultado: el desarenador no quita la arcilla que da la turbiedad, el pH del juego siempre queda dentro de la norma y el lodo se muestra como la turbiedad retirada. Las animaciones «con lupa» son ilustrativas; donde dependen de la dosis, la turbiedad o el cloro, usan los valores calculados.
+        </p>
         <h3>Medellín</h3>
         <p>
           El 96 % de los usuarios de EPM en el valle recibe agua de los embalses La Fe, Riogrande II y Piedras Blancas, potabilizada en plantas como La Ayurá (9,2 m³/s) y Manantiales (6,0 m³/s). San Fernando trata el sur del valle desde 2000 (1,8 m³/s nominales) y Aguas Claras, el norte desde 2018 (unos 5 m³/s). Fuentes: EPM y Superservicios, citadas en <em>docs/calidad/MODELO_CALIDAD.md</em>.
@@ -296,10 +396,12 @@ export function PlantLab({ head }: { head: ReactNode }) {
           <li>¿Por qué la planta necesita más coagulante después de llover?</li>
           <li>¿Por qué no sirve echar mucho cloro si el agua sigue turbia?</li>
           <li>¿Para qué debe quedar algo de cloro cuando el agua llega a la casa?</li>
+          <li>¿Por qué la floculación revuelve cada vez más despacio?</li>
+          <li>¿Qué pasaría con la quebrada si la planta botara sus lodos al río?</li>
         </ol>
       </div>
     ),
   };
 
-  return <Q3Layout head={head} stage={stage} dock={dock} panels={panels} tab={tab} setTab={setTab} />;
+  return <Q3Layout head={head} stage={stage} dock={dock} panels={panels} tab={tab} setTab={setTab} tabs={['procesos', 'retos', 'experimentos', 'datos', 'docente']} />;
 }

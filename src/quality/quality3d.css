@@ -422,10 +422,12 @@
   display: flex;
   gap: 2px;
   padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
   border-bottom: 1px solid var(--line);
 }
 .q3-ptabs button {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 42px;
   padding: 4px 6px;
   border: 0;
@@ -839,7 +841,8 @@
   display: none;
 }
 .q3-retos .link,
-.q3-probe .link {
+.q3-probe .link,
+.q3-unit .link {
   padding: 0;
   border: 0;
   background: none;
@@ -863,4 +866,232 @@
   .q3-probe .q3-small {
     display: none;
   }
+}
+
+/* pestaña Procesos de la planta: los once pasos, la lupa y el recorrido guiado */
+.q3-procs .btn {
+  min-height: 38px;
+  padding: 5px 14px;
+  font-size: 0.86rem;
+}
+.q3-procs .btn-ghost.small {
+  min-height: 36px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+.q3-tour {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 10px;
+}
+.q3-tour .q3-small {
+  margin: 0;
+}
+.q3-tourbar {
+  height: 4px;
+  margin: -4px 0 10px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.q3-tourbar i {
+  display: block;
+  height: 100%;
+  background: var(--water);
+  transform-origin: left center;
+  animation-name: q3-tour;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.q3-tourbar i.is-still {
+  animation: none;
+  transform: scaleX(1);
+  opacity: 0.4;
+}
+@keyframes q3-tour {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.q3-steps {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+.q3-steps button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 3px 8px 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+}
+.q3-steps button:hover {
+  border-color: var(--line-2);
+  background: var(--water-wash);
+}
+.q3-steps b {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--water-wash);
+  color: var(--water-deep);
+  font-size: 0.72rem;
+}
+.q3-steps button.is-seen b {
+  background: #d9efe1;
+  color: #1d5a35;
+}
+.q3-steps button.is-on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.q3-steps button.is-on b {
+  background: #ffd23f;
+  color: #3a2c00;
+}
+.q3-steps button:focus-visible,
+.q3-procnav button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.q3-proc {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.q3-proc-n {
+  margin: 0;
+  color: var(--water-deep);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.q3-proc h3 {
+  margin: 2px 0 6px;
+  font-size: 1.12rem;
+}
+.q3-proc h4 {
+  margin: 14px 0 6px;
+  font-size: 0.9rem;
+}
+.q3-proc p,
+.q3-how li {
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+.q3-proc p.q3-proc-short {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  font-weight: 550;
+}
+.q3-proc p.q3-small {
+  font-size: 0.76rem;
+}
+.q3-proc-lens {
+  margin: 0;
+}
+.q3-proc-lens figcaption {
+  margin-top: 4px;
+}
+.q3-lens2 {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.q3-lens-t {
+  font-size: 9px;
+  font-weight: 700;
+}
+.q3-lens-t:not([fill]) {
+  fill: #17324d;
+}
+.q3-io {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+.q3-io div {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--water-wash);
+}
+.q3-io dt {
+  color: var(--ink-2);
+  font-size: 0.72rem;
+}
+.q3-io dd {
+  margin: 1px 0 0;
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+.q3-how {
+  margin: 0;
+  padding-left: 18px;
+}
+.q3-how li + li {
+  margin-top: 3px;
+}
+.q3-dtable {
+  margin: 4px 0;
+}
+.q3-dtable th {
+  width: 46%;
+  font-weight: 650;
+  vertical-align: top;
+}
+.q3-dtable td {
+  text-align: left;
+}
+.q3-wash {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  margin-top: 12px;
+}
+.q3-procnav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 16px;
+}
+.q3-procnav .btn-ghost.small {
+  max-width: 48%;
+}
+.q3-procnav .btn-ghost.small:nth-child(2) {
+  order: 3;
+  max-width: none;
+  width: 100%;
+}
+.q3-unit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
 }

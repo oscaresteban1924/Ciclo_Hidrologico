@@ -380,6 +380,20 @@ La procedencia de los sectores reales escribe ahora los decimales con coma, como
 
 `npm run test:city`: **48 de 48**. `npm run test:quality`: **12 de 12** (nuevas Q9 a Q12: regla de los peces y solución del reto, escala del dibujo de la quebrada, casas del juego del colorante, partículas y bacterias dibujadas).
 
+## 4 terdecies. Los once procesos de la planta (ejecutada)
+
+**Pedido.** «Que en el módulo de calidad especifiques qué es lo que hace cada proceso de tratamiento del agua … se ve cada uno de los procesos, pero quiero más detalle».
+
+**Qué cambió.**
+- La planta 3D pasó de ocho a once partes: captación con rejilla (con basura atajada según el río), desarenador (arena en el fondo según el río), mezcla rápida, floculación en tres zonas separadas con paletas cada vez más lentas, sedimentación de alta tasa, tres filtros con grava, arena y antracita, tanque de contacto con pantallas en zigzag y cilindros de cloro, silo de cal y cámara de pH, tanque de almacenamiento, la llave y, detrás del sedimentador, el espesador y cuatro lechos de secado con sus tuberías de lodo.
+- Nueva pestaña **Procesos** (la primera): los once pasos como botones; para cada uno, qué hace, una animación «con lupa», lo que le pasa al agua en el juego con los valores calculados, cómo lo hace, la tabla de criterios con su fuente (Resolución 0330 de 2017 o Resolución 2115 de 2007), qué puede salir mal y qué se mide. Al elegir un paso la cámara vuela hasta él; tocar una parte en la escena abre el paso en el panel.
+- «Recorrer la planta» avanza solo cada 16 s y mueve la cámara; «Lavar los filtros» anima el retrolavado. Nuevo reto: los once pasos.
+- Al revisar las citas se corrigieron los artículos de la Resolución 2115 de 2007 que se mostraban en la llave: turbiedad art. 2, pH art. 4, cloro art. 9, coliformes art. 11, IRCA arts. 13 (cuadro 6) y 15 (cuadro 7), según el texto compilado de la CRA.
+
+**Capturas** (`tools/verificacion/planta_procesos.py`, escritorio 1440 × 860, y teléfono 390 × 844): las once etiquetas visibles en la vista general; los once pasos recorridos con «siguiente», cada uno con su lupa, sus valores (ninguno NaN) y su fuente; el retrolavado empieza y termina; la medalla de los once pasos se gana. En el teléfono la página no se desborda (ancho 390). `tools/verificacion/calidad3d.py` sigue dando las medallas de los peces, las jarras y el colorante. Consola sin errores.
+
+`npm run test:quality`: **13 de 13** (nueva Q13: los once procesos completos, en orden, en la escena, con valores válidos en 18 combinaciones, con las citas de la Resolución 0330 y con el IRCA calculado).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
