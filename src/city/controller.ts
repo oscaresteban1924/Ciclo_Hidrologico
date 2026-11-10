@@ -2,7 +2,7 @@
 // El tiempo de simulación avanza separado del dibujo: la pausa detiene el cálculo y el dibujo solo
 // muestra el estado calculado. Reiniciar reconstruye el estado inicial exacto desde el escenario.
 
-import { compile } from './sim/compile';
+import { compile, creekPoint } from './sim/compile';
 import { ComparePair, indicators, type Indicators } from './sim/compare';
 import { CitySim } from './sim/engine';
 import { baseInterventions, cloneInterventions, type CityConfig, type Interventions, type Pt, type Scenario, type Shared } from './sim/scenario';
@@ -114,6 +114,7 @@ export class CityController {
   overflowT: number | null = null;
   private view: SectorScene | SectorMap2D | null = null;
   private labelsPref = true;
+  private orthoPref = true;
   private valley: ValleyScene | null = null;
   private raf = 0;
   private last = 0;
@@ -212,6 +213,7 @@ export class CityController {
       if (this.disposed || epoch !== this.epoch) return;
       this.view = new SectorScene(this.opts.container, sc, c, { reducedMotion: this.opts.reducedMotion, quality: this.opts.quality });
       this.view.labels.setEnabled(this.labelsPref);
+      this.view.setOrtho(this.orthoPref);
     } else {
       const { SectorMap2D } = await import('./render/map2d');
       if (this.disposed || epoch !== this.epoch) return;
@@ -426,6 +428,19 @@ export class CityController {
   labelsOn(): boolean {
     return this.labelsPref;
   }
+  /** Foto aérea (ortofoto) sobre el terreno y los techos de un sector real, en la vista realista. */
+  setOrtho(on: boolean): void {
+    this.orthoPref = on;
+    if (this.view && 'setOrtho' in this.view) this.view.setOrtho(on);
+    this.notify(true);
+  }
+  orthoOn(): boolean {
+    return this.orthoPref;
+  }
+  /** El sector mostrado tiene ortofoto. */
+  hasOrtho(): boolean {
+    return !!this.sc?.imagery;
+  }
   setArrows(on: boolean): void {
     if (this.view) this.view.showArrows = on;
     this.notify(true);
@@ -455,6 +470,8 @@ export class CityController {
     }
     const v = this.view;
     if (!v) return;
+    // las vistas generales vuelven a mostrar los árboles ocultos para mirar la sección
+    if (cmd !== 'izq' && cmd !== 'der' && cmd !== 'acercar' && cmd !== 'alejar' && 'setTreeCutaway' in v) v.setTreeCutaway(null);
     if (cmd === 'izq') v.orbit(-20);
     else if (cmd === 'der') v.orbit(20);
     else if (cmd === 'acercar') v.zoom(0.8);
@@ -462,6 +479,7 @@ export class CityController {
     else v.goto(cmd, true);
   }
   focus(x: number, y: number): void {
+    if (this.view && 'setTreeCutaway' in this.view) this.view.setTreeCutaway(null);
     this.view?.focusOn(x, y);
   }
   /** Mira la boca de entrada de una cobertura desde aguas arriba, en diagonal y algo más alto que la vía. */
@@ -485,12 +503,12 @@ export class CityController {
     const cr = sim?.c.creek;
     const v = this.view;
     if (!cr || !v || !('lookFrom' in v)) {
-      if (cr && sim) this.focus((cr.i + 0.5) * sim.c.dx, (cr.jt + 0.5) * sim.c.dx);
+      if (cr && sim) this.focus(...creekPoint(cr, sim.c.dx, cr.jt));
       return;
     }
     // desde aguas abajo, sobre la quebrada y en diagonal: se ven el cauce, la mira y los frentes de las casas
     // de la orilla
-    const x = (cr.i + 0.5) * sim!.c.dx, y = (cr.jt + 0.5) * sim!.c.dx;
+    const [x, y] = creekPoint(cr, sim!.c.dx, cr.jt);
     // sentido del flujo en la sección (del eje de la quebrada): la cámara se pone aguas abajo
     let ux = 1, uy = 0;
     const ax = this.sc?.creek?.axis ?? [];
@@ -506,7 +524,10 @@ export class CityController {
       }
     }
     const nx = -uy, ny = ux;
-    (v as SectorScene).lookFrom([x + 33 * ux + 3 * nx, y + 33 * uy + 3 * ny, cr.bankLevel + 12], [x + 2 * ux + 6.5 * nx, y + 2 * uy + 6.5 * ny, cr.bankLevel + 0.6]);
+    const eye: [number, number] = [x + 33 * ux + 3 * nx, y + 33 * uy + 3 * ny];
+    // los árboles entre la cámara y la sección se ocultan mientras dura esta vista
+    (v as SectorScene).setTreeCutaway([eye, [x - 4 * ux, y - 4 * uy]], 6);
+    (v as SectorScene).lookFrom([eye[0], eye[1], cr.bankLevel + 12], [x + 2 * ux + 6.5 * nx, y + 2 * uy + 6.5 * ny, cr.bankLevel + 0.6]);
     this.notify(true);
   }
   isFlying(): boolean {

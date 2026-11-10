@@ -34,6 +34,9 @@ export class SectorMap2D {
   netFilter: NetFilter = 'ambas';
   showArrows = true;
   amplify = 1;
+  /** Ortofoto del sector real (vista realista): imagen cargada y preferencia de la persona. */
+  private ortho: HTMLImageElement | null = null;
+  private orthoOn = true;
 
   constructor(container: HTMLElement, sc: Scenario, c: Compiled) {
     this.container = container;
@@ -53,6 +56,15 @@ export class SectorMap2D {
     this.img = new ImageData(1, 1);
     this.setCompiled(c);
     this.resize();
+    if (sc.imagery) {
+      const im = new Image();
+      im.onload = () => (this.ortho = im);
+      im.src = sc.imagery.href;
+    }
+  }
+
+  setOrtho(on: boolean): void {
+    this.orthoOn = on;
   }
 
   setCompiled(c: Compiled): void {
@@ -107,9 +119,20 @@ export class SectorMap2D {
       zmin = Math.min(zmin, c.z[k]);
       zmax = Math.max(zmax, c.z[k]);
     }
+    // con la ortofoto, la imagen va debajo y la capa de celdas lleva solo el agua (transparente donde está seco)
+    const photo = this.view === 'realista' && this.orthoOn && this.ortho !== null && !!this.sc.imagery;
     for (let j = 0; j < c.ny; j++) for (let i = 0; i < c.nx; i++) {
       const k = j * c.nx + i;
       const o = ((c.ny - 1 - j) * c.nx + i) * 4;
+      if (photo) {
+        const h = sim && !c.solid[k] ? sim.h[k] : 0;
+        depthColor(h, tmp, 0);
+        d[o] = tmp[0] * 255;
+        d[o + 1] = tmp[1] * 255;
+        d[o + 2] = tmp[2] * 255;
+        d[o + 3] = c.solid[k] ? 0 : tmp[3] * 255;
+        continue;
+      }
       const base = (this.view === 'materiales' ? mat : real)[c.cover[k]];
       const shade = 0.75 + 0.3 * ((c.z[k] - zmin) / Math.max(1e-6, zmax - zmin));
       let r = base[0] * shade, g = base[1] * shade, b = base[2] * shade;
@@ -145,10 +168,16 @@ export class SectorMap2D {
     G.setTransform(1, 0, 0, 1, 0, 0);
     G.fillStyle = '#dfe8ee';
     G.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    G.imageSmoothingEnabled = false;
     const W = c.nx * c.dx, H = c.ny * c.dx;
-    G.drawImage(this.off, this.ox, this.oy, W * this.scale, H * this.scale);
     const P = (x: number, y: number): [number, number] => [this.ox + x * this.scale, this.oy + (H - y) * this.scale];
+    if (photo) {
+      const im = this.sc.imagery!;
+      const [ax, ay] = P(im.x0, im.y1), [bx, by] = P(im.x1, im.y0);
+      G.imageSmoothingEnabled = true;
+      G.drawImage(this.ortho!, ax, ay, bx - ax, by - ay);
+    }
+    G.imageSmoothingEnabled = false;
+    G.drawImage(this.off, this.ox, this.oy, W * this.scale, H * this.scale);
     // Tuberías esquemáticas
     if (this.cut) {
       G.setLineDash([6, 5]);

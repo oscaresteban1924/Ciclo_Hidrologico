@@ -65,6 +65,15 @@ export class SectorScene {
   private terrain!: THREE.Mesh;
   private terrainMat: THREE.MeshStandardMaterial;
   private terrainColors = { real: new Float32Array(0), mat: new Float32Array(0) };
+  /**
+   * Ortofoto del sector (sectores reales): se pinta sobre el terreno y los techos en la vista realista. `orthoOn`
+   * es la preferencia de la persona (botón «Foto aérea»); los uniformes los comparten el terreno y los techos.
+   */
+  private orthoTex: THREE.Texture | null = null;
+  /** Árboles del dibujo (instancias) y sus matrices originales, para el corte de vista. */
+  private treeInst: { trunks: THREE.InstancedMesh; crowns: THREE.InstancedMesh; xy: [number, number][]; mT: Float32Array; mC: Float32Array } | null = null;
+  private orthoOn = true;
+  private orthoU = { uOrtho: { value: null as THREE.Texture | null }, uOrthoOn: { value: 0 }, uOrthoBox: { value: new THREE.Vector4(0, 0, 1, 1) } };
   private terrainUniforms = { uPat: { value: 0 } };
   private water!: THREE.Mesh;
   private waterCells = new Int32Array(0);
@@ -217,14 +226,23 @@ export class SectorScene {
       sh.uniforms.uField = this.fx.u.uField;
       sh.uniforms.uHalf = this.fx.u.uHalf;
       sh.uniforms.uRainGeo = this.fx.u.uRainGeo;
+      sh.uniforms.uOrtho = this.orthoU.uOrtho;
+      sh.uniforms.uOrthoOn = this.orthoU.uOrthoOn;
+      sh.uniforms.uOrthoBox = this.orthoU.uOrthoBox;
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute float aPat;\nvarying float vPat;\nvarying vec3 vWPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPat = aPat;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+        .replace('#include <common>', '#include <common>\nattribute float aPat;\nattribute float aTop;\nvarying float vPat;\nvarying float vTop;\nvarying vec3 vWPos;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPat = aPat;\nvTop = aTop;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uPat;\nuniform float uWet;\nuniform float uWetTrail;\nuniform sampler2D uField;\nuniform vec2 uHalf;\nuniform vec4 uRainGeo;\nvarying float vPat;\nvarying vec3 vWPos;')
+        .replace('#include <common>', '#include <common>\nuniform float uPat;\nuniform float uWet;\nuniform float uWetTrail;\nuniform sampler2D uField;\nuniform vec2 uHalf;\nuniform vec4 uRainGeo;\nuniform sampler2D uOrtho;\nuniform float uOrthoOn;\nuniform vec4 uOrthoBox;\nvarying float vPat;\nvarying float vTop;\nvarying vec3 vWPos;')
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
+          // ortofoto sobre el terreno (vista realista de un sector real): cara superior con su color; escalones
+          // interiores, más oscuros; el corte del borde de la maqueta conserva el color del suelo
+          if (uOrthoOn > 0.5 && vTop > 0.25) {
+            vec2 ouv = (vec2(vWPos.x + uHalf.x, uHalf.y - vWPos.z) - uOrthoBox.xy) / (uOrthoBox.zw - uOrthoBox.xy);
+            if (ouv.x >= 0.0 && ouv.x <= 1.0 && ouv.y >= 0.0 && ouv.y <= 1.0) diffuseColor.rgb = texture2D(uOrtho, ouv).rgb * (vTop > 0.75 ? 1.0 : 0.7);
+          }
           if (uPat > 0.5) {
             vec2 p = vWPos.xz;
             float f = 1.0;
@@ -241,7 +259,10 @@ export class SectorScene {
           float wetT = clamp(max(uWet * rainHereT, trailT * uWetTrail * 0.9), 0.0, 1.0);
           diffuseColor.rgb *= mix(1.0, 0.64, wetT);`,
         )
-        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.24, wetT);');
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.24, wetT);')
+        // los escalones verticales del terreno, vistos casi de canto desde arriba, reflejaban el cielo (Fresnel) y
+        // se veían como rayas claras: en ellos se apaga casi todo el reflejo especular del entorno
+        .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectSpecular *= mix(0.12, 1.0, step(0.75, vTop));');
     };
     // Vista «bajo la calle»: las tuberías esquemáticas se dibujan por encima del terreno translúcido (rayos X)
     this.pipeMat = new THREE.MeshStandardMaterial({ color: '#25405c', roughness: 0.45, metalness: 0.2, emissive: new THREE.Color('#2b6cb0'), emissiveIntensity: 0, transparent: true, opacity: 0.92, depthTest: false });
@@ -462,11 +483,12 @@ export class SectorScene {
     const col: number[] = [];
     const mat: number[] = [];
     const pat: number[] = [];
+    const top: number[] = [];
     const idx: number[] = [];
     const coverRgb = COVER_LIST.map((id) => hexToRgb(COVERS[id].color));
     const matRgb = COVER_LIST.map((id) => hexToRgb(COVERS[id].matColor));
     const patOf = COVER_LIST.map((id) => PATTERN_ID[COVERS[id].pattern]);
-    const quad = (a: THREE.Vector3, b: THREE.Vector3, cc: THREE.Vector3, d: THREE.Vector3, rgb: number[], mrgb: number[], p: number, shade: number, bottomShade = shade) => {
+    const quad = (a: THREE.Vector3, b: THREE.Vector3, cc: THREE.Vector3, d: THREE.Vector3, rgb: number[], mrgb: number[], p: number, shade: number, bottomShade = shade, isTop = 0) => {
       const base = pos.length / 3;
       for (const q of [a, b, cc, d]) pos.push(q.x, q.y, q.z);
       for (let q = 0; q < 4; q++) {
@@ -474,6 +496,7 @@ export class SectorScene {
         col.push(rgb[0] * sh, rgb[1] * sh, rgb[2] * sh);
         mat.push(mrgb[0] * sh, mrgb[1] * sh, mrgb[2] * sh);
         pat.push(p);
+        top.push(isTop); // 1 cara superior · 0,5 escalón interior · 0 corte del borde
       }
       idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     };
@@ -498,7 +521,7 @@ export class SectorScene {
           const [x, y] = cxy(i, j, q);
           return this.w(x, y, cz[k * 4 + q]);
         });
-        quad(P[0], P[1], P[2], P[3], rgb, mrgb, p, n);
+        quad(P[0], P[1], P[2], P[3], rgb, mrgb, p, n, n, 1);
         for (const [qa, qb, di, dj, na, nbq] of EDGES) {
           const ii = i + di, jj = j + dj;
           const edge = ii < 0 || jj < 0 || ii >= nx || jj >= ny;
@@ -517,7 +540,11 @@ export class SectorScene {
           }
           const [ax, ay] = cxy(i, j, qa), [bx, by] = cxy(i, j, qb);
           const wrgb = edge ? soil : rgb;
-          quad(P[qa], P[qb], this.w(bx, by, zb), this.w(ax, ay, za), wrgb, edge ? soil : mrgb, 0, edge ? 0.95 : 0.78, edge ? 0.45 : 0.7);
+          // escalón interior: cara hacia la celda vecina más baja (orden antihorario visto desde afuera; antes
+          // quedaba al revés y se descartaba, y por el hueco se veía el cielo); el corte del borde de la maqueta
+          // conserva su orden
+          if (edge) quad(P[qa], P[qb], this.w(bx, by, zb), this.w(ax, ay, za), wrgb, soil, 0, 0.95, 0.45, 0);
+          else quad(P[qb], P[qa], this.w(ax, ay, za), this.w(bx, by, zb), wrgb, mrgb, 0, 0.78, 0.7, 0.5);
         }
       }
     }
@@ -526,6 +553,7 @@ export class SectorScene {
     const colors = new Float32Array(col);
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     g.setAttribute('aPat', new THREE.Float32BufferAttribute(pat, 1));
+    g.setAttribute('aTop', new THREE.Float32BufferAttribute(top, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
     this.terrainColors = { real: Float32Array.from(colors), mat: new Float32Array(mat) };
@@ -758,6 +786,26 @@ export class SectorScene {
         new THREE.MeshStandardMaterial({ map: glass, roughness: 0.35, metalness: 0.1 }),
         new THREE.MeshStandardMaterial({ map: roof, vertexColors: true, roughness: 0.95 }),
       ];
+      // techos: en la vista realista de un sector real, el color de la ortofoto en ese punto
+      this.buildingMats[3].onBeforeCompile = (sh) => {
+        sh.uniforms.uOrtho = this.orthoU.uOrtho;
+        sh.uniforms.uOrthoOn = this.orthoU.uOrthoOn;
+        sh.uniforms.uOrthoBox = this.orthoU.uOrthoBox;
+        sh.uniforms.uHalf = this.fx.u.uHalf;
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying vec3 vRW;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRW = (modelMatrix * vec4(position, 1.0)).xyz;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform sampler2D uOrtho;\nuniform float uOrthoOn;\nuniform vec4 uOrthoBox;\nuniform vec2 uHalf;\nvarying vec3 vRW;')
+          .replace(
+            '#include <color_fragment>',
+            `#include <color_fragment>
+            if (uOrthoOn > 0.5) {
+              vec2 ouv = (vec2(vRW.x + uHalf.x, uHalf.y - vRW.z) - uOrthoBox.xy) / (uOrthoBox.zw - uOrthoBox.xy);
+              if (ouv.x >= 0.0 && ouv.x <= 1.0 && ouv.y >= 0.0 && ouv.y <= 1.0) diffuseColor.rgb = texture2D(uOrtho, ouv).rgb;
+            }`,
+          );
+      };
     }
     const atlas = this.atlas!;
     type Geo = { pos: number[]; uv: number[]; col: number[]; nrm: number[]; idx: number[] };
@@ -1051,8 +1099,8 @@ export class SectorScene {
       g.setAttribute('position', new THREE.Float32BufferAttribute(laundryLines, 3));
       this.roofExtras.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#d8d8d2' })));
     }
-    this.roofExtras.visible = !this.cut;
     this.buildingsGroup.add(this.roofExtras);
+    this.syncRoofExtras();
   }
 
   private buildDrainsAndPipes(): void {
@@ -1281,6 +1329,7 @@ export class SectorScene {
     });
     trunks.castShadow = crowns.castShadow = true;
     this.decorGroup.add(trunks, crowns);
+    this.treeInst = { trunks, crowns, xy: d.trees.map(([x, y]) => [x, y] as [number, number]), mT: Float32Array.from(trunks.instanceMatrix.array as Float32Array), mC: Float32Array.from(crowns.instanceMatrix.array as Float32Array) };
     // Postes de concreto con cruceta, luminaria y cableado aéreo (rasgo muy visible de las calles de
     // Medellín). Son decorativos: no son la red eléctrica ni el alumbrado reales.
     const c = this.c;
@@ -1660,7 +1709,7 @@ export class SectorScene {
   setCut(on: boolean): void {
     this.cut = on;
     this.pipeGroup.visible = on;
-    this.roofExtras.visible = !on;
+    this.syncRoofExtras();
     for (const o of this.decorGroup.children) o.visible = !on || o.userData.keepInCut === true;
     this.floodGroup.visible = !on;
     this.probeGroup.visible = !on;
@@ -1685,7 +1734,80 @@ export class SectorScene {
     this.syncLabels();
   }
 
+  /**
+   * Corte de árboles para una vista: se ocultan los que quedan a menos de `r` metros del tramo entre la cámara y
+   * el punto mirado (en planta), para que no tapen la sección de la quebrada. `null` los vuelve a mostrar.
+   */
+  setTreeCutaway(seg: [[number, number], [number, number]] | null, r = 7): void {
+    const ti = this.treeInst;
+    if (!ti) return;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0).elements;
+    const aT = ti.trunks.instanceMatrix.array as Float32Array, aC = ti.crowns.instanceMatrix.array as Float32Array;
+    aT.set(ti.mT);
+    aC.set(ti.mC);
+    let hidden = 0;
+    if (seg) {
+      const [[ax, ay], [bx, by]] = seg;
+      const vx = bx - ax, vy = by - ay, L2 = vx * vx + vy * vy || 1;
+      ti.xy.forEach(([x, y], n) => {
+        const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / L2));
+        if (Math.hypot(ax + t * vx - x, ay + t * vy - y) < r) {
+          aT.set(zero, n * 16);
+          aC.set(zero, n * 16);
+          hidden++;
+        }
+      });
+    }
+    ti.trunks.instanceMatrix.needsUpdate = true;
+    ti.crowns.instanceMatrix.needsUpdate = true;
+    this.treesCut = hidden;
+  }
+  /** Árboles ocultos por el corte de la vista actual. */
+  treesCut = 0;
+
+  /** Hay ortofoto del sector (sectores reales). */
+  get hasOrtho(): boolean {
+    return !!this.sc.imagery;
+  }
+  /** Ortofoto activa (preferencia de la persona). */
+  get orthoEnabled(): boolean {
+    return this.orthoOn;
+  }
+  setOrtho(on: boolean): void {
+    this.orthoOn = on;
+    this.applyView();
+  }
+
+  /** Carga la ortofoto la primera vez que se necesita (imagen incrustada en el escenario; sin red). */
+  private ensureOrtho(): THREE.Texture | null {
+    const im = this.sc.imagery;
+    if (!im) return null;
+    if (!this.orthoTex) {
+      const tex = new THREE.TextureLoader().load(im.href, () => {
+        this.orthoU.uOrtho.value = tex;
+        if (this.terrain) this.applyView();
+        this.envPending = Math.max(this.envPending, 1);
+      });
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      this.orthoTex = tex;
+      this.textures.push(tex);
+      this.orthoU.uOrthoBox.value.set(im.x0, im.y0, im.x1, im.y1);
+    }
+    return this.orthoTex;
+  }
+
+  /** Accesorios inventados de los techos (tanques, ropa, rejas): ocultos bajo la calle y sobre la ortofoto. */
+  private syncRoofExtras(): void {
+    this.roofExtras.visible = !this.cut && this.orthoU.uOrthoOn.value < 0.5;
+  }
+
   private applyView(): void {
+    // se activa cuando la imagen ya está cargada (antes, el terreno conserva sus colores)
+    const ortho = this.view === 'realista' && this.orthoOn && this.ensureOrtho() !== null && this.orthoU.uOrtho.value !== null;
+    this.orthoU.uOrthoOn.value = ortho ? 1 : 0;
+    this.syncRoofExtras();
     const colAttr = this.terrain.geometry.getAttribute('color') as THREE.BufferAttribute;
     if (this.view === 'materiales') {
       (colAttr.array as Float32Array).set(this.terrainColors.mat);

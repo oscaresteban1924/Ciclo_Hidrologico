@@ -37,6 +37,8 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+import sys
+
 import numpy as np
 import tifffile
 from pyproj import Transformer
@@ -46,6 +48,7 @@ from shapely.ops import linemerge, unary_union
 from shapely.validation import make_valid
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 INSUMOS = ROOT / "insumos"
 
 
@@ -63,16 +66,6 @@ class Site:
 
 
 SITES = {
-    "blanquizal-la-iguana": Site(
-        "blanquizal-la-iguana",
-        "Blanquizal: afluente de la quebrada La Iguaná (datos oficiales)",
-        "Blanquizal · La Iguaná",
-        "Q. La Iguaná",
-        "Blanquizal",
-        "San Javier (comuna 13)",
-        (4711981, 2252010, 4712101, 2252160),
-        "Tramo de un afluente de la quebrada La Iguaná en el barrio Blanquizal (San Javier), con casas a pocos metros del cauce. Terreno, construcciones, vías y eje de la quebrada vienen de los servicios oficiales de mapas de la Alcaldía de Medellín.",
-    ),
     "andalucia-juan-bobo": Site(
         "andalucia-juan-bobo",
         "Andalucía: quebrada Juan Bobo (datos oficiales)",
@@ -81,20 +74,36 @@ SITES = {
         "Andalucía",
         "Santa Cruz (comuna 2)",
         (4717256, 2254459, 4717406, 2254579),
-        "Tramo de la quebrada Juan Bobo en el barrio Andalucía (Santa Cruz), conocido por el reasentamiento de familias del retiro. Terreno, construcciones, vías y eje de la quebrada vienen de los servicios oficiales de mapas de la Alcaldía de Medellín.",
+        "Tramo de la quebrada Juan Bobo en el barrio Andalucía (Santa Cruz), conocido por el reasentamiento de familias del retiro. Terreno, ortofoto, construcciones, vías y eje de la quebrada vienen de los servicios oficiales de mapas de la Alcaldía de Medellín.",
     ),
-    "el-corazon-ana-diaz": Site(
-        "el-corazon-ana-diaz",
-        "El Corazón: quebrada Ana Díaz (datos oficiales)",
-        "El Corazón · Ana Díaz",
+    "la-iguana-el-pesebre": Site(
+        "la-iguana-el-pesebre",
+        "La Iguaná entre El Pesebre y Fuente Clara (datos oficiales)",
+        "La Iguaná · El Pesebre",
+        "Q. La Iguaná",
+        "El Pesebre y Fuente Clara",
+        "límite de San Javier (comuna 13) y Robledo (comuna 7)",
+        (4712140, 2252060, 4712290, 2252180),
+        "Tramo abierto de la quebrada La Iguaná entre los barrios El Pesebre (San Javier) y Fuente Clara (Robledo), aguas abajo de Blanquizal. Terreno, ortofoto, construcciones, vías y eje de la quebrada vienen de los servicios oficiales de mapas de la Alcaldía de Medellín.",
+    ),
+    "ana-diaz-el-corazon": Site(
+        "ana-diaz-el-corazon",
+        "Ana Díaz en El Corazón y Betania (datos oficiales)",
+        "Ana Díaz · El Corazón",
         "Q. Ana Diaz",
-        "El Corazón",
+        "El Corazón y Betania",
         "San Javier (comuna 13)",
-        (4709311, 2248951, 4709431, 2249101),
-        "Tramo de la quebrada Ana Díaz en el barrio El Corazón (San Javier), con viviendas en la orilla. Terreno, construcciones, vías y eje de la quebrada vienen de los servicios oficiales de mapas de la Alcaldía de Medellín.",
+        (4709827, 2248823, 4709977, 2248943),
+        "Tramo abierto de la quebrada Ana Díaz entre los barrios El Corazón y Betania (San Javier), con viviendas a pocos metros del cauce. Terreno, ortofoto, construcciones, vías y eje de la quebrada vienen de los servicios oficiales de mapas de la Alcaldía de Medellín.",
     ),
 }
 
+BASIN_DEM = {
+    "andalucia-juan-bobo": "cuenca-dem-5m.tif",
+    "la-iguana-el-pesebre": "cuenca-dem-10m-amplia.tif",
+    "ana-diaz-el-corazon": "cuenca-dem-10m-amplia.tif",
+}
+RUNOFF_C = 0.75  # coeficiente de escorrentía de las laderas vecinas urbanizadas (estimado)
 FLOOR_M = 3.0
 BURN_HALF = 1.0  # semiancho del paso abierto a lo largo del eje [m]
 GAP_HALF = 1.5  # semiancho del paso de agua bajo construcciones sobre el cauce [m]
@@ -236,6 +245,82 @@ def cross_section(z: np.ndarray, axis: LineString, sv: float, half: float = 15.0
     return p, (nx_, ny_), ofs, zz
 
 
+def bank_tops(zz: np.ndarray, ofs: np.ndarray, c: int, free: np.ndarray, max_d: float = 10.0):
+    """Orillas a cada lado del talweg en una sección perpendicular (muestras cada 0,5 m): el borde de una terraza
+    (después de un talud que sube más de 0,3 m en un metro, los 3 m siguientes suben menos de 0,45 m y están
+    libres), el pie de una construcción o el terreno a `max_d` del talweg. Devuelve, por lado, (cota, distancia,
+    motivo)."""
+    out = []
+    for side in (-1, 1):
+        k, steep, why = c, False, "límite"
+        while True:
+            k2 = k + 2 * side
+            if k2 < 0 or k2 >= len(ofs) or abs(ofs[k2] - ofs[c]) > max_d:
+                break
+            if not free[k2]:
+                why = "construcción"
+                break
+            g = zz[k2] - zz[k]
+            if g >= 0.3:
+                steep = True
+            elif steep:
+                k3 = k + 6 * side
+                if 0 <= k3 < len(ofs) and zz[k3] - zz[k] < 0.45 and all(free[min(k, k3) : max(k, k3) + 1]):
+                    why = "terraza"
+                    break
+            k = k2
+        out.append((float(zz[k]), float(abs(ofs[k] - ofs[c])), why))
+    return out
+
+
+def control_section(z: np.ndarray, axis: LineString, solid: np.ndarray, log: list[str]):
+    """Sección de control: en la mitad central del tramo, entre las estaciones (cada metro) donde el eje va casi a
+    lo largo de una fila o columna de la malla (coseno ≥ 0,96, para que la sección del modelo sea perpendicular
+    al cauce), la de menor profundidad de cauce lleno (mediana móvil de 5 m): donde la quebrada se sale primero."""
+    from scipy.ndimage import median_filter
+
+    ny, nx = z.shape
+    L = axis.length
+    cands = []
+    for sv in np.arange(L * 0.25, L * 0.75, 1.0):
+        q, r = axis.interpolate(min(L, sv + 3)), axis.interpolate(max(0.0, sv - 3))
+        tx, ty = q.x - r.x, q.y - r.y
+        nn = math.hypot(tx, ty) or 1.0
+        tx, ty = tx / nn, ty / nn
+        p, (nx_, ny_), ofs, zz = cross_section(z, axis, sv, 12)
+        xs, ys = p.x + ofs * nx_, p.y + ofs * ny_
+        ii = np.clip(xs.astype(int), 0, nx - 1)
+        jj = np.clip(ys.astype(int), 0, ny - 1)
+        free = ~solid[jj, ii] & (xs >= 0) & (xs < nx) & (ys >= 0) & (ys < ny)
+        c = len(ofs) // 2
+        ct = min(range(c - 4, c + 5), key=lambda k: zz[k] if free[k] else 1e9)
+        tops = bank_tops(zz, ofs, ct, free)
+        cands.append({"sv": float(sv), "al": max(abs(tx), abs(ty)), "flow": "x" if abs(tx) >= abs(ty) else "y", "depth": min(tops[0][0], tops[1][0]) - float(zz[ct]), "tops": tops, "ct": ct, "p": p, "n": (nx_, ny_), "ofs": ofs, "zz": zz, "free": free})
+    med = median_filter(np.array([c["depth"] for c in cands]), size=5, mode="nearest")
+    ok = [k for k, c in enumerate(cands) if c["al"] >= 0.96]
+    if not ok:
+        ok = sorted(range(len(cands)), key=lambda k: -cands[k]["al"])[: max(1, len(cands) // 5)]
+    kb = min(ok, key=lambda k: med[k])
+    c = cands[kb]
+    ct, ofs, zz, free = c["ct"], c["ofs"], c["zz"], c["free"]
+    depth = float(min(4.0, max(0.5, c["depth"])))
+    level = float(zz[ct]) + depth
+
+    def reach(side):
+        k = ct
+        while 0 <= k + side < len(ofs) and free[k + side] and zz[k + side] < level:
+            k += side
+        return abs(ofs[k] - ofs[ct]) + 0.25
+
+    bank_half = float(min(10.0, max(1.5, round((reach(-1) + reach(1)) / 2 * 2) / 2)))
+    at = (c["p"].x + ofs[ct] * c["n"][0], c["p"].y + ofs[ct] * c["n"][1])
+    low = 0 if c["tops"][0][0] <= c["tops"][1][0] else 1
+    why = {"terraza": "borde de una terraza", "construcción": "pie de una construcción", "límite": "terreno a 10 m del fondo"}[c["tops"][low][2]]
+    clip = "" if abs(depth - c["depth"]) < 1e-9 else f" (la estimación dio {c['depth']:.2f} m; se usa el límite de {'0,5' if depth < 1 else '4'} m)"
+    log.append(f"Sección de control a {c['sv']:.0f} m de la entrada, donde el cauce se llena primero en la mitad central del tramo (entre las estaciones con el eje a menos de 16° de la malla): cauce lleno a {depth:.2f} m sobre el fondo{clip}, limitado por la orilla más baja ({why}, a {c['tops'][low][1]:.1f} m del talweg); semiancho del agua a ese nivel {bank_half:.1f} m.")
+    return {"at": at, "flow": c["flow"], "depth": depth, "bank_half": bank_half, "sv": c["sv"]}
+
+
 def fill_depressions(z: np.ndarray, solid: np.ndarray, log: list[str], eps: float = 0.001) -> np.ndarray:
     """Relleno de depresiones (inundación por prioridad, Barnes et al., 2014) con las construcciones como muros:
     toda celda libre queda con un camino descendente hasta un borde del dominio."""
@@ -278,6 +363,41 @@ def raster_mask(polys_: list, nx: int, ny: int) -> np.ndarray:
             continue
         m[j0:j1, i0:i1] |= shapely.contains_xy(p, xs[j0:j1, i0:i1], ys[j0:j1, i0:i1])
     return m
+
+
+def ortho(site: Site, nx: int, ny: int):
+    """Ortofoto 2024 del dominio (0,25 m) y su color medio por celda de 1 m."""
+    from PIL import Image
+
+    p = INSUMOS / site.id / "ortofoto-2024-25cm.jpg"
+    im = Image.open(p).convert("RGB")
+    m = 40  # 10 m de margen a 4 px/m
+    dom = im.crop((m, m, m + nx * 4, m + ny * 4))
+    a = np.asarray(dom, dtype=np.float64)  # filas desde el norte
+    cells = a.reshape(ny, 4, nx, 4, 3).mean(axis=(1, 3))[::-1]  # filas desde el sur
+    return dom, cells, p
+
+
+def vegetation(cells: np.ndarray, blocked: np.ndarray):
+    """Índice de exceso de verde (Woebbecke et al., 1995) en coordenadas cromáticas: 2g − r − b."""
+    s = cells.sum(axis=2) + 1e-9
+    r, g, b = cells[..., 0] / s, cells[..., 1] / s, cells[..., 2] / s
+    exg = 2 * g - r - b
+    bright = cells.mean(axis=2)
+    veg = (exg > 0.06) & ~blocked
+    trees = veg & (exg > 0.1) & (bright < 120)
+    return exg, veg, trees
+
+
+def mask_polys(m: np.ndarray, min_area: float = 6.0):
+    from shapely.geometry import box as sbox
+
+    ny, nx = m.shape
+    sq = [sbox(i, j, i + 1, j + 1) for j in range(ny) for i in range(nx) if m[j, i]]
+    if not sq:
+        return []
+    u = unary_union(sq).simplify(0.5)
+    return [q for q in polys(u) if q.area >= min_area]
 
 
 def edge_of(pt, W, H):
@@ -380,61 +500,87 @@ def build(site: Site, with_creek: bool) -> dict:
             names[lab] = names.get(lab, 0) + g.intersection(dom).length
     road_u = unary_union(roads).intersection(dom) if roads else Polygon()
     surfaces = []
-    if with_creek:
-        retiro = axis.buffer(RETIRO_M).intersection(dom).difference(road_u)
-        for k, q in enumerate(polys(retiro)):
-            if q.area >= 6:
-                surfaces.append({"id": f"retiro-{k}", "polygon": ring(q.simplify(0.3)), "cover": "grama", "kind": "estimado", "label": "Retiro de la quebrada"})
+    # coberturas vegetales desde la ortofoto (fuera de construcciones y vías)
+    img, cells_rgb, ortho_path = ortho(site, nx, ny)
+    road_m = raster_mask(polys(road_u), nx, ny)
+    exg, veg, trees_m = vegetation(cells_rgb, solid | road_m)
+    for k, q in enumerate(mask_polys(veg & ~trees_m)):
+        surfaces.append({"id": f"grama-{k}", "polygon": ring(q), "cover": "grama", "kind": "estimado", "label": "Pasto (ortofoto)"})
+    for k, q in enumerate(mask_polys(trees_m)):
+        surfaces.append({"id": f"arboles-{k}", "polygon": ring(q), "cover": "zona_verde", "kind": "estimado", "label": "Árboles (ortofoto)"})
+    log.append(f"Coberturas desde la ortofoto 2024 (índice de exceso de verde por celda de 1 m): {int((veg & ~trees_m).sum())} m² de pasto y {int(trees_m.sum())} m² con árboles; el resto, concreto.")
     for k, q in enumerate(polys(road_u)):
         if q.area >= 6:
             surfaces.append({"id": f"via-{k}", "polygon": ring(q.simplify(0.2)), "cover": "asfalto", "kind": "estimado"})
+    # árboles para el dibujo: uno cada ~4 m donde la ortofoto muestra copas
+    tree_pts = []
+    rng = np.random.default_rng(11)
+    for j in range(1, ny - 1, 4):
+        for i in range(1, nx - 1, 4):
+            sub = trees_m[j : j + 4, i : i + 4]
+            if sub.size and sub.mean() > 0.6:
+                tree_pts.append([round(i + 1 + float(rng.uniform(0, 2)), 1), round(j + 1 + float(rng.uniform(0, 2)), 1)])
     log.append(f"Vías: {len(vj['features'])} ejes oficiales; calzada estimada de 5 m (3 m en las de menor jerarquía), {road_u.area:.0f} m² en asfalto.")
     # --------------------------------------------------------------- bordes, entrada y sección
     inflows, creek, probes, labels = [], None, [], []
     a0 = axis.coords[0]
     e_in = edge_of(a0, W, H)
     if with_creek:
-        # sección de control: la del medio del tramo con el cauce mejor definido
-        best, bs = -1.0, axis.length / 2
-        for sv in np.arange(axis.length * 0.3, axis.length * 0.7, 2.0):
-            p, n_, ofs, zz = cross_section(z, axis, sv, 10)
-            c = len(ofs) // 2
-            d = min(zz[:c].max(), zz[c + 1 :].max()) - zz[c]
-            if d > best:
-                best, bs = d, sv
-        p, n_, ofs, zz = cross_section(z, axis, bs, 12)
-        c = len(ofs) // 2
-        bed = zz[c]
-
-        def half(side):
-            rng = range(c, len(ofs)) if side > 0 else range(c, -1, -1)
-            for k in rng:
-                if zz[k] >= bed + 1.5:
-                    return abs(ofs[k])
-            return 6.0
-
-        bank_half = float(min(6.0, max(2.0, round((half(-1) + half(1)) / 2 * 2) / 2)))
+        cs = control_section(z, axis, solid, log)
+        bank_half = cs["bank_half"]
         coord = a0[1] if e_in in ("E", "W") else a0[0]
         span = bank_half + 2.0
         inflows.append({"id": "quebrada-arriba", "name": f"Agua que trae la {site.quebrada.replace('Q.', 'quebrada')} desde arriba", "edge": e_in, "from": round(max(0.0, coord - span), 2), "to": round(min(W if e_in in ('N', 'S') else H, coord + span), 2), "kind": "estimado"})
-        sec = (round(p.x, 2), round(p.y, 2))
+        sec = (round(cs["at"][0], 2), round(cs["at"][1], 2))
+        # lecho del cauce con rugosidad de quebrada de montaña (cobertura «cauce»)
+        bed = axis.buffer(bank_half, cap_style=2).intersection(dom)
+        for k, q in enumerate(polys(bed)):
+            if q.area >= 4:
+                surfaces.append({"id": f"cauce-{k}", "polygon": ring(q.simplify(0.3)), "cover": "cauce", "kind": "estimado", "label": "Lecho de la quebrada"})
+        # cuenca real hasta la entrada del sector
+        from cuenca import delineate, runon_entries
+
+        res = delineate(INSUMOS / site.id / BASIN_DEM[site.id], (site.domain[0] + a0[0], site.domain[1] + a0[1]))
+        if res["touchesEdge"]:
+            raise SystemExit("La cuenca toca el borde del modelo de elevación: amplíe el recuadro.")
+        gauge_d = max(300.0, round(res["lengthM"] / 2, -1))
+        basin = {"name": f"Cuenca de la {site.quebrada.replace('Q. ', 'quebrada ')} hasta el sector", "areaKm2": res["areaKm2"], "lengthM": res["lengthM"], "slopePct": res["slopePct"], "gauge": {"name": "Estación de nivel didáctica aguas arriba", "distanceM": gauge_d, "celerityMs": 4}}
+        log.append(f"Cuenca hasta la entrada del sector (D8 sobre el modelo de elevación de {res['cellM']:.0f} m, con relleno de depresiones): {res['areaKm2']:.3f} km², longitud hidráulica {res['lengthM']:.0f} m, pendiente media {res['slopePct']:.1f} %, desde {res['headZ']:.0f} m hasta {res['outletZ']:.0f} m. La estación de nivel es didáctica, a {gauge_d:.0f} m por el cauce.")
+        # agua de las laderas vecinas que entra por los bordes
+        coord_in = a0[1] if e_in in ("E", "W") else a0[0]
+        for k, g in enumerate(runon_entries(res, site.domain, [(e_in, coord_in, bank_half + 8)])):
+            if g["areaM2"] < 200:
+                continue
+            L = W if g["edge"] in ("N", "S") else H
+            inflows.append({"id": f"ladera-{k}", "name": f"Agua de la ladera vecina (borde {g['edge']})", "edge": g["edge"], "from": round(max(0.0, g["center"] - 5), 1), "to": round(min(L, g["center"] + 5), 1), "kind": "estimado", "rainAreaM2": round(g["areaM2"], 0), "runoffC": RUNOFF_C})
+        ro = [q for q in inflows if q.get("rainAreaM2")]
+        log.append(f"Agua de las laderas vecinas: {len(ro)} entradas por los bordes con {sum(q['rainAreaM2'] for q in ro) / 1e4:.2f} ha de fuera del sector (método racional, C = {RUNOFF_C}).")
         creek = {
             "name": site.quebrada.replace("Q. ", "Quebrada "),
             "inflowId": "quebrada-arriba",
             "axis": [[round(x, 2), round(y, 2)] for x, y in axis.simplify(0.5).coords],
-            "section": {"at": list(sec), "halfWidthM": 12, "bankHalfWidthM": bank_half, "name": "Sección de control"},
-            "baseM3s": 0.1,
+            "section": {"at": list(sec), "halfWidthM": 12, "bankHalfWidthM": bank_half, "name": "Sección de control", "flowAxis": cs["flow"], "bankDepthM": round(cs["depth"], 2)},
+            "baseM3s": round(max(0.05, 0.03 * res["areaKm2"]), 2),
+            "basin": basin,
         }
         probes.append({"id": "seccion", "name": "Quebrada (sección de control)", "at": list(sec)})
-        log.append(f"Sección de control a {bs:.0f} m del borde de entrada: cauce de {best:.1f} m de hondo; semiancho hasta la orilla {bank_half:.1f} m (estimado del modelo de elevación).")
     # salidas: todos los bordes, salvo el tramo por donde entra la quebrada
     outlets = []
     for e in ("N", "S", "E", "W"):
         L = W if e in ("N", "S") else H
         segs = [(0.0, L)]
-        if inflows and inflows[0]["edge"] == e:
-            a, b = inflows[0]["from"] - 1.0, inflows[0]["to"] + 1.0
-            segs = [(0.0, max(0.0, a)), (min(L, b), L)]
+        for f in sorted([q for q in inflows if q["edge"] == e], key=lambda q: q["from"]):
+            a, b = f["from"] - 1.0, f["to"] + 1.0
+            nsegs = []
+            for fr, to in segs:
+                if b <= fr or a >= to:
+                    nsegs.append((fr, to))
+                    continue
+                if a > fr:
+                    nsegs.append((fr, a))
+                if b < to:
+                    nsegs.append((b, to))
+            segs = nsegs
         for k, (fr, to) in enumerate(segs):
             if to - fr >= 2:
                 outlets.append({"id": f"borde-{e}-{k}", "name": f"Borde {e}", "edge": e, "from": round(fr, 2), "to": round(to, 2), "slope": round(outward_slope(z, e), 3), "kind": "estimado"})
@@ -531,10 +677,17 @@ def build(site: Site, with_creek: bool) -> dict:
         "engine": {"name": "inercial-local-urbano", "version": "1.0.0"},
         "seed": 7,
     }
+    import base64
+    import io
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=80, optimize=True, progressive=True)
+    scen["imagery"] = {"href": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii"), "x0": 0, "y0": 0, "x1": W, "y1": H, "label": f"Ortofoto Medellín 2024 (0,25 m), Alcaldía de Medellín · SHA-256 del original {sha(ortho_path)[:16]}…"}
+    scen["decor"] = {"markings": [], "trees": tree_pts, "lamps": []}
     if creek:
         scen["creek"] = creek
     else:
-        scen["decor"] = {"markings": [], "trees": [], "lamps": [], "creekRef": [[round(x, 2), round(y, 2)] for x, y in axis.simplify(0.5).coords]}
+        scen["decor"]["creekRef"] = [[round(x, 2), round(y, 2)] for x, y in axis.simplify(0.5).coords]
     return scen
 
 
@@ -551,14 +704,14 @@ def main() -> None:
     zb, *_ = burn_channel(z, axis, log)
     ok = tot = 0
     for sv in np.arange(3, axis.length - 3, 5):
-        p, n_, ofs, zz = cross_section(zb, axis, sv, 10)
+        p, n_, ofs, zz = cross_section(zb, axis, sv, 15)
         c = len(ofs) // 2
         tot += 1
         ok += zz[:c].max() - zz[c] >= 1.0 and zz[c + 1 :].max() - zz[c] >= 1.0
     open_frac = ok / max(1, tot)
     with_creek = a.creek == "si" or (a.creek == "auto" and open_frac >= 0.8)
     scen = build(site, with_creek)
-    scen["provenance"]["log"].insert(0, f"Cauce abierto en el terreno: {open_frac * 100:.0f} % de las secciones cada 5 m tienen las dos orillas al menos 1 m sobre el fondo en 10 m (umbral 80 % para simular la quebrada).")
+    scen["provenance"]["log"].insert(0, f"Cauce abierto en el terreno: {open_frac * 100:.0f} % de las secciones cada 5 m tienen las dos orillas al menos 1 m sobre el fondo en 15 m (umbral 80 % para simular la quebrada).")
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(json.dumps(scen, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"{a.out}: quebrada {'simulada' if with_creek else 'de referencia'}; {len(scen['buildings'])} edificaciones; {len(scen['surfaces'])} superficies")

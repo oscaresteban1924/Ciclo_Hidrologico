@@ -198,8 +198,13 @@ export interface CreekSpec {
   inflowId: string;
   /** Eje del cauce (para dibujar y para la pendiente) de aguas arriba a aguas abajo. */
   axis: Pt[];
-  /** Sección de control: punto sobre el eje y semiancho analizado [m]; semiancho del cauce hasta la orilla [m]. */
-  section: { at: Pt; halfWidthM: number; bankHalfWidthM: number; name: string };
+  /**
+   * Sección de control: punto sobre el eje y semiancho analizado [m]; semiancho del cauce hasta la orilla [m].
+   * Opcionales (sectores reales): `flowAxis`, eje de la malla que el agua cruza (si falta, sale de la dirección
+   * del eje del cauce en el punto), y `bankDepthM`, profundidad de cauce lleno estimada en la sección [m]; con
+   * ella las orillas son las primeras celdas a cada lado que alcanzan ese nivel (o una construcción).
+   */
+  section: { at: Pt; halfWidthM: number; bankHalfWidthM: number; name: string; flowAxis?: 'x' | 'y'; bankDepthM?: number };
   /** Caudal base mientras dura la creciente [m³/s]. */
   baseM3s: number;
   /**
@@ -285,6 +290,12 @@ export interface InflowSpec {
   from: number;
   to: number;
   kind: DataKind;
+  /**
+   * Agua de las laderas vecinas: área de fuera del sector que drena a este tramo del borde [m²] y su coeficiente
+   * de escorrentía. Mientras llueve entra C·i·A (método racional). Sin estos campos es una entrada fija.
+   */
+  rainAreaM2?: number;
+  runoffC?: number;
 }
 
 export interface ZoneSpec {
@@ -382,6 +393,8 @@ export interface Scenario {
    * construcción vecina. Para sectores reales con manzanas densas.
    */
   closePockets?: boolean;
+  /** Imagen aérea del dominio para el dibujo del terreno y los techos (solo dibujo). */
+  imagery?: { href: string; x0: number; y0: number; x1: number; y1: number; label: string };
   defaults: Shared;
   engine: { name: string; version: string };
   seed: number;
@@ -585,6 +598,12 @@ export function validateScenario(raw: unknown): ValidationResult {
   if (!s.provenance || !Array.isArray(s.provenance.layers) || !s.provenance.statement) errors.push('Falta la procedencia de los datos.');
   if (!Array.isArray(s.outlets) || s.outlets.length === 0) errors.push('Debe existir al menos una salida hidráulica definida.');
   if (!Array.isArray(s.buildings)) errors.push('Falta la lista de edificios.');
+  const sec = s.creek?.section;
+  if (s.creek && (!sec || !Array.isArray(s.creek.axis) || s.creek.axis.length < 2)) errors.push('Quebrada sin eje o sin sección de control.');
+  else if (sec) {
+    if (sec.bankDepthM != null && !isNum(sec.bankDepthM, 0.1, 10)) errors.push('Profundidad de cauce lleno fuera de rango (0,1–10 m).');
+    if (sec.flowAxis != null && sec.flowAxis !== 'x' && sec.flowAxis !== 'y') errors.push('Eje de la sección de control inválido.');
+  }
   if (errors.length === 0 && ext && t) {
     if (Math.abs(t.nx * t.dx - ext.width) > t.dx || Math.abs(t.ny * t.dx - ext.height) > t.dx) errors.push('El terreno no cubre la extensión declarada.');
   }

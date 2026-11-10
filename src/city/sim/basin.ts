@@ -42,6 +42,8 @@ export interface BasinSpec {
 export const WARNING = {
   /** Lluvia acumulada en la cuenca en los últimos 30 minutos que activa el aviso por lluvia [mm]. */
   rain30Mm: 20,
+  /** El tiempo de aviso se mide hasta que el agua llega a una casa a esta distancia del cauce o menos [m]. */
+  nearCreekM: 20,
   /** Alertas por caudal en la estación, como fracción de la capacidad del cauce en el sector. */
   levels: [
     { id: 'amarilla', name: 'Alerta amarilla', frac: 0.4, color: '#e7c35a', text: 'atentos: la quebrada viene creciendo' },

@@ -261,7 +261,7 @@ Resultado: **51 m³/s**, a 1,96 m del fondo con 1,7 % de pendiente. La prueba C1
 - con el 125 % sí pasa agua por fuera y el nivel supera la orilla.
 
 **Lo que se mide en la sección,** del estado calculado:
-- el caudal que la cruza dentro del cauce y por fuera (desborde);
+- el caudal que la cruza dentro del cauce y por fuera (desborde), promediado en cada intervalo de muestreo de 10 s (en un cauce empinado el caudal instantáneo de una sola fila de caras oscila de un paso al siguiente);
 - el nivel en el talweg.
 
 El panel dibuja la sección transversal en vivo y el hidrograma, con la línea de capacidad.
@@ -362,7 +362,7 @@ En la herramienta «Creciente» se puede elegir el **origen de la creciente**: e
 
 El hidrograma se calcula cada minuto y entra completo por la quebrada (prueba W2); el lodo lo multiplica por `1/(1 − Cv)` como en el hidrograma de ejemplo. La cobertura de la cuenca es una intervención: A y B pueden tener cuencas distintas con la misma lluvia.
 
-**Aviso temprano.** Una estación de nivel a 2,5 km aguas arriba ve el mismo hidrograma adelantado el tiempo de viaje de la onda (4 m/s: 10 min; sin atenuación). Los umbrales son **didácticos**: aviso por lluvia con 20 mm o más en 30 minutos; alerta amarilla, naranja y roja cuando el caudal en la estación llega a 40 %, 70 % y 100 % de la capacidad del cauce en el sector. El motor registra el primer momento en que el agua llega a 10 cm junto a cada edificación; el **tiempo de aviso** es el que pasa entre una alerta y ese momento. En el Valle de Aburrá funciona un sistema de alerta temprana real, con sus propias estaciones y umbrales; este ejercicio no usa sus datos.
+**Aviso temprano.** Una estación de nivel a 2,5 km aguas arriba ve el mismo hidrograma adelantado el tiempo de viaje de la onda (4 m/s: 10 min; sin atenuación). Los umbrales son **didácticos**: aviso por lluvia con 20 mm o más en 30 minutos; alerta amarilla, naranja y roja cuando el caudal en la estación llega a 40 %, 70 % y 100 % de la capacidad del cauce en el sector. El motor registra el primer momento en que el agua llega a 10 cm junto a cada edificación a 20 m o menos del eje de la quebrada (las demás se pueden mojar por la lluvia del barrio sin que crezca la quebrada); el **tiempo de aviso** es el que pasa entre una alerta y ese momento. Al elegir un aguacero, la simulación dura hasta media hora después del pico calculado en el barrio (entre 110 y 240 min). En el Valle de Aburrá funciona un sistema de alerta temprana real, con sus propias estaciones y umbrales; este ejercicio no usa sus datos.
 
 **Resultados con 80 mm en una hora y suelo seco** (pruebas W1 y W2; 110 min simulados):
 
@@ -373,6 +373,17 @@ El hidrograma se calcula cada minuto y entra completo por la quebrada (prueba W2
 | Urbanizada | 90 | 54 mm (67 %) | 21 min | 72 m³/s en el minuto 65 | lluvia 15; amarilla 19; naranja 27; roja 35 | minuto 40 (5 min después de la alerta roja) | 6 |
 
 La fila «Mixta» viene solo del hidrograma y de los umbrales; no se corrió en el sector, de modo que no tiene resultados de casas.
+
+### 6.8 Sectores con datos oficiales: sección de control, cuenca y laderas
+
+Los tres sectores reales (`docs/medellin/DATOS_REALES.md`) usan el mismo motor con cuatro piezas propias:
+
+- **Sección de control orientada con el cauce.** Si el escenario no lo declara (`section.flowAxis`), el compilador toma la dirección del eje en el punto de la sección: si va más en x, la sección es una columna de la malla; si va más en y, una fila. Guarda el sentido del flujo (`sign`) y el coseno del ángulo entre el cauce y la malla (`cosT`; si el ángulo es menor de ≈ 6° se toma 1, porque la corrección sería menor de 0,5 %). El caudal medido es el de la cara de aguas abajo de cada celda, positivo en el sentido del cauce; la capacidad se multiplica por `cosT` (la línea de la malla es `1/cosT` más larga que el ancho del cauce) y la pendiente se mide sobre el eje.
+- **Cauce lleno estimado.** Con `section.bankDepthM` el talweg es la celda más baja a ±2 celdas del punto, el cauce lleno queda a esa profundidad y las orillas son, a cada lado, la primera celda que alcanza ese nivel o una construcción. Así la capacidad corresponde al terreno de la malla de cálculo (prueba D2).
+- **Laderas vecinas.** Cada entrada con `rainAreaM2` aporta `C·i·A` mientras llueve (i, la intensidad del momento). Sus celdas no son salidas, están comunicadas con el resto del barrio (componente libre de 200 m² o más) y el terreno baja hacia adentro; se cuentan aparte en el balance (`runonIn`) y como entrada.
+- **Relleno final de depresiones** sobre la malla ya rasterizada, desde las salidas (sección 0 de DATOS_REALES.md).
+
+**Aviso temprano en los sectores reales.** La cuenca es la delineada sobre el modelo de elevación; la estación queda a la mitad de la longitud hidráulica. En La Iguaná (42,7 km², retardo de 60 min) la creciente llega más de una hora después de la lluvia del barrio; en Juan Bobo (0,13 km², retardo de 8 min) la creciente es pequeña y lo que moja las casas es la lluvia del barrio.
 
 ## 7. Tiempo, pausa y reproducibilidad
 

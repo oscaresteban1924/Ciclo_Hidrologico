@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 import type { CitySim } from '../sim/engine';
-import type { Compiled } from '../sim/compile';
+import { creekCell, creekPoint, type Compiled } from '../sim/compile';
 import type { Scenario } from '../sim/scenario';
 import { circ, type SewerStepEnv } from '../sim/sewer';
 import { SEWER_COLORS, acometidas, showsSystem, type NetFilter } from './sewerColors';
@@ -294,10 +294,14 @@ export class SewerView {
   private buildCreek(): void {
     const cr = this.c.creek, ck = this.sc.creek;
     if (!cr || !ck) return;
-    const { dx } = this.c;
-    const x = (cr.i + 0.5) * dx;
-    const yt = ck.section.at[1];
-    const yPost = yt - ck.section.bankHalfWidthM - 1.2;
+    const { dx, nx } = this.c;
+    // la mira va en la orilla de índice transversal menor, fuera del cauce; si allí hay una construcción, en la otra
+    const along = (cr.i + 0.5) * dx;
+    const sCross = cr.flow === 'x' ? ck.section.at[1] : ck.section.at[0];
+    let cPost = ck.section.bankDepthM != null ? (cr.jb0 + 0.5) * dx - 1.0 : sCross - ck.section.bankHalfWidthM / cr.cosT - 1.2;
+    const jPost = Math.floor(cPost / dx);
+    if (ck.section.bankDepthM != null && (jPost < 0 || this.c.solid[creekCell(cr, nx, Math.max(0, jPost))])) cPost = (cr.jb1 + 0.5) * dx + 1.0;
+    const [x, yPost] = cr.flow === 'x' ? [along, cPost] : [cPost, along];
     const g0 = cr.zBed;
     const top = cr.bankLevel + 2.6;
     const post = new THREE.Mesh(this.geo(new THREE.BoxGeometry(0.16, top - g0, 0.06)), this.mat(new THREE.MeshStandardMaterial({ color: '#f2f0ea', roughness: 0.6 })));
@@ -318,12 +322,13 @@ export class SewerView {
     const dashG = this.geo(new THREE.PlaneGeometry(0.12, 0.6).rotateX(-Math.PI / 2));
     const dashM = this.mat(new THREE.MeshBasicMaterial({ color: '#f2f0ea', transparent: true, opacity: 0.8 }));
     for (let j = cr.j0; j <= cr.j1; j++) {
-      const y = (j + 0.5) * dx;
       if (j % 2) continue;
-      const k = j * this.c.nx + cr.i;
+      const k = creekCell(cr, nx, j);
       if (this.c.solid[k]) continue;
+      const [px, py] = creekPoint(cr, dx, j);
       const m = new THREE.Mesh(dashG, dashM);
-      m.position.copy(this.w(x, y, this.groundAt(x, y) + 0.025));
+      if (cr.flow === 'y') m.rotation.y = Math.PI / 2;
+      m.position.copy(this.w(px, py, this.groundAt(px, py) + 0.025));
       this.over.add(m);
     }
     this.anchors.push({ id: 'creek-sec', text: `${ck.section.name}`, sub: 'mira con la cota de cauce lleno', at: this.w(x, yPost, top + 0.6), cutOnly: false, priority: 4, kind: 'aviso', sys: -1 });

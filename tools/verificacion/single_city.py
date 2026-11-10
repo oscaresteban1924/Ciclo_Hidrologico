@@ -1,4 +1,5 @@
-# Versión de un solo archivo, sin servidor: el módulo Medellín abre, calcula y no pide nada a internet.
+# Versión de un solo archivo, sin servidor: el módulo Medellín abre y calcula, la calidad del agua abre, la foto
+# aérea de un sector real se carga (incrustada) y no se pide nada a internet.
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
@@ -19,6 +20,23 @@ with sync_playwright() as p:
     t = pg.locator('.sim-clock').inner_text().replace('\n', ' | ')
     pg.screenshot(path='/home/claude/shots/city/single-file.png')
     print('reloj:', t)
+    # módulo «Calidad del agua» en el mismo archivo
+    pg.get_by_role('button', name='Calidad del agua').click()
+    pg.wait_for_selector('.q-tabs', timeout=30000)
+    pg.get_by_role('button', name='Levantar una piedra').click()
+    print('calidad:', pg.locator('.q-bmwp').inner_text().replace('\n', ' '))
+    pg.locator('.city-pick, .q-tabs').first.wait_for()
+    # sector real con foto aérea
+    pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
+    pg.wait_for_selector('.city-pick, .city-simbar', timeout=60000)
+    if pg.locator('.city-pick').count() == 0:
+        pg.locator('a, button', has_text='Valle de Aburrá').first.click()
+        pg.wait_for_selector('.city-pick', timeout=60000)
+    pg.locator('.city-pick button', has_text='La Iguaná').first.evaluate('e => e.click()')
+    pg.wait_for_function("() => { const c = window.__cityDebug.controller; return c && c.sc && c.sc.id === 'la-iguana-el-pesebre' && c.hasOrtho(); }", timeout=60000)
+    pg.wait_for_timeout(3000)
+    pg.screenshot(path='/home/claude/shots/city/single-file-iguana.png')
+    print('foto aérea activa:', pg.evaluate("() => window.__cityDebug.controller.view.orthoU.uOrthoOn.value"))
     print('peticiones externas:', reqs)
     print('\n'.join(logs[:10]) or 'consola limpia')
     b.close()

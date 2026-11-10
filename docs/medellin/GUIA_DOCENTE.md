@@ -6,7 +6,7 @@ Para estudiantes de 8 a 12 años. Sesión sugerida: 45 a 60 minutos.
 
 Que cada niña o niño **cambie una parte de la ciudad, vea un cambio coherente en el agua y pueda explicar por qué**. La maqueta calcula de verdad cómo corre, se infiltra, se guarda y sale el agua; no es una animación preparada de antemano.
 
-> Es un laboratorio educativo. No es un pronóstico oficial de inundaciones y sus intervenciones no son diseños de ingeniería. Los sectores incluidos son didácticos o demostrativos: **no son lugares reales de Medellín**.
+> Es un laboratorio educativo. No es un pronóstico oficial de inundaciones y sus intervenciones no son diseños de ingeniería. La calle de prueba y la ladera son didácticas: **no son lugares reales de Medellín**. Los tres sectores con datos oficiales (Juan Bobo, La Iguaná y Ana Díaz) sí son lugares reales, con terreno, ortofoto, construcciones y vías de la Alcaldía; sus alturas, coberturas, sección de control y cuenca son estimadas.
 
 ## Recorrido sugerido
 
@@ -125,11 +125,23 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
 ### Dentro de un sector
 
 - Alrededor de la maqueta se ve el mismo valle, a escala real y sin exagerar. El botón **Valle** pone la cámara detrás del sector, ladera arriba, mirando hacia el río y la otra ladera.
-- La ubicación de la calle y de la ladera en el valle es **ilustrativa**: son escenarios didácticos.
+- La ubicación de la calle y de la ladera en el valle es **ilustrativa**: son escenarios didácticos. Los sectores con datos oficiales están en su lugar real.
+- En los sectores con datos oficiales, la vista realista pinta la **foto aérea de 2024** sobre el terreno y los techos (botón «Foto aérea» para quitarla). Las fachadas siguen siendo ambientación: la foto solo muestra los techos.
+- **Preguntas para la clase (sectores reales):** «En Juan Bobo la quebrada casi no crece con la lluvia de su cuenca, pero las casas igual se mojan. ¿De dónde viene esa agua?» (la lluvia del barrio y la de las laderas vecinas). «En La Iguaná, ¿por qué la creciente llega más de una hora después del aguacero?» (cuenca de 43 km²).
 - Las fachadas, los avisos de los locales, los postes con cables, las motos y la ropa tendida son **ambientación**: ayudan a reconocer un barrio de Medellín, pero no son la red eléctrica, el alumbrado ni casas reales. El cálculo usa solo las huellas, las alturas y las bajantes de los edificios.
 - Durante un aguacero fuerte el valle se pierde en la bruma, las nubes bajan por las laderas y se encienden ventanas y luminarias, como en Medellín en una tarde de lluvia. El sector sigue nítido. Todo eso es ambiente: la lluvia que se calcula es la que se eligió en «Crear lluvia».
 - En equipos sin tarjeta gráfica, el entorno lejano se simplifica solo para que la maqueta responda mejor; el cálculo no cambia.
 - **Preguntas para la clase:** «Si toda la ladera de enfrente está cubierta de techos, ¿adónde va la lluvia que cae ahí?» «¿Qué diferencia hay entre la quebrada con árboles y la calle de concreto?»
+
+## Módulo «Calidad del agua»
+
+Está en el menú principal, junto a «Medellín». Tiene tres partes; cada una sirve para una sesión de 30 a 45 minutos.
+
+1. **La quebrada y su salud.** La sonda mide temperatura, oxígeno, pH, conductividad y turbiedad en cualquier punto; las muestras de laboratorio dan coliformes fecales y DBO5; al levantar una piedra aparecen los bichos y su puntaje BMWP/Col. Secuencia sugerida: medir arriba y abajo del tubo; cambiar a verano; levantar la piedra en las dos estaciones; conectar las casas al alcantarillado y repetir. Preguntas: «¿Por qué el oxígeno casi no baja, pero ya no se puede nadar?» «¿Qué nos dicen los bichos que no dice la sonda?» (cómo ha estado el agua durante semanas).
+2. **Del río a la llave.** Prueba de jarras para encontrar la dosis de coagulante, dosis de cloro y lista de la Resolución 2115 de 2007 con su IRCA. Retos: hacer que el agua cumpla con el río tras la lluvia; luego con la creciente; luego quitar el coagulante y ver por qué el cloro solo no basta. Al final, el esquema de una planta de aguas residuales y las plantas San Fernando y Aguas Claras.
+3. **La ciudad y la lluvia.** Mugre acumulada en la calle, primer lavado, basura en el sumidero y conexiones erradas. Dos botones abren el laboratorio de lluvia en las misiones «Sumidero obstruido» y «Conexiones erradas».
+
+Las muestras de la quebrada se pueden guardar en la bitácora. Los valores son típicos de la literatura y las presencias de los bichos siguen una regla didáctica; el detalle está en «Para docentes» de cada parte y en `docs/calidad/MODELO_CALIDAD.md`.
 
 ## Pestaña Docente
 

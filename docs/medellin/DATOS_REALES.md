@@ -2,36 +2,48 @@
 
 ## 0. Sectores con datos oficiales incluidos (noviembre de 2026)
 
-La aplicación trae tres sectores construidos con los servicios oficiales de mapas de la Alcaldía de Medellín. El entorno de trabajo no tiene acceso a `www.medellin.gov.co`, así que los datos se consultaron con el navegador integrado del computador del usuario. Las respuestas sin modificar se trajeron al repositorio en `tools/geo/insumos/`, cada una con su SHA-256 verificado. El manifiesto (`tools/geo/insumos/manifiesto.json`) guarda la consulta exacta de cada archivo.
+La aplicación trae tres sectores construidos con los servicios oficiales de mapas de la Alcaldía de Medellín, los tres sobre **tramos abiertos** de quebradas. El entorno de trabajo no tiene acceso a `www.medellin.gov.co`, así que los datos se consultaron con el navegador integrado del computador del usuario. Las respuestas sin modificar se trajeron al repositorio en `tools/geo/insumos/`, cada una con su SHA-256 verificado. El manifiesto (`tools/geo/insumos/manifiesto.json`) guarda la consulta exacta de cada archivo (tres paquetes de descarga).
 
 | Insumo | Servicio | Uso |
 |---|---|---|
 | Terreno | `ServiciosImagen/Modelo_digital_de_elevacion_medellin_2024/ImageServer` (1 m, EPSG:9377, modelo de terreno: las construcciones no aparecen como relieve) | Malla de cálculo de 1 m, sin remuestrear |
+| Ortofoto | `ServiciosImagen/Ortofoto_Medellin_2024/ImageServer` (0,25 m) | Se pinta sobre el terreno y los techos en la vista realista (botón «Foto aérea»); coberturas vegetales y árboles del dibujo |
+| Cuenca | `ServiciosImagen/Modelo_digital_de_elevacion_AMVA/ImageServer` (10 m; 5 m en Juan Bobo) | Delineación de la cuenca hasta la entrada del sector |
 | Construcciones | `ServiciosCiudad/CartografiaBase/MapServer/15` (Construccion) | Huellas; altura = número de pisos × 3 m (estimada) |
 | Vías | `ServiciosCiudad/CartografiaBase/MapServer/14` (Vias Medellin) | Ejes; calzada estimada de 5 m (3 m en las de menor jerarquía) |
 | Quebrada | `ServiciosCiudad/CartografiaBase/MapServer/27` (Hidrografia POT, escala 1:25 000) | Eje llevado al fondo del cauce del modelo de elevación |
 
-El constructor `tools/geo/sector_real.py` genera los escenarios en `src/city/scenarios/reales/`:
+El constructor `tools/geo/sector_real.py` genera los escenarios en `src/city/scenarios/reales/` (la delineación de la cuenca está en `tools/geo/cuenca.py`):
 
 ```bash
-python3 tools/geo/sector_real.py --site andalucia-juan-bobo --out src/city/scenarios/reales/andalucia-juan-bobo.json
+python3 -I tools/geo/sector_real.py --site la-iguana-el-pesebre --out src/city/scenarios/reales/la-iguana-el-pesebre.json
 ```
 
-| Sector | Dominio (EPSG:9377) | Quebrada | Resultado |
-|---|---|---|---|
-| Andalucía · Juan Bobo (Santa Cruz, comuna 2) | 4717256–4717406 E, 2254459–2254579 N (150 × 120 m) | Cauce abierto en el terreno en el 97 % de las secciones | **Se simula la creciente** (de ejemplo). Capacidad de la sección de control ≈ 20 m³/s; pendiente media del fondo 25 % |
-| Blanquizal · La Iguaná (San Javier, comuna 13) | 4711981–4712101 E, 2252010–2252160 N (120 × 150 m) | El afluente pasa bajo las casas: cauce visible en el 36 % de las secciones | Sector de lluvia urbana; el eje de la quebrada se dibuja como referencia y no se simula |
-| El Corazón · Ana Díaz (San Javier, comuna 13) | 4709311–4709431 E, 2248951–2249101 N (120 × 150 m) | Cauce visible en el 11 % de las secciones | Igual que Blanquizal |
+| Sector | Dominio (EPSG:9377, 150 × 120 m) | Cauce abierto | Cuenca hasta el sector | Sección de control |
+|---|---|---|---|---|
+| Andalucía · Juan Bobo (Santa Cruz, comuna 2) | 4717256–4717406 E, 2254459–2254579 N | 97 % de las secciones | 0,133 km², 840 m, pendiente 30 % | cauce lleno a 1,61 m (pie de una casa); capacidad 36,5 m³/s; pendiente 20 % |
+| La Iguaná · El Pesebre (límite de las comunas 13 y 7) | 4712140–4712290 E, 2252060–2252180 N | 86 % | 42,7 km², 12,9 km, pendiente 41 % | cauce lleno a 2,16 m (terreno a 10 m del fondo); capacidad 150 m³/s; pendiente 6,4 % |
+| Ana Díaz · El Corazón (San Javier, comuna 13) | 4709827–4709977 E, 2248823–2248943 N | 100 % | 7,21 km², 6,0 km, pendiente 54 % | cauce lleno a 0,50 m (la estimación dio 0,13 m por una casa a 2 m del fondo; se usa el mínimo de 0,5 m); capacidad 6,8 m³/s |
 
-Se simula la quebrada solo si al menos el 80 % de las secciones, cada 5 m, tienen las dos orillas por lo menos 1 m sobre el fondo en 10 m. En Blanquizal y El Corazón la ortofoto de 2024 confirma que el eje POT cruza manzanas construidas. Sin datos de esas coberturas, simular la creciente por encima de las casas exageraría la inundación.
+Se simula la quebrada si al menos el 80 % de las secciones, cada 5 m, tienen las dos orillas por lo menos 1 m sobre el fondo en 15 m. Los sectores anteriores de Blanquizal y El Corazón se reemplazaron: allí la quebrada pasa cubierta bajo las casas y no hay datos de esas coberturas.
 
 **Acondicionamiento del terreno (queda registrado en la procedencia de cada escenario):**
-- **Eje de la quebrada.** El eje POT se lleva al fondo del cauce: la cota mínima en ±8 m perpendiculares, suavizada. En Juan Bobo el desplazamiento medio es de 2,3 m.
-- **Paso del agua por el cauce.** Donde el perfil del fondo sube aguas abajo, se rebaja el fondo a lo largo de 2 m de ancho para que el agua siga. Esto pasa en vías sobre coberturas o puentes que el modelo de terreno no distingue. En Juan Bobo se rebajaron 21 m, hasta 0,84 m. No se dibuja ninguna obra.
-- **Depresiones sin salida.** Entre construcciones hay terrazas y patios que en el modelo quedan cerrados; en la realidad se desaguan por tuberías. Se rellenan con inundación por prioridad (Barnes et al., 2014), con las construcciones como muros: 796 a 892 celdas por sector. Sin este paso, la lluvia sola dejaba más de 100 edificaciones con agua contra los muros; con él quedan 2.
+- **Eje de la quebrada.** El eje POT se lleva al fondo del cauce: la cota mínima en ±8 m perpendiculares, suavizada (desplazamiento medio de 1,6 a 3,4 m).
+- **Paso del agua por el cauce.** Donde el perfil del fondo sube aguas abajo, se rebaja el fondo a lo largo de 2 m de ancho para que el agua siga (vías sobre coberturas o puentes que el modelo de terreno no distingue). No se dibuja ninguna obra.
+- **Depresiones sin salida.** Terrazas y patios cerrados entre construcciones (en la realidad se desaguan por tuberías) se rellenan con inundación por prioridad (Barnes et al., 2014), con las construcciones como muros: 424 a 796 celdas por sector. El compilador repite el relleno con la malla de cálculo ya rasterizada, desde las salidas, para quitar los pozos de una o dos celdas que deja la diferencia entre las dos rasterizaciones (4 a 90 celdas; `fillCells` y `fillVolume`).
 - **Patios interiores cerrados.** Las celdas libres rodeadas por construcciones se tratan como parte de la construcción vecina; su lluvia sale por la bajante (`closePockets`).
 
-**Lo que no se incluye ni se inventa:** red de alcantarillado, sumideros, coberturas, puentes y bordillos. Las coberturas del suelo son estimadas: retiro con grama y el resto concreto. La creciente es de ejemplo; no hay una cuenca delineada para estos sectores. Prueba D1 en `PRUEBAS.md`.
+**Sección de control.** Entre las estaciones de la mitad central del tramo donde el eje forma menos de 16° con una fila o columna de la malla (para que la sección del modelo cruce el cauce), se elige la de menor profundidad de cauce lleno (mediana móvil de 5 m): donde la quebrada se sale primero. En cada orilla, el cauce lleno llega hasta el borde de una terraza (después de un talud que sube más de 0,3 m por metro, los 3 m siguientes suben menos de 0,45 m), el pie de una construcción o el terreno a 10 m del fondo, lo primero que aparezca; manda la orilla más baja (entre 0,5 y 4 m). El escenario guarda `flowAxis` y `bankDepthM`; el compilador busca las orillas sobre la malla donde el terreno o una construcción alcanzan ese nivel y corrige la capacidad por el ángulo entre el cauce y la malla.
+
+**Creciente de su cuenca.** La cuenca hasta la entrada del sector se delinea con D8 sobre el modelo de elevación del AMVA (con relleno de depresiones); su área, longitud hidráulica y pendiente alimentan el hidrograma del NRCS (MODELO.md, 6.7). La estación de nivel es didáctica, a mitad de la longitud hidráulica (al menos 300 m). En Juan Bobo la cuenca es muy pequeña: con 80 mm en una hora el pico es de 2 m³/s, el 6 % de la capacidad; el agua que llega a las casas viene de la lluvia en el barrio y de las laderas, no de la quebrada. En La Iguaná, con 60 mm en una hora el pico llega a unos 159 m³/s, por encima de la capacidad de la sección.
+
+**Agua de las laderas vecinas.** La misma delineación da, para cada tramo de borde del sector, el área de fuera que drena hacia adentro. Las entradas de 200 m² o más se convierten en entradas de escorrentía con el método racional (C = 0,75): mientras llueve entra `C·i·A`. El compilador reparte cada entrada en las celdas de borde libres, comunicadas con el resto del barrio y con el terreno bajando hacia adentro (al menos una celda por cada 2000 m², entre 5 y 20), ampliando el tramo hasta 15 m a cada lado; esas celdas dejan de ser salidas. Juan Bobo recibe 1,61 ha; La Iguaná, 11,74 ha; Ana Díaz, 4,59 ha.
+
+**Cómo se ve.** La ortofoto de 2024 (recortada al dominio, JPEG incrustado en el escenario) se pinta sobre el terreno y los techos en la vista realista; los accesorios inventados de los techos (tanques, ropa, rejas) se ocultan mientras está activa. Los árboles del dibujo salen de la ortofoto: celdas con índice de exceso de verde (2g − r − b) mayor de 0,1 y brillo bajo.
+
+**Resultados de referencia** (60 mm/h durante 20 min, 25 min simulados; pruebas D1 y D2): sin el agua de las laderas, ninguna edificación queda con 10 cm o más contra los muros solo por la lluvia del sector; con ella, 1 en Juan Bobo, 6 en La Iguaná (una manzana donde entra la escorrentía de 1,4 ha de ladera) y 0 en Ana Díaz. El balance cierra con residuo menor de 10⁻¹⁴.
+
+**Lo que no se incluye ni se inventa:** red de alcantarillado, sumideros, coberturas, puentes y bordillos. Las coberturas del suelo son estimadas (pasto y árboles desde la ortofoto, vías como asfalto, el resto concreto). La cobertura de la cuenca y la lluvia pareja en toda la cuenca son supuestos; el resultado no es un pronóstico.
 
 ## 1. Qué está listo
 

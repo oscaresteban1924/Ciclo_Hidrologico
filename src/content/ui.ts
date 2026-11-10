@@ -8,6 +8,7 @@ export const UI = {
     explore: 'Exploración libre',
     lab: 'Laboratorio del agua',
     city: 'Medellín: laboratorio de lluvia',
+    quality: 'Calidad del agua',
   },
   tools: {
     tracer: 'Gota trazadora',
@@ -20,6 +21,7 @@ export const UI = {
     explore: 'Explorar',
     lab: 'Laboratorio',
     city: 'Medellín',
+    quality: 'Calidad',
   },
   toolsShort: {
     tracer: 'Gota',

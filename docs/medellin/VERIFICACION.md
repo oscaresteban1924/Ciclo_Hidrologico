@@ -332,6 +332,25 @@ Las 31 anteriores siguen cumpliendo. S4 sigue en 15 de 15 criterios de EPM en ca
 
 **Comparación:** `medellin-creciente-redes.png` (en `docs/medellin/capturas` y entregada aparte).
 
+## 4 undecies. Sectores reales más fieles y módulo «Calidad del agua» (ejecutada)
+
+**Pedido.** Mejorar mucho el aspecto y la modelación del caso de estudio real y crear un módulo interactivo de calidad del agua para niños.
+
+**Qué se encontró al revisar.**
+- Dos de los tres sectores anteriores (Blanquizal y El Corazón) tenían la quebrada cubierta bajo las casas: no se podía simular. Se reemplazaron por tramos abiertos de las mismas quebradas: La Iguaná entre El Pesebre y Fuente Clara (86 % de secciones abiertas) y Ana Díaz entre El Corazón y Betania (100 %).
+- **La sección de control medía a lo largo del cauce, no a través**, cuando la quebrada corre en dirección norte–sur: el compilador siempre tomaba una columna de la malla. En Ana Díaz daba una orilla de 10 cm y una capacidad de 0,2 m³/s. Además, en las quebradas que corren hacia el oeste el caudal medido salía negativo y las gráficas lo mostraban como cero. Ahora la sección es una fila o una columna según la dirección del cauce, con el sentido del flujo y la corrección por el ángulo (MODELO, 6.8; prueba D2).
+- **El cauce lleno se tomaba donde el terreno subía 1,5 m**, que en las cañadas en V no es la orilla. Ahora es el borde de una terraza, el pie de una construcción o el terreno a 10 m, lo primero que aparezca (DATOS_REALES, sección 0).
+- **Pozos de una celda** junto a construcciones: la rasterización del constructor y la del compilador no coincidían. En Juan Bobo quedaba una celda con 1,2 m de agua de lluvia. El compilador repite ahora el relleno de depresiones sobre su propia malla.
+- **Agua de las laderas en rincones del borde**: las entradas de ladera caían en celdas encerradas entre casas y el borde, sin salida (hasta 1,4 m de agua). Ahora solo entran por celdas comunicadas con el barrio y con el terreno bajando hacia adentro, y esas celdas dejan de ser salidas.
+- **Rayas claras sobre el terreno** en la vista desde arriba: las caras verticales de los escalones del terreno tenían el orden de vértices al revés y se descartaban; por el hueco se veía el cielo. Se corrigió el orden (también en la ladera y la calle de prueba).
+- La cámara de la sección quedaba dentro de las copas de los árboles en La Iguaná: los árboles entre la cámara y la sección se ocultan mientras dura esa vista.
+
+**Capturas** (`tools/verificacion/sectores_reales.py`, en `/home/claude/shots/city/reales/`; las anteriores, en `reales-antes/`): vista general con y sin foto aérea, vista desde arriba y creciente desde la cuenca en la sección de control para los tres sectores. Consola sin errores.
+
+**Módulo «Calidad del agua»** (`tools/verificacion/calidad.py`, escritorio 1440 × 900 y teléfono 390 × 844): en la estación B, en verano, la piedra da BMWP/Col 29 (clase IV); al conectar las casas al alcantarillado, 103 (clase I). Con la dosis de la mejor jarra y 1,5 mg/L de cloro, el agua cumple las cinco características (IRCA 0 %). La lluvia de la calle se anima y el botón «Misión: conexiones erradas» abre esa misión en el laboratorio de lluvia. Consola sin errores.
+
+`npm run test:city`: **48 de 48** (nueva D2; D1 cambia a los nuevos sectores y separa la lluvia del sector del agua de las laderas). `npm run test:quality`: **8 de 8** (`docs/calidad/PRUEBAS_CALIDAD.md`).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
@@ -402,7 +421,8 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
 
 ## 6. Pendiente o no verificado
 
-- **Datos reales de Medellín.** El servicio cartográfico no fue accesible desde el entorno (403 del proxy). Falta verificar el CRS real del servicio y generar un sector real con el pipeline (`DATOS_REALES.md`).
+- **Datos reales de Medellín.** Los tres sectores reales se construyeron con descargas hechas desde el navegador del usuario (el entorno de trabajo no llega al servicio). Falta comparar la sección de control y la cuenca delineada con estudios hidrológicos de cada quebrada, y conocer la red de alcantarillado real de esos barrios.
+- **Calidad del agua.** Valores típicos y reglas didácticas; no se compararon con monitoreos de quebradas de Medellín (por ejemplo, la red de calidad del Área Metropolitana).
 - **Rendimiento con GPU real** y en tabletas o teléfonos físicos.
 - **Lectores de pantalla reales** (NVDA, VoiceOver). Solo se verificaron los roles, los nombres accesibles y el texto equivalente.
 - **Firefox y Safari.** Se probó solo en Chrome.

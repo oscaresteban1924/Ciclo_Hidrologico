@@ -7,7 +7,7 @@ import { speechSupported } from '../lib/speech';
 import { useStore, type Mode, type Tool } from '../state/store';
 import { Disclosure, Icon, Segmented, Toggle } from './ui';
 
-const MODES: Mode[] = ['guided', 'explore', 'lab', 'city'];
+const MODES: Mode[] = ['guided', 'explore', 'lab', 'city', 'quality'];
 const TOOLS: Exclude<Tool, null>[] = ['tracer', 'challenges', 'logbook', 'glossary'];
 
 function Mark() {
@@ -101,6 +101,10 @@ export function Help({ onClose }: { onClose: () => void }) {
         <dt>Medellín: laboratorio de lluvia</dt>
         <dd>
           Una maqueta 3D de un sector de ciudad donde la lluvia se calcula de verdad: elige un sector en el valle, crea lluvia, cambia superficies, construye un jardín de lluvia o limpia un sumidero, y compara dos versiones con la misma lluvia. Es educativo: no es un pronóstico oficial.
+        </dd>
+        <dt>Calidad del agua</dt>
+        <dd>
+          Mide la salud de una quebrada con una sonda y con los bichos que viven debajo de las piedras, sigue el agua del río hasta la llave en una planta de potabilización y mira qué arrastra la lluvia de las calles. Los valores son típicos de la literatura: no es un monitoreo de una quebrada real.
         </dd>
         <dt>Gota trazadora</dt>
         <dd>Sigue una pequeña porción de agua y elige su camino. Cada camino tarda tiempos muy distintos.</dd>

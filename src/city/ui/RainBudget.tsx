@@ -54,7 +54,7 @@ export function RainBudget({ bal, title = '¿Adónde fue la lluvia?' }: { bal: B
       ) : (
         <>
           <p className="city-small">
-            Han entrado <strong>{m3(total)}</strong> de agua{bal.inflow > 0 || sewage > 0 ? ` (lluvia ${m3(bal.precipitation)}${bal.inflow > 0 ? `, ${bal.creekIn > 0 ? 'creciente de la quebrada' : 'agua de arriba'} ${m3(bal.inflow)}` : ''}${sewage > 0 ? `, agua que llega por las tuberías desde fuera del sector ${m3(sewage)}: aguas residuales y escorrentía de calles de arriba` : ''})` : ' de lluvia'}. Así se repartieron:
+            Han entrado <strong>{m3(total)}</strong> de agua{bal.inflow > 0 || sewage > 0 ? ` (lluvia ${m3(bal.precipitation)}${bal.creekIn > 0 ? `, creciente de la quebrada ${m3(bal.creekIn)}` : ''}${bal.runonIn > 0 ? `, agua de las laderas vecinas ${m3(bal.runonIn)}` : ''}${bal.inflow - bal.creekIn - bal.runonIn > 1e-6 ? `, agua de arriba ${m3(bal.inflow - bal.creekIn - bal.runonIn)}` : ''}${sewage > 0 ? `, agua que llega por las tuberías desde fuera del sector ${m3(sewage)}: aguas residuales y escorrentía de calles de arriba` : ''})` : ' de lluvia'}. Así se repartieron:
           </p>
           <div className="rb-bar" role="img" aria-label={`Reparto del agua: ${BUDGET_PARTS.map((p) => `${p.label} ${fmtNum(pct(v[p.id]), 0)} %`).join(', ')}.`}>
             {shown.map((p) => (

@@ -4,7 +4,7 @@
 import { useId, useMemo, type ReactNode } from 'react';
 import { Segmented } from '../../components/ui';
 import type { CityController } from '../controller';
-import { compile, type Compiled } from '../sim/compile';
+import { compile, creekCell, type Compiled } from '../sim/compile';
 import { CULVERT_CLOG_S, type CitySim } from '../sim/engine';
 import { AFFECTED_DEPTH_M, HAZARD, HAZARD_SOURCE, bulkingFactor, damageSummary, exposureOf, hazardClass } from '../sim/hazard';
 import { baseInterventions, type CreekFlood, type CulvertState, type Scenario } from '../sim/scenario';
@@ -763,7 +763,7 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
   const { nx, dx } = c;
   const rows = [] as { y: number; z: number; h: number; hm: number; solid: boolean; b: number; haz: number }[];
   for (let j = cr.j0; j <= cr.j1; j++) {
-    const k = j * nx + cr.i;
+    const k = creekCell(cr, nx, j);
     const [u, v] = sim.velocityCapped(k);
     rows.push({ y: (j + 0.5) * dx, z: c.solid[k] ? c.zGround[k] : c.z[k], h: sim.h[k], hm: sim.hmaxField[k], solid: !!c.solid[k], b: c.building[k], haz: c.solid[k] ? 0 : hazardClass(sim.h[k], Math.hypot(u, v)) });
   }
@@ -771,10 +771,11 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
   const zTop = zb + Math.max(5, ...rows.map((r) => r.z + r.hm - zb + 0.4));
   const W = 340, H = 230, L0 = 34, R0 = 10, T0 = 12, B0 = 40;
   const y0 = rows[0].y - dx / 2, y1 = rows[rows.length - 1].y + dx / 2;
-  // mirando aguas abajo: si la quebrada corre hacia el este, el norte queda a la izquierda; hacia el oeste, a la derecha
-  const ax = sc.creek?.axis ?? [];
-  const eastward = ax.length < 2 || ax[ax.length - 1][0] >= ax[0][0];
-  const X = (y: number) => L0 + ((eastward ? y1 - y : y - y0) / (y1 - y0)) * (W - L0 - R0);
+  // mirando aguas abajo: si la quebrada corre hacia el este, el norte queda a la izquierda; hacia el oeste, el
+  // sur; hacia el norte, el oeste; hacia el sur, el este (la coordenada transversal crece hacia el norte o el este)
+  const leftHigh = (cr.flow === 'x') === (cr.sign > 0);
+  const [hiName, loName] = cr.flow === 'x' ? ['norte', 'sur'] : ['este', 'oeste'];
+  const X = (y: number) => L0 + ((leftHigh ? y1 - y : y - y0) / (y1 - y0)) * (W - L0 - R0);
   const Y = (z: number) => T0 + (1 - (z - zb + 0.3) / (zTop - zb + 0.3)) * (H - T0 - B0);
   const base = Y(zb - 0.3);
   const rev = [...rows].reverse();
@@ -804,6 +805,8 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
   }
   const jt = cr.jt - cr.j0;
   const talweg = rows[jt];
+  // nombre de cada margen: punto cardinal y, si las hay en la sección, casas
+  const sideLabel = (high: boolean) => `${high ? hiName : loName}${houses.some((hh) => (high ? hh.ya > talweg.y : hh.yb < talweg.y)) ? ' · casas' : ''}`;
   const depthNow = Number.isFinite(level) ? level - zb : 0;
   const desc = `Sección de control, mirando aguas abajo: fondo a cota relativa 0; orilla (cauce lleno) a ${fmtNum(cr.bankLevel - zb, 2)} m. Agua ${Number.isFinite(level) ? `a ${fmtNum(level - zb, 2)} m` : 'seca'}${Number.isFinite(lmax) && lmax > level + 0.02 ? `; ya llegó a ${fmtNum(lmax - zb, 2)} m` : ''}${out.length ? `; hay agua fuera del cauce en ${fmtNum(out.length * dx, 0)} m del retiro` : ''}.`;
   const ticks = [0, 1, 2, 3, 4, 5, 6].filter((v) => zb + v <= zTop);
@@ -862,8 +865,8 @@ export function SectionChart({ sim, sc }: { sim: CitySim; sc: Scenario }) {
           <rect key={`hz${r.y}`} x={Math.min(X(r.y + dx / 2), X(r.y - dx / 2))} y={H - B0 + 6} width={Math.max(0.6, Math.abs(X(r.y - dx / 2) - X(r.y + dx / 2)))} height="7" fill={r.solid ? '#cfc8bd' : HAZARD[r.haz].color} />
         ))}
         <text x={L0 - 4} y={H - B0 + 12} textAnchor="end" className="tick">peligro</text>
-        <text x={L0} y={H - 8} className="tick">norte · casas</text>
-        <text x={W - R0} y={H - 8} textAnchor="end" className="tick">sur · talud</text>
+        <text x={L0} y={H - 8} className="tick">{sideLabel(leftHigh)}</text>
+        <text x={W - R0} y={H - 8} textAnchor="end" className="tick">{sideLabel(!leftHigh)}</text>
         <text x={(L0 + W - R0) / 2} y={H - 8} textAnchor="middle" className="tick">{fmtNum(y1 - y0, 0)} m, mirando aguas abajo</text>
       </svg>
       <p className="city-small">{desc}</p>

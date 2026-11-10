@@ -4,11 +4,11 @@ import type { Scenario } from '../sim/scenario';
 import { laderaScenario } from './ladera';
 import { streetScenario } from './street';
 import juanBobo from './reales/andalucia-juan-bobo.json';
-import blanquizal from './reales/blanquizal-la-iguana.json';
-import corazon from './reales/el-corazon-ana-diaz.json';
+import iguana from './reales/la-iguana-el-pesebre.json';
+import anaDiaz from './reales/ana-diaz-el-corazon.json';
 
 /** Sectores con datos oficiales de la Alcaldía de Medellín (generados con tools/geo/sector_real.py). */
-const REALES = [juanBobo, blanquizal, corazon] as unknown as Scenario[];
+const REALES = [juanBobo, iguana, anaDiaz] as unknown as Scenario[];
 
 let cache: Record<string, Scenario> | null = null;
 

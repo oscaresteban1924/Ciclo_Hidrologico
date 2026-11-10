@@ -25,6 +25,8 @@ export interface CitySaved {
   labels?: boolean;
   /** Panel derecho contraído para ampliar la maqueta. */
   panelHidden?: boolean;
+  /** Foto aérea de los sectores reales apagada (false). Por omisión se muestra. */
+  ortho?: boolean;
 }
 
 export const DEFAULT_SAVED: CitySaved = { version: 1, configs: {}, missions: {}, speed: 30, budget: {} };
@@ -48,6 +50,7 @@ export function loadCity(): CitySaved {
     if (d.coach === true) out.coach = true;
     if (d.labels === false) out.labels = false;
     if (d.panelHidden === true) out.panelHidden = true;
+    if (d.ortho === false) out.ortho = false;
     return out;
   } catch {
     return { ...DEFAULT_SAVED };

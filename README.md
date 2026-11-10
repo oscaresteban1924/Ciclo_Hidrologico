@@ -16,6 +16,7 @@ npm run build:single # un único archivo autocontenido en dist-single/index.html
 npm run preview      # sirve la versión de producción para revisarla
 npm run typecheck    # verificación de tipos
 npm run test:city    # pruebas del motor de lluvia urbana (escribe docs/medellin/PRUEBAS.md)
+npm run test:quality # pruebas del modelo de calidad del agua (escribe docs/calidad/PRUEBAS_CALIDAD.md)
 ```
 
 La versión `dist-single/index.html` incluye en un solo archivo el código, los estilos y las fuentes. Se abre directamente en el navegador, sin servidor y sin conexión a internet. La carpeta `dist/` puede publicarse en cualquier servidor web estático.
@@ -50,7 +51,8 @@ Cada vista de detalle es una secuencia con inicio, desarrollo y resultado. Tiene
 | **Gota trazadora** | Sigue una porción de agua por rutas ramificadas elegidas en cada bifurcación, con su estado y el tiempo de permanencia aproximado en cada reservorio. |
 | **Retos** | Sin cronómetros ni penalizaciones: cada respuesta no esperada recibe una pista y la opción de observar de nuevo. |
 | **Bitácora** | Registra observaciones (al completar vistas de detalle), predicciones e hipótesis, comparaciones y explicaciones escritas por el niño. Los niveles (Observación, Exploración, Investigación, Hidrología) premian observar, comparar y explicar, no hacer clics. Se puede descargar como texto. |
-| **Glosario** | 67 términos con búsqueda; cada uno puede iluminar su lugar en el paisaje. |
+| **Calidad del agua** | Una quebrada con sonda, muestras de laboratorio y bichos debajo de las piedras (índice BMWP/Col); una planta de potabilización con prueba de jarras, cloro y la Resolución 2115 de 2007 (IRCA); y lo que arrastra la lluvia de las calles. Ver `docs/calidad/MODELO_CALIDAD.md`. |
+| **Glosario** | 109 términos con búsqueda; cada uno puede iluminar su lugar en el paisaje. |
 
 Una sola **pausa** controla toda la experiencia: paisaje, subtítulos, vistas de detalle y laboratorio. La **velocidad** de reproducción cambia el ritmo de las animaciones, nunca las condiciones ni los resultados. El panel lateral puede **contraerse** para ampliar el paisaje. La ayuda («Cómo explorar») resume los controles.
 
@@ -126,9 +128,9 @@ Además hay:
 Escenarios incluidos:
 - **Calle de prueba**: escenario didáctico de verificación.
 - **Ladera con quebrada**: sector demostrativo inspirado en barrios de ladera de Medellín.
-- **Andalucía · Juan Bobo**, **Blanquizal · La Iguaná** y **El Corazón · Ana Díaz**: sectores con datos oficiales de la Alcaldía de Medellín (modelo de elevación 2024 de 1 m, construcciones, vías e hidrografía POT). En Juan Bobo se simula la creciente; en los otros dos la quebrada pasa cubierta bajo las casas y su eje se dibuja como referencia. Ver `docs/medellin/DATOS_REALES.md`.
+- **Andalucía · Juan Bobo**, **La Iguaná · El Pesebre** y **Ana Díaz · El Corazón**: sectores con datos oficiales de la Alcaldía de Medellín sobre tramos abiertos de quebradas (modelo de elevación 2024 de 1 m, ortofoto 2024 sobre el terreno y los techos, construcciones, vías e hidrografía POT). Cada uno tiene su cuenca delineada con el modelo de elevación del AMVA (creciente desde la lluvia y aviso temprano), el agua de las laderas vecinas que entra por los bordes y una sección de control estimada del terreno. Ver `docs/medellin/DATOS_REALES.md`.
 
-**Ninguno es un lugar real.** Los datos reales se incorporan con el pipeline `tools/geo/medellin_pipeline.py`, como explica `docs/medellin/DATOS_REALES.md`.
+**Los dos primeros no son lugares reales.** Más datos reales se incorporan con el pipeline `tools/geo/medellin_pipeline.py`, como explica `docs/medellin/DATOS_REALES.md`.
 
 Documentos del módulo:
 
@@ -139,7 +141,9 @@ Documentos del módulo:
 | `docs/medellin/PRUEBAS.md` | Pruebas obligatorias con tolerancias y resultados (generado) |
 | `docs/medellin/VERIFICACION.md` | Qué se verificó en el navegador, rendimiento medido y pendientes |
 | `docs/medellin/DATOS_REALES.md` | Cómo reemplazar el sector demostrativo por datos de Medellín |
-| `docs/medellin/GUIA_DOCENTE.md` | Uso en clase, misiones, palabras clave y accesibilidad |
+| `docs/medellin/GUIA_DOCENTE.md` | Uso en clase, misiones, palabras clave y accesibilidad (incluye el módulo de calidad del agua) |
+| `docs/calidad/MODELO_CALIDAD.md` | Módulo «Calidad del agua»: ecuaciones, reglas didácticas, normas y fuentes |
+| `docs/calidad/PRUEBAS_CALIDAD.md` | Pruebas del módulo de calidad del agua (generado) |
 
 Estructura del código del módulo:
 
@@ -156,6 +160,8 @@ src/city/
   controller.ts  Une cálculo, dibujo y tiempo real; libera todos los recursos al salir
   CityLab.tsx    Componente del modo
 tests/city/    Pruebas obligatorias, rendimiento y verificación de escenarios externos
+src/quality/   Módulo «Calidad del agua»: modelo puro (model.ts), tres partes y dibujos
+tests/quality/ Pruebas del modelo de calidad del agua
 tools/geo/     Pipeline de datos reales y su prueba sin red
 ```
 

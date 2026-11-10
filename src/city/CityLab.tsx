@@ -7,7 +7,8 @@ import { loadCity, saveCity, type CitySaved } from './persist';
 import { allScenarios } from './scenarios/index';
 import { baseInterventions, cloneInterventions, type Interventions, type Scenario } from './sim/scenario';
 import { COVERS, COVER_LIST, H_WET } from './sim/constants';
-import { budgetItems, type Mission } from './content/missions';
+import { MISSIONS, budgetItems, type Mission } from './content/missions';
+import { takeCityIntent } from './intent';
 import { DEPTH_STOPS, VALLEY_EXAGGERATION, cssDepthGradient, fmtDepth, fmtNum, fmtTime } from './render/palette';
 import { CompareTab, MissionsTab, TeacherTab, ToolsTab, WordsTab, type LabApi, type MissionUi, type TabId, type ToolId } from './ui/Panels';
 import { RainBudget } from './ui/RainBudget';
@@ -140,9 +141,20 @@ export default function CityLab() {
     });
     ctrl.speed = savedRef.current.speed;
     ctrl.setLabels(savedRef.current.labels !== false);
+    ctrl.setOrtho(savedRef.current.ortho !== false);
     ctrlRef.current = ctrl;
     const resume = resumeRef.current;
-    if (resume && allScenarios()[resume]) ctrl.enterSector(resume, savedRef.current.configs[resume] ?? null);
+    // encargo desde otro módulo (por ejemplo, «Calidad del agua»): entrar directo a una misión o un sector
+    const intent = takeCityIntent();
+    const im = intent?.missionId ? MISSIONS.find((m) => m.id === intent.missionId) : undefined;
+    const target = im?.scenarioId ?? intent?.scenarioId;
+    if (target && allScenarios()[target]) {
+      ctrl.enterSector(target, savedRef.current.configs[target] ?? null);
+      if (im) {
+        setTab('misiones');
+        setMissionState({ id: im.id, step: 0, prediction: savedRef.current.missions[im.id]?.prediction ?? null, running: false });
+      }
+    } else if (resume && allScenarios()[resume]) ctrl.enterSector(resume, savedRef.current.configs[resume] ?? null);
     else void ctrl.showValley();
     return () => {
       const cfg = ctrl.config();
@@ -535,6 +547,12 @@ function ViewBar({ api }: { api: LabApi }) {
             ctrl.setLabels(on);
             api.setSaved((s) => ({ ...s, labels: on ? undefined : false }));
           }, 'Etiquetas de la maqueta: lugares, medidores, daños y redes')}
+        {ctrl.hasOrtho() && v === 'realista' &&
+          btn('Foto aérea', ctrl.orthoOn(), () => {
+            const on = !ctrl.orthoOn();
+            ctrl.setOrtho(on);
+            api.setSaved((s) => ({ ...s, ortho: on ? undefined : false }));
+          }, 'Foto aérea de 2024 sobre el terreno y los techos (ortofoto de la Alcaldía de Medellín)')}
         {btn('Flechas', ctrl.arrowsOn(), () => ctrl.setArrows(!ctrl.arrowsOn()), 'Flechas de dirección del flujo')}
         {btn('Bajo la calle', ctrl.cutOn(), () => ctrl.setCut(!ctrl.cutOn()), ctrl.displayed()?.sewer ? 'Ver bajo la calle: redes de aguas lluvias y de aguas residuales' : 'Ver bajo la calle: tuberías esquemáticas')}
         {api.renderer === 'webgl' && btn('Agua ×5', ctrl.amplify() > 1, () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5), 'Dibujar el agua cinco veces más gruesa (solo el dibujo)')}

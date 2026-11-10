@@ -2,7 +2,7 @@
 // Es determinista: la misma entrada produce exactamente la misma malla (se verifica con un hash).
 
 import { COVERS, COVER_LIST, G, NUMERICS, coverIndex, mmhToMs, type CoverId } from './constants';
-import type { ExposedObject, Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
+import type { ExposedObject, InflowSpec, Interventions, Polygon, Pt, Scenario, Shared, TerrainRaster } from './scenario';
 import { buildNodeTable, fullFlow, windowK, type CompiledSewer, type SInlet, type SNode, type SPipe } from './sewer';
 import { barrelR, inletRating, qInlet, type CulvertGeom, type InletRating } from './culvert';
 import type { BasinCover, BasinSpec } from './basin';
@@ -19,6 +19,32 @@ export interface CompiledBuilding {
   heightM: number;
   /** Suma de pesos de lluvia de sus celdas (para lluvia localizada). */
   rainWeight: number;
+  /** Distancia horizontal del contorno al eje de la quebrada [m] (Infinity sin quebrada). */
+  creekDistM: number;
+}
+
+/** Distancia de un punto a un segmento [m]. */
+function distSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const vx = bx - ax, vy = by - ay;
+  const L2 = vx * vx + vy * vy;
+  const t = L2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / L2)) : 0;
+  return Math.hypot(ax + t * vx - px, ay + t * vy - py);
+}
+
+/** Distancia entre el contorno de un polígono y una polilínea [m] (0 si la polilínea entra en el polígono). */
+export function polyToLine(poly: Polygon, line: Pt[]): number {
+  let d = Infinity;
+  for (const [x, y] of line) {
+    if (pointInPolygon(x, y, poly)) return 0;
+  }
+  for (let a = 0; a < poly.length; a++) {
+    const [x0, y0] = poly[a], [x1, y1] = poly[(a + 1) % poly.length];
+    for (let q = 1; q < line.length; q++) {
+      const [lx0, ly0] = line[q - 1], [lx1, ly1] = line[q];
+      d = Math.min(d, distSeg(x0, y0, lx0, ly0, lx1, ly1), distSeg(lx0, ly0, x0, y0, x1, y1));
+    }
+  }
+  return d;
 }
 
 export interface CompiledDrain {
@@ -59,6 +85,11 @@ export interface Compiled {
   scenarioId: string;
   /** Celdas de patios interiores cerrados tratadas como construcción (sectores reales). */
   pockets: number;
+  /** Relleno final de depresiones en sectores reales: celdas elevadas más de 1 cm y volumen [m³]. */
+  fillCells: number;
+  fillVolume: number;
+  /** Agua de las laderas vecinas: celdas del borde, área aportante [m²] y coeficiente de escorrentía. */
+  runon: { id: string; cells: number[]; areaM2: number; c: number }[];
   dx: number;
   nx: number;
   ny: number;
@@ -123,13 +154,22 @@ export interface CompiledCreek {
   /** Celdas por donde entra la creciente. */
   cells: number[];
   baseM3s: number;
-  /** Columna i de la sección, filas analizadas [j0, j1] y filas del cauce entre orillas [jb0, jb1]. */
+  /**
+   * Orientación de la sección sobre la malla: con `flow` 'x' el agua cruza una columna (i es la columna y los
+   * índices j, filas); con 'y' cruza una fila (i es la fila y los índices j, columnas). `sign` es el sentido del
+   * flujo a lo largo de ese eje (+1 hacia +x o +y) y `cosT`, el coseno entre el eje del cauce y el de la malla.
+   * Las celdas de la sección se obtienen con `creekCell`.
+   */
+  flow: 'x' | 'y';
+  sign: 1 | -1;
+  cosT: number;
+  /** Índice a lo largo del flujo (i), índices transversales analizados [j0, j1] y del cauce entre orillas [jb0, jb1]. */
   i: number;
   j0: number;
   j1: number;
   jb0: number;
   jb1: number;
-  /** Fila del fondo (talweg), cota del fondo y cota de cauce lleno (la orilla más baja) [m]. */
+  /** Índice transversal del fondo (talweg), cota del fondo y cota de cauce lleno (la orilla más baja) [m]. */
   jt: number;
   zBed: number;
   bankLevel: number;
@@ -142,6 +182,35 @@ export interface CompiledCreek {
   /** Cuenca aguas arriba y su cobertura (creciente desde la lluvia). */
   basin?: BasinSpec;
   basinCover: BasinCover;
+}
+
+/** Celda de la sección de control en el índice transversal j. */
+export function creekCell(cr: CompiledCreek, nx: number, j: number): number {
+  return cr.flow === 'x' ? j * nx + cr.i : cr.i * nx + j;
+}
+
+/** Centro [x, y] de la celda de la sección de control en el índice transversal j [m]. */
+export function creekPoint(cr: CompiledCreek, dx: number, j: number): [number, number] {
+  const a = (cr.i + 0.5) * dx, b = (j + 0.5) * dx;
+  return cr.flow === 'x' ? [a, b] : [b, a];
+}
+
+/** Dirección unitaria del eje del cauce en el tramo más cercano al punto (de aguas arriba a aguas abajo). */
+export function axisDirAt(axis: Pt[], x: number, y: number): [number, number] {
+  let best = Infinity, ux = 1, uy = 0;
+  for (let q = 1; q < axis.length; q++) {
+    const [x0, y0] = axis[q - 1], [x1, y1] = axis[q];
+    const L = Math.hypot(x1 - x0, y1 - y0);
+    if (L < 1e-6) continue;
+    const t = Math.max(0, Math.min(1, ((x - x0) * (x1 - x0) + (y - y0) * (y1 - y0)) / (L * L)));
+    const d = Math.hypot(x0 + t * (x1 - x0) - x, y0 + t * (y1 - y0) - y);
+    if (d < best - 1e-9) {
+      best = d;
+      ux = (x1 - x0) / L;
+      uy = (y1 - y0) / L;
+    }
+  }
+  return [ux, uy];
 }
 
 export function pointInPolygon(x: number, y: number, poly: Polygon): boolean {
@@ -396,7 +465,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       if (zGround[k] < baseZ) baseZ = zGround[k];
     });
     cells += patio[bi];
-    buildings.push({ id: b.id, index: bi, cells, roofArea: cells * area, downCell: -1, tank: tankOf.get(b.id) ?? -1, baseZ: Number.isFinite(baseZ) ? baseZ : 0, heightM: b.heightM, rainWeight: 0 });
+    buildings.push({ id: b.id, index: bi, cells, roofArea: cells * area, downCell: -1, tank: tankOf.get(b.id) ?? -1, baseZ: Number.isFinite(baseZ) ? baseZ : 0, heightM: b.heightM, rainWeight: 0, creekDistM: sc.creek ? polyToLine(b.polygon, sc.creek.axis) : Infinity });
   });
   buildings.forEach((cb, bi) => {
     cb.downCell = nearestFree(solid, nx, ny, dx, sc.buildings[bi].downspout);
@@ -481,21 +550,163 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
 
   // Entradas externas (agua que llega desde fuera del sector)
   const inflowCells: number[] = [];
-  for (const f of sc.inflows) {
+  const edgeCells = (f: InflowSpec): number[] => {
+    const out: number[] = [];
     if (f.edge === 'E' || f.edge === 'W') {
       const i = f.edge === 'E' ? nx - 1 : 0;
       for (let j = 0; j < ny; j++) {
         const y = (j + 0.5) * dx;
-        if (y >= f.from && y <= f.to && !solid[j * nx + i]) inflowCells.push(j * nx + i);
+        if (y >= f.from && y <= f.to && !solid[j * nx + i]) out.push(j * nx + i);
       }
     } else {
       const j = f.edge === 'N' ? ny - 1 : 0;
       for (let i = 0; i < nx; i++) {
         const x = (i + 0.5) * dx;
-        if (x >= f.from && x <= f.to && !solid[j * nx + i]) inflowCells.push(j * nx + i);
+        if (x >= f.from && x <= f.to && !solid[j * nx + i]) out.push(j * nx + i);
+      }
+    }
+    // tramo más corto que una celda: la celda libre más cercana al centro del tramo
+    if (!out.length) out.push(nearestFree(solid, nx, ny, dx, f.edge === 'E' || f.edge === 'W' ? [f.edge === 'E' ? nx * dx - dx / 2 : dx / 2, (f.from + f.to) / 2] : [(f.from + f.to) / 2, f.edge === 'N' ? ny * dx - dx / 2 : dx / 2]));
+    return out;
+  };
+  // Agua de las laderas vecinas (entra mientras llueve, C·i·A); las demás son entradas fijas
+  const runon: { id: string; cells: number[]; areaM2: number; c: number }[] = [];
+  // Las laderas entran por el tramo de borde donde cruza su drenaje; si casi todo el tramo está ocupado por
+  // construcciones, el tramo se amplía a lado y lado hasta 15 m (sin entrar en el de la quebrada) buscando una
+  // celda libre por cada 2000 m² de ladera (entre 5 y 20 celdas): el agua de la ladera llega repartida por las
+  // calles y escaleras, no por un solo metro de borde.
+  // Solo sirven celdas de borde comunicadas con el resto del barrio (componente de celdas libres de 200 m² o
+  // más): un rincón del borde encerrado por casas no tiene por dónde dejar pasar el agua de la ladera.
+  const comp = new Int32Array(N).fill(-1);
+  const compSize: number[] = [];
+  for (let k0 = 0; k0 < N; k0++) {
+    if (solid[k0] || comp[k0] >= 0) continue;
+    const id = compSize.length;
+    let size = 0;
+    const st = [k0];
+    comp[k0] = id;
+    while (st.length) {
+      const k = st.pop()!;
+      size++;
+      const i = k % nx, j = (k - i) / nx;
+      for (const q of [i > 0 ? k - 1 : -1, i < nx - 1 ? k + 1 : -1, j > 0 ? k - nx : -1, j < ny - 1 ? k + nx : -1]) {
+        if (q >= 0 && !solid[q] && comp[q] < 0) {
+          comp[q] = id;
+          st.push(q);
+        }
+      }
+    }
+    compSize.push(size);
+  }
+  const open = (k: number) => !solid[k] && compSize[comp[k]] * area >= 200;
+  // sin celdas de borde útiles: las `m` celdas comunicadas más cercanas al centro del tramo (el agua cruza por
+  // encima o entre las casas del borde y aparece en la calle más cercana)
+  const nearestOpen = (f: InflowSpec, m: number): number[] => {
+    const cx = f.edge === 'E' ? nx * dx : f.edge === 'W' ? 0 : (f.from + f.to) / 2;
+    const cy = f.edge === 'N' ? ny * dx : f.edge === 'S' ? 0 : (f.from + f.to) / 2;
+    const cand: [number, number][] = [];
+    for (let k = 0; k < N; k++) if (open(k)) cand.push([Math.hypot((k % nx + 0.5) * dx - cx, (Math.floor(k / nx) + 0.5) * dx - cy), k]);
+    cand.sort((a, b) => a[0] - b[0]);
+    const out = cand.slice(0, m).map((q) => q[1]);
+    return out.length ? out : edgeCells(f).slice(0, 1);
+  };
+  const creekIn = sc.creek ? sc.inflows.find((q) => q.id === sc.creek!.inflowId) : undefined;
+  for (const f of sc.inflows) {
+    if (f.rainAreaM2 && f.rainAreaM2 > 0) {
+      const want = Math.min(20, Math.max(5, Math.ceil(f.rainAreaM2 / 2000)));
+      const L = f.edge === 'E' || f.edge === 'W' ? ny * dx : nx * dx;
+      // celda útil: comunicada y con el terreno bajando hacia adentro (donde baja hacia afuera, el borde es una
+      // salida del barrio y debe seguir siéndolo)
+      const di = f.edge === 'E' ? -1 : f.edge === 'W' ? 1 : f.edge === 'N' ? -nx : nx;
+      const ok = (k: number) => open(k) && z[k] > z[k + 2 * di] + 0.02;
+      let g = { ...f };
+      let cells = edgeCells(g).filter(ok);
+      for (let w = 1; cells.length < want && (g.from > 0 || g.to < L) && w * dx <= 15; w++) {
+        g = { ...f, from: Math.max(0, f.from - w * dx), to: Math.min(L, f.to + w * dx) };
+        cells = edgeCells(g).filter(ok);
+        if (creekIn && creekIn.edge === f.edge) cells = cells.filter((k) => {
+          const t = ((f.edge === 'E' || f.edge === 'W' ? Math.floor(k / nx) : k % nx) + 0.5) * dx;
+          return t < creekIn.from - dx || t > creekIn.to + dx;
+        });
+      }
+      if (!cells.length) cells = edgeCells(f).filter(open);
+      if (!cells.length) cells = nearestOpen(f, want);
+      runon.push({ id: f.id, cells, areaM2: f.rainAreaM2, c: f.runoffC ?? 0.75 });
+    } else inflowCells.push(...edgeCells(f));
+  }
+  // las celdas por donde entra agua de una ladera no son salidas (la condición de salida no mira hacia dónde
+  // baja el terreno)
+  if (runon.length) {
+    const rs = new Set(runon.flatMap((r) => r.cells));
+    for (let q = outlets.length - 1; q >= 0; q--) if (rs.has(outlets[q].cell)) outlets.splice(q, 1);
+  }
+
+  // 3d) Sectores reales: relleno final de depresiones con la malla de cálculo ya rasterizada (inundación por
+  // prioridad desde las celdas de salida, con las construcciones como muros). El constructor del sector ya rellenó
+  // el terreno con sus polígonos; aquí se corrigen los pozos de una o dos celdas que deja la diferencia entre ambas
+  // rasterizaciones. Toda celda libre queda con un camino descendente (pendiente mínima de 1 mm por celda) hasta
+  // una salida. Se cuentan las celdas y el volumen rellenados.
+  let fillCells = 0, fillVolume = 0;
+  if (sc.closePockets && outlets.length) {
+    const done = new Uint8Array(N);
+    // montículo binario de mínimos por cota
+    const hk: number[] = [], hz: number[] = [];
+    const push = (k: number, v: number) => {
+      let p = hk.length;
+      hk.push(k);
+      hz.push(v);
+      while (p > 0) {
+        const q = (p - 1) >> 1;
+        if (hz[q] <= hz[p]) break;
+        [hk[p], hk[q]] = [hk[q], hk[p]];
+        [hz[p], hz[q]] = [hz[q], hz[p]];
+        p = q;
+      }
+    };
+    const pop = (): number => {
+      const top = hk[0];
+      const lk = hk.pop()!, lz = hz.pop()!;
+      if (hk.length) {
+        hk[0] = lk;
+        hz[0] = lz;
+        let p = 0;
+        for (;;) {
+          const a = 2 * p + 1, b = a + 1;
+          let m = p;
+          if (a < hk.length && hz[a] < hz[m]) m = a;
+          if (b < hk.length && hz[b] < hz[m]) m = b;
+          if (m === p) break;
+          [hk[p], hk[m]] = [hk[m], hk[p]];
+          [hz[p], hz[m]] = [hz[m], hz[p]];
+          p = m;
+        }
+      }
+      return top;
+    };
+    for (const o of outlets) if (!done[o.cell]) {
+      done[o.cell] = 1;
+      push(o.cell, z[o.cell]);
+    }
+    const eps = 0.001;
+    while (hk.length) {
+      const k = pop();
+      const i = k % nx, j = (k - i) / nx;
+      for (const q of [i > 0 ? k - 1 : -1, i < nx - 1 ? k + 1 : -1, j > 0 ? k - nx : -1, j < ny - 1 ? k + nx : -1]) {
+        if (q < 0 || done[q] || solid[q]) continue;
+        done[q] = 1;
+        if (z[q] < z[k] + eps) {
+          const d = z[k] + eps - z[q];
+          if (d > 0.01) {
+            fillCells++;
+            fillVolume += d * area;
+          }
+          z[q] = z[k] + eps;
+        }
+        push(q, z[q]);
       }
     }
   }
+
 
   const probes = sc.probes.map((p) => ({ id: p.id, name: p.name, cell: nearestFree(solid, nx, ny, dx, p.at) }));
 
@@ -616,44 +827,75 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       }
     }
     const [sx, sy] = ck.section.at;
-    const i = Math.min(nx - 1, Math.max(0, Math.floor(sx / dx)));
-    const j0 = Math.max(0, Math.floor((sy - ck.section.halfWidthM) / dx));
-    const j1 = Math.min(ny - 1, Math.floor((sy + ck.section.halfWidthM) / dx));
-    let jt = j0;
-    for (let j = j0; j <= j1; j++) if (z[j * nx + i] < z[jt * nx + i]) jt = j;
-    const zBed = z[jt * nx + i];
-    // orillas: primera celda a cada lado cuyo centro queda fuera del cauce encajado (a ≥ semiancho del eje)
-    const yb = sy;
-    const jb0 = Math.max(j0, Math.floor((yb - ck.section.bankHalfWidthM) / dx - 0.5));
-    const jb1 = Math.min(j1, Math.ceil((yb + ck.section.bankHalfWidthM) / dx - 0.5));
-    const bankLevel = Math.min(z[jb0 * nx + i], z[jb1 * nx + i]);
-    // pendiente del fondo: talweg 5 m aguas arriba y aguas abajo
+    // orientación: la sección es la columna (cauce que corre en x) o la fila (cauce que corre en y) de la malla
+    // que pasa por el punto, según la dirección del eje allí
+    const [ux, uy] = axisDirAt(ck.axis, sx, sy);
+    const flow: 'x' | 'y' = ck.section.flowAxis ?? (Math.abs(ux) >= Math.abs(uy) ? 'x' : 'y');
+    const along = flow === 'x' ? ux : uy;
+    const sign: 1 | -1 = along >= 0 ? 1 : -1;
+    // con menos de ≈ 6° entre el eje y la malla la corrección es menor de 0,5 % y no se aplica
+    const cos0 = Math.abs(along) / Math.hypot(ux, uy);
+    const cosT = cos0 >= 0.995 ? 1 : Math.max(0.5, cos0);
+    const nAlong = flow === 'x' ? nx : ny, nCross = flow === 'x' ? ny : nx;
+    const [sa, sx2] = flow === 'x' ? [sx, sy] : [sy, sx];
+    const i = Math.min(nAlong - 1, Math.max(0, Math.floor(sa / dx)));
+    const cell = (ii: number, j: number) => (flow === 'x' ? j * nx + ii : ii * nx + j);
+    const j0 = Math.max(0, Math.floor((sx2 - ck.section.halfWidthM) / dx));
+    const j1 = Math.min(nCross - 1, Math.floor((sx2 + ck.section.halfWidthM) / dx));
+    let jt: number, jb0: number, jb1: number, bankLevel: number;
+    if (ck.section.bankDepthM != null) {
+      // sectores reales: talweg junto al punto, cauce lleno a la profundidad estimada en la sección y orillas
+      // donde el terreno (o una construcción) alcanza ese nivel a cada lado
+      const jc = Math.min(j1, Math.max(j0, Math.floor(sx2 / dx)));
+      jt = jc;
+      for (let j = Math.max(j0, jc - 2); j <= Math.min(j1, jc + 2); j++) if (z[cell(i, j)] < z[cell(i, jt)]) jt = j;
+      bankLevel = z[cell(i, jt)] + ck.section.bankDepthM;
+      jb0 = j0;
+      for (let j = jt - 1; j >= j0; j--) if (solid[cell(i, j)] || z[cell(i, j)] >= bankLevel) { jb0 = j; break; }
+      jb1 = j1;
+      for (let j = jt + 1; j <= j1; j++) if (solid[cell(i, j)] || z[cell(i, j)] >= bankLevel) { jb1 = j; break; }
+    } else {
+      jt = j0;
+      for (let j = j0; j <= j1; j++) if (z[cell(i, j)] < z[cell(i, jt)]) jt = j;
+      // orillas: primera celda a cada lado cuyo centro queda fuera del cauce encajado (a ≥ semiancho del eje)
+      const bh = ck.section.bankHalfWidthM / cosT;
+      jb0 = Math.max(j0, Math.floor((sx2 - bh) / dx - 0.5));
+      jb1 = Math.min(j1, Math.ceil((sx2 + bh) / dx - 0.5));
+      bankLevel = Math.min(z[cell(i, jb0)], z[cell(i, jb1)]);
+    }
+    const zBed = z[cell(i, jt)];
+    // pendiente del fondo: talweg 5 m aguas arriba y aguas abajo (sobre el eje del cauce, no de la malla)
     const bedAt = (ii: number) => {
       let m = Infinity;
-      for (let j = j0; j <= j1; j++) m = Math.min(m, z[j * nx + Math.min(nx - 1, Math.max(0, ii))]);
+      const iic = Math.min(nAlong - 1, Math.max(0, ii));
+      for (let j = j0; j <= j1; j++) m = Math.min(m, z[cell(iic, j)]);
       return m;
     };
     const di = Math.max(1, Math.round(5 / dx));
-    // pendiente del fondo 5 m aguas arriba y aguas abajo; si aguas arriba hay una vía en terraplén sobre el
-    // cauce (cobertura), se toma el primer punto del cauce natural después de ella
-    let iu = i - di;
-    for (const cs of sc.culverts ?? []) {
-      const a = Math.floor(cs.road.x0 / dx), b = Math.ceil(cs.road.x1 / dx);
-      if (iu >= a && iu < b && b < i) iu = b;
+    // si aguas arriba hay una vía en terraplén sobre el cauce (cobertura), se toma el primer punto del cauce
+    // natural después de ella
+    let iu = i - sign * di;
+    if (flow === 'x' && sign > 0) {
+      for (const cs of sc.culverts ?? []) {
+        const a = Math.floor(cs.road.x0 / dx), b = Math.ceil(cs.road.x1 / dx);
+        if (iu >= a && iu < b && b < i) iu = b;
+      }
     }
-    // en valor absoluto: la quebrada puede correr hacia +x (ladera) o hacia −x (sectores reales)
-    const slope = Math.max(1e-4, Math.abs(bedAt(iu) - bedAt(i + di)) / ((i + di - iu) * dx));
+    const idn = i + sign * di;
+    const slope = Math.max(1e-4, (Math.abs(bedAt(iu) - bedAt(idn)) * cosT) / (Math.abs(idn - iu) * dx));
+    // capacidad: caudal normal a la sección; si cruza el cauce en diagonal, la línea de la malla es 1/cosT más
+    // larga que el ancho del cauce
     let capacity = 0, capacityManning = 0;
     for (let j = jb0; j <= jb1; j++) {
-      const k = j * nx + i;
+      const k = cell(i, j);
       const hh = bankLevel - z[k];
       if (hh <= 0 || solid[k]) continue;
       const qm = (Math.pow(hh, 5 / 3) * Math.sqrt(slope)) / n[k];
       const qf = NUMERICS.froudeMax * hh * Math.sqrt(G * hh);
-      capacity += Math.min(qm, qf) * dx;
-      capacityManning += qm * dx;
+      capacity += Math.min(qm, qf) * dx * cosT;
+      capacityManning += qm * dx * cosT;
     }
-    creek = { cells, baseM3s: ck.baseM3s, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name, basin: ck.basin, basinCover: iv.basinCover ?? 'mixta' };
+    creek = { cells, baseM3s: ck.baseM3s, flow, sign, cosT, i, j0, j1, jb0, jb1, jt, zBed, bankLevel, slope, capacity, capacityManning, name: ck.section.name, basin: ck.basin, basinCover: iv.basinCover ?? 'mixta' };
   }
 
   // Coberturas: grupos de celdas a la entrada y a la salida, bateas, tabla de control de entrada
@@ -721,6 +963,9 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
 
   return {
     pockets,
+    fillCells,
+    fillVolume,
+    runon,
     scenarioId: sc.id,
     dx,
     nx,

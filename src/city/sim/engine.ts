@@ -13,10 +13,10 @@
 //    animación (solo por cambios de lluvia y tiempos de registro), así cada corrida es reproducible.
 
 import { G, H_FLOW_MIN, H_WET, INLET, NUMERICS, mmhToMs } from './constants';
-import type { Compiled } from './compile';
+import { creekCell, type Compiled } from './compile';
 import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from './drainage';
 import { AFFECTED_DEPTH_M, HAZARD_WET_M, UNSTABLE_FROM, bulkingFactor, hazardClass, ringsFor } from './hazard';
-import { basinHydrograph, type BasinResult } from './basin';
+import { WARNING, basinHydrograph, type BasinResult } from './basin';
 import { culvertFlow } from './culvert';
 
 /**
@@ -158,6 +158,8 @@ export interface Balance {
   roofToSewer: number;
   /** Agua de la creciente que entró por la quebrada [m³] (incluida en `inflow`). */
   creekIn: number;
+  /** Agua que entró desde las laderas vecinas [m³]. */
+  runonIn: number;
   /** Aportes externos a la red: aguas residuales domésticas, de aguas arriba y conexiones erradas de arriba [m³]. */
   sewageIn: number;
   /** Agua que salió del sector por la red (descargas libres) [m³]. */
@@ -399,6 +401,7 @@ export class CitySim {
       tankOverflow: 0,
       roofToSewer: 0,
       creekIn: 0,
+      runonIn: 0,
       sewageIn: 0,
       netOut: 0,
       netResidual: 0,
@@ -413,6 +416,8 @@ export class CitySim {
     this.lastSampleB = 0;
     this.lastSampleD = 0;
     this.nextSample = 0;
+    this.secAcc = [0, 0, 0];
+    this.secMean = [0, 0, 0];
     this.record();
   }
 
@@ -496,6 +501,16 @@ export class CitySim {
       const per = vol / c.inflowCells.length / area;
       for (const k of c.inflowCells) h[k] += per;
       bal.inflow += vol;
+    }
+    // Agua de las laderas vecinas mientras llueve (método racional: C·i·A sobre el área de fuera que drena aquí)
+    if (R > 0 && c.runon.length) {
+      for (const ro of c.runon) {
+        const vol = ro.c * R * ro.areaM2 * dt;
+        const per = vol / ro.cells.length / area;
+        for (const k of ro.cells) h[k] += per;
+        bal.inflow += vol;
+        bal.runonIn += vol;
+      }
     }
     // Creciente de la quebrada: volumen exacto del hidrograma en [t, t+dt] (los quiebres coinciden con pasos)
     if (this.creekHydro && c.creek && c.creek.cells.length > 0) {
@@ -789,6 +804,13 @@ export class CitySim {
     if (cour > dg.maxCourant) dg.maxCourant = cour;
 
     if (this.drift.length) this.stepDrift(dt);
+    // caudal de la sección de control acumulado en el intervalo de muestreo (las muestras guardan el promedio)
+    if (c.creek) {
+      const q = this.creekFlux();
+      this.secAcc[0] += q[0] * dt;
+      this.secAcc[1] += q[1] * dt;
+      this.secAcc[2] += dt;
+    }
     this.t += dt;
     if (Math.abs(this.t - Math.round(this.t)) < 1e-9) this.t = Math.round(this.t);
     this.lastDt = dt;
@@ -1062,12 +1084,17 @@ export class CitySim {
       };
       this.lastSampleSewer = { out: [T.out[0], T.out[1]], overflow: [T.overflow[0], T.overflow[1]], toCreek: T.toCreek[0] };
     }
-    if (c.creek) s.creek = this.creekSection();
-    // primer momento en que el agua llega a 10 cm junto a cada edificación (para el tiempo de aviso)
+    if (c.creek) {
+      if (this.secAcc[2] > 0) this.secMean = [this.secAcc[0] / this.secAcc[2], this.secAcc[1] / this.secAcc[2], this.secAcc[2]];
+      this.secAcc = [0, 0, 0];
+      s.creek = this.creekSection();
+    }
+    // primer momento en que el agua llega a 10 cm junto a cada edificación cercana a la quebrada (para el
+    // tiempo de aviso; las demás se mojan por la lluvia del barrio, no por la creciente)
     if (this.firstWet.length) {
       const rings = ringsFor(c);
       for (let b = 0; b < rings.length; b++) {
-        if (this.firstWet[b] >= 0) continue;
+        if (this.firstWet[b] >= 0 || c.buildings[b].creekDistM > WARNING.nearCreekM) continue;
         for (const k of rings[b]) if (this.h[k] >= AFFECTED_DEPTH_M) {
           this.firstWet[b] = this.t;
           break;
@@ -1094,17 +1121,28 @@ export class CitySim {
    */
   creekSection(): { qin: number; qChannel: number; qOutside: number; level: number } {
     const c = this.c, cr = c.creek!;
+    const kt = creekCell(cr, c.nx, cr.jt);
+    // caudales: promedio del último intervalo de muestreo (en una quebrada empinada el caudal instantáneo de una
+    // sola fila de caras oscila de un paso al siguiente); al empezar, el instantáneo
+    const [qc, qo] = this.secMean[2] > 0 ? this.secMean : this.creekFlux();
+    return { qin: this.creekInflowAt(), qChannel: qc, qOutside: qo, level: c.z[kt] + this.h[kt] };
+  }
+
+  /** Caudal instantáneo por la sección de control, dentro y fuera del cauce [m³/s], positivo aguas abajo. */
+  private creekFlux(): [number, number] {
+    const c = this.c, cr = c.creek!;
     const { nx, dx } = c;
     let qc = 0, qo = 0;
     for (let j = cr.j0; j <= cr.j1; j++) {
-      const f = j * (nx + 1) + cr.i + 1;
-      const q = this.qx[f] * dx;
+      const q = (cr.flow === 'x' ? this.qx[j * (nx + 1) + cr.i + 1] : this.qy[(cr.i + 1) * nx + j]) * dx * cr.sign;
       if (j > cr.jb0 && j < cr.jb1) qc += q;
       else qo += q;
     }
-    const kt = cr.jt * nx + cr.i;
-    return { qin: this.creekInflowAt(), qChannel: qc, qOutside: qo, level: c.z[kt] + this.h[kt] };
+    return [qc, qo];
   }
+  /** Acumulado [∫qc dt, ∫qo dt, ∫dt] desde la última muestra y promedio de ese intervalo. */
+  private secAcc: [number, number, number] = [0, 0, 0];
+  private secMean: [number, number, number] = [0, 0, 0];
 
   /** Cuenta valores no finitos o negativos (verificación). */
   check(): { nonFinite: number; negative: number } {

@@ -10,7 +10,8 @@
     "build:single": "tsc --noEmit && vite build --mode single",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test:city": "tsx tests/city/sim.test.ts"
+    "test:city": "tsx tests/city/sim.test.ts",
+    "test:quality": "tsx tests/quality/model.test.ts"
   },
   "dependencies": {
     "react": "^19.3.1",

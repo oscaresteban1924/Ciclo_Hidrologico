@@ -135,7 +135,8 @@ export function LineChart({
         {refY && (
           <g>
             <line x1={L} x2={W - R} y1={sy(refY.y)} y2={sy(refY.y)} className="ref" />
-            <text x={W - R - 4} y={sy(refY.y) - 4} textAnchor="end" className="tick ref-label">
+            {/* a la izquierda: los rótulos de las líneas van a la derecha */}
+            <text x={L + 4} y={sy(refY.y) - 4} textAnchor="start" className="tick ref-label">
               {refY.label}
             </text>
           </g>

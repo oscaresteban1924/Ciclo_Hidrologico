@@ -4,7 +4,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { COVERS, mmhToMs, msToMmh, type CoverId } from '../../src/city/sim/constants';
-import { compile } from '../../src/city/sim/compile';
+import { axisDirAt, compile } from '../../src/city/sim/compile';
 import { ComparePair, change, indicators } from '../../src/city/sim/compare';
 import { CitySim } from '../../src/city/sim/engine';
 import { flowArrows } from '../../src/city/sim/fields';
@@ -1094,7 +1094,7 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
   // depresiones artificiales; en Juan Bobo la creciente de ejemplo entra completa y el agua sale por el borde
   const rows: string[] = [];
   let ok = true;
-  for (const id of ['andalucia-juan-bobo', 'blanquizal-la-iguana', 'el-corazon-ana-diaz']) {
+  for (const id of ['andalucia-juan-bobo', 'la-iguana-el-pesebre', 'ana-diaz-el-corazon']) {
     const sc = builtinScenarios()[id];
     const v = validateScenario(sc);
     const sh: Shared = { ...sc.defaults, simMinutes: 25 };
@@ -1102,11 +1102,17 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
     const sim = new CitySim(c, sh);
     sim.runToEnd();
     const chk = sim.check();
-    const res = Math.abs(sim.bal.residual) / sim.bal.precipitation;
+    const res = Math.abs(sim.bal.residual) / (sim.bal.precipitation + sim.bal.inflow);
     const aff = damageSummary(exposureOf(sim)).affected;
-    const good = v.ok && chk.nonFinite === 0 && chk.negative === 0 && res < 1e-9 && aff <= 5 && sc.provenance.kind === 'datos-reales';
+    // sin el agua de las laderas vecinas: lo que queda contra los muros solo puede venir de la lluvia en el sector
+    const c2 = compile(sc, sh, baseInterventions(sc));
+    c2.runon = [];
+    const sim2 = new CitySim(c2, sh);
+    sim2.runToEnd();
+    const aff2 = damageSummary(exposureOf(sim2)).affected;
+    const good = v.ok && chk.nonFinite === 0 && chk.negative === 0 && res < 1e-9 && aff2 <= 2 && aff <= 10 && sc.provenance.kind === 'datos-reales' && !!c.creek;
     if (!good) ok = false;
-    rows.push(`${id}: ${v.ok ? 'válido' : 'inválido'}, ${c.buildings.length} construcciones, ${c.pockets} celdas de patios cerrados, quebrada ${c.creek ? `simulada (capacidad ${fmt(c.creek.capacity, 1)} m³/s)` : 'de referencia'}, residuo ${res.toExponential(1)}, edificaciones con 10 cm o más solo por la lluvia ${aff}`);
+    rows.push(`${id}: ${v.ok ? 'válido' : 'inválido'}, ${c.buildings.length} construcciones, ${c.pockets} celdas de patios cerrados, relleno final ${c.fillCells} celdas (${fmt(c.fillVolume, 0)} m³), quebrada ${c.creek ? `simulada (capacidad ${fmt(c.creek.capacity, 1)} m³/s)` : 'de referencia'}, residuo ${res.toExponential(1)}, edificaciones con 10 cm o más: ${aff2} solo por la lluvia del sector, ${aff} con el agua de las laderas vecinas`);
   }
   const sc = builtinScenarios()['andalucia-juan-bobo'];
   const cap = compile(sc, sc.defaults, baseInterventions(sc)).creek!.capacity;
@@ -1122,7 +1128,46 @@ function miniNet(o: { D: number; L: number; S: number; rimDepth: number; n?: num
   const outFrac = sim.bal.boundaryOut / (sim.bal.precipitation + sim.bal.inflow);
   if (!(eV < 1e-6 && resC < 1e-9 && outFrac > 0.9)) ok = false;
   rows.push(`Juan Bobo con creciente de 150 %: volumen de entrada error ${eV.toExponential(1)}, residuo ${resC.toExponential(1)}, salió por los bordes el ${fmt(outFrac * 100, 1)} % de lo que entró`);
-  record({ id: 'D1', kind: 'obligatoria', name: 'Sectores con datos oficiales: válidos, conservan el agua y sin encharcamientos artificiales', tolerance: 'los tres escenarios son válidos y de tipo «datos reales», compilan y simulan 25 min de lluvia sin valores no numéricos ni negativos, con residuo < 10⁻⁹; la lluvia sola deja 10 cm o más contra los muros de 5 edificaciones o menos; en Juan Bobo la creciente de ejemplo entra completa (error < 10⁻⁶) y más del 90 % del agua sale por los bordes', measured: rows.join(' | '), pass: ok });
+  record({ id: 'D1', kind: 'obligatoria', name: 'Sectores con datos oficiales: válidos, conservan el agua y sin encharcamientos artificiales', tolerance: 'los tres escenarios son válidos, de tipo «datos reales» y con la quebrada simulada; compilan y simulan 25 min de lluvia (60 mm/h por 20 min) sin valores no numéricos ni negativos, con residuo < 10⁻⁹; sin el agua de las laderas vecinas, 2 edificaciones o menos quedan con 10 cm o más contra los muros (comprobación de pozos artificiales); con ella, 10 o menos; en Juan Bobo la creciente de ejemplo entra completa (error < 10⁻⁶) y más del 90 % del agua sale por los bordes', measured: rows.join(' | '), pass: ok });
+}
+
+{
+  // D2) Sectores reales: sección de control orientada con el cauce, cuenca delineada, agua de las laderas y
+  // creciente desde la lluvia en la cuenca
+  const rows: string[] = [];
+  let ok = true;
+  for (const id of ['andalucia-juan-bobo', 'la-iguana-el-pesebre', 'ana-diaz-el-corazon']) {
+    const sc = builtinScenarios()[id];
+    const b = sc.creek!.basin!;
+    const c = compile(sc, sc.defaults, baseInterventions(sc));
+    const cr = c.creek!;
+    // la sección cruza el cauce: la dirección del eje en el punto va a lo largo del eje de la malla elegido
+    const [ux, uy] = axisDirAt(sc.creek!.axis, ...sc.creek!.section.at);
+    const aligned = (cr.flow === 'x' ? Math.abs(ux) : Math.abs(uy)) >= 0.9;
+    // las orillas encierran el talweg y su nivel es el de cauce lleno declarado
+    const banksOk = cr.jb0 < cr.jt && cr.jt < cr.jb1 && Math.abs(cr.bankLevel - cr.zBed - (sc.creek!.section.bankDepthM ?? 0)) < 1e-9;
+    // las celdas de entrada de las laderas no son salidas y están comunicadas con el resto del barrio
+    const outCells = new Set(c.outlets.map((o) => o.cell));
+    const runonOk = c.runon.length > 0 && c.runon.every((r) => r.cells.length > 0 && r.cells.every((k) => !outCells.has(k) && !c.solid[k]));
+    // creciente desde la cuenca (60 mm en 1 h): el volumen que entra es el del hidrograma y el balance cierra con
+    // el agua de las laderas
+    const rain = { ...sc.defaults.rain, intensityMmH: 60, durationMin: 60, pattern: 'constante' as const, spatial: 'uniforme' as const };
+    const sh: Shared = { ...sc.defaults, rain, simMinutes: 30, creek: { source: 'cuenca', peakM3s: 0, timeToPeakMin: 6, startMin: 0 } };
+    const sim = new CitySim(compile(sc, sh, baseInterventions(sc)), sh);
+    sim.runToEnd();
+    const hg = sim.creekHydro!;
+    let vin = 0;
+    for (let k = 1; k < hg.t.length && hg.t[k] <= sim.endT + 1e-9; k++) vin += 0.5 * (hg.q[k] + hg.q[k - 1]) * (hg.t[k] - hg.t[k - 1]);
+    const eV = Math.abs(sim.bal.creekIn - vin) / vin;
+    // agua de las laderas: C·i·A durante la lluvia
+    const roExpected = sim.c.runon.reduce((a, r) => a + r.c * r.areaM2, 0) * (60 / 3.6e6) * Math.min(30, 60) * 60;
+    const eR = Math.abs(sim.bal.runonIn - roExpected) / roExpected;
+    const res = Math.abs(sim.bal.residual) / (sim.bal.precipitation + sim.bal.inflow);
+    const good = aligned && banksOk && runonOk && b.areaKm2 > 0 && b.lengthM > 0 && eV < 1e-3 && eR < 1e-6 && res < 1e-9;
+    if (!good) ok = false;
+    rows.push(`${id}: sección ${cr.flow === 'x' ? 'columna' : 'fila'} (sentido ${cr.sign > 0 ? '+' : '−'}, cos ${fmt(cr.cosT, 2)}), cauce lleno ${fmt(cr.bankLevel - cr.zBed, 2)} m, capacidad ${fmt(cr.capacity, 1)} m³/s; cuenca ${fmt(b.areaKm2, 3)} km², ${fmt(b.lengthM, 0)} m, ${fmt(b.slopePct, 1)} %; ${c.runon.length} entradas de ladera (${fmt(c.runon.reduce((a, r) => a + r.areaM2, 0) / 1e4, 2)} ha) en ${c.runon.reduce((a, r) => a + r.cells.length, 0)} celdas; en 30 min: error de volumen de la creciente ${eV.toExponential(1)}, de las laderas ${eR.toExponential(1)}, residuo ${res.toExponential(1)}`);
+  }
+  record({ id: 'D2', kind: 'obligatoria', name: 'Sectores reales: sección orientada con el cauce, cuenca, laderas y creciente desde la cuenca', tolerance: 'la sección de control cruza el cauce (la dirección del eje en el punto forma menos de 26° con el eje de la malla que la sección mide), sus orillas encierran el talweg al nivel de cauce lleno declarado; las entradas de ladera no coinciden con salidas ni con construcciones; con 60 mm en una hora y 30 min simulados, el volumen de la creciente es la integral de su hidrograma (error < 10⁻³), el de las laderas es C·i·A·t (error < 10⁻⁶) y el balance cierra (residuo < 10⁻⁹)', measured: rows.join(' | '), pass: ok });
 }
 
 // ---------------------------------------------------------------- Sensibilidad al límite de Froude (información para docentes)
