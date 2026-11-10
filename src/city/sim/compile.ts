@@ -78,8 +78,15 @@ export interface OutletFace {
   face: number;
   /** +1 si el flujo saliente es positivo en el eje, −1 si es negativo. */
   dir: 1 | -1;
+  /** Pendiente usada en la condición de profundidad normal: la del terreno junto al borde [m/m]. */
   slope: number;
+  /** Pendiente escrita en el escenario (se usa solo si el terreno no baja hacia el borde). */
+  slopeSpec: number;
 }
+
+/** Tramo de terreno junto al borde con que se mide la pendiente de una salida [m], y pendiente mínima aceptada. */
+export const OUTLET_REACH_M = 6;
+export const OUTLET_MIN_SLOPE = 0.002;
 
 export interface Compiled {
   scenarioId: string;
@@ -414,6 +421,23 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
       zone[k] = zi;
     });
   });
+  // 4b) Planificador: una fracción del suelo abierto de concreto (patios, antejardines, lotes duros) pasa a
+  // pasto, en un orden fijo y repartido por todo el sector (el mismo en cada corrida)
+  if (iv.greening && iv.greening > 0) {
+    const conc = coverIndex('concreto');
+    const open: number[] = [];
+    for (let k = 0; k < N; k++) if (!solid[k] && building[k] < 0 && zone[k] < 0 && cover[k] === conc) open.push(k);
+    const key = (k: number) => {
+      let x = (k * 2654435761) ^ (sc.seed * 40503);
+      x = Math.imul(x ^ (x >>> 16), 2246822507);
+      x = Math.imul(x ^ (x >>> 13), 3266489909);
+      return (x ^ (x >>> 16)) >>> 0;
+    };
+    open.sort((a, b) => key(a) - key(b));
+    const n = Math.round(open.length * Math.min(0.3, iv.greening));
+    const gr = coverIndex('grama');
+    for (let q = 0; q < n; q++) cover[open[q]] = gr;
+  }
   // 5) Jardines de lluvia activos: rebaje del terreno y abertura en el bordillo
   sc.gardens.forEach((g, gi) => {
     if (!iv.gardens[g.id]) return;
@@ -524,8 +548,22 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
     };
   });
 
-  // Salidas: caras de borde con condición de profundidad normal
+  // Salidas: caras de borde con condición de profundidad normal. La pendiente es la del terreno junto al borde
+  // (de la celda a ≈ 6 m hacia adentro hasta la del borde): el cauce o la calle siguen bajando fuera del sector
+  // con esa pendiente. La del escenario solo se usa si el terreno no baja hacia el borde.
   const outlets: OutletFace[] = [];
+  const reach = Math.max(2, Math.round(OUTLET_REACH_M / dx));
+  const edgeSlope = (cell: number, step: number, spec: number): number => {
+    let k = cell, n = 0;
+    for (let q = 0; q < reach; q++) {
+      const nk = k + step;
+      if (nk < 0 || nk >= N || solid[nk]) break;
+      k = nk;
+      n++;
+    }
+    const sl = n > 0 ? (z[k] - z[cell]) / (n * dx) : 0;
+    return sl > OUTLET_MIN_SLOPE ? sl : spec;
+  };
   for (const o of sc.outlets) {
     if (o.edge === 'E' || o.edge === 'W') {
       const i = o.edge === 'E' ? nx - 1 : 0;
@@ -534,7 +572,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
         if (y < o.from || y > o.to) continue;
         const cell = j * nx + i;
         if (solid[cell]) continue;
-        outlets.push({ id: o.id, cell, axis: 'x', face: j * (nx + 1) + (o.edge === 'E' ? nx : 0), dir: o.edge === 'E' ? 1 : -1, slope: o.slope });
+        outlets.push({ id: o.id, cell, axis: 'x', face: j * (nx + 1) + (o.edge === 'E' ? nx : 0), dir: o.edge === 'E' ? 1 : -1, slope: edgeSlope(cell, o.edge === 'E' ? -1 : 1, o.slope), slopeSpec: o.slope });
       }
     } else {
       const j = o.edge === 'N' ? ny - 1 : 0;
@@ -543,7 +581,7 @@ export function compile(sc: Scenario, shared: Shared, iv: Interventions): Compil
         if (x < o.from || x > o.to) continue;
         const cell = j * nx + i;
         if (solid[cell]) continue;
-        outlets.push({ id: o.id, cell, axis: 'y', face: (o.edge === 'N' ? ny : 0) * nx + i, dir: o.edge === 'N' ? 1 : -1, slope: o.slope });
+        outlets.push({ id: o.id, cell, axis: 'y', face: (o.edge === 'N' ? ny : 0) * nx + i, dir: o.edge === 'N' ? 1 : -1, slope: edgeSlope(cell, o.edge === 'N' ? -nx : nx, o.slope), slopeSpec: o.slope });
       }
     }
   }

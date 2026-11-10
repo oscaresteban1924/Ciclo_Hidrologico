@@ -13,7 +13,10 @@ import type { NetFilter } from './render/sewerColors';
 import type { SectorMap2D } from './render/map2d';
 import type { SectorPin, ValleyScene } from './render/valleyScene';
 import { SECTOR_SPOTS, toKm } from './render/aburra';
-import { setAmbient, startAmbient, stopAmbient } from '../lib/audio';
+import { StormAudio } from './audio';
+import { ClipRecorder, downloadBlob, recordingSupported, type Overlay } from './recorder';
+import { ampMaxCm, fmtClock, fmtNum } from './render/palette';
+import { describeRain } from './ui/RainTool';
 
 export type RendererKind = 'webgl' | '2d';
 export type RunStatus = 'listo' | 'corriendo' | 'terminado';
@@ -82,6 +85,18 @@ export const PINS: SectorPin[] = [
   { id: 'ladera-quebrada', label: 'Ladera con quebrada', sub: 'sector demostrativo · ubicación ilustrativa', km: SECTOR_SPOTS['ladera-quebrada'] },
 ];
 
+/**
+ * Agua que corre, normalizada [0–1] para el sonido: raíz cuadrada del caudal calculado (quebrada: el que pasa
+ * por la sección; calle: el que sale por los bordes más el que capta la red), con tope en 60 m³/s en la
+ * quebrada y en 1 m³/s en la calle.
+ */
+export function flowLevel(sim: CitySim): number {
+  const s = sim.samples.length ? sim.samples[sim.samples.length - 1] : null;
+  if (!s) return 0;
+  if (s.creek) return Math.min(1, Math.sqrt(Math.max(0, s.creek.qChannel + s.creek.qOutside) / 60));
+  return Math.min(1, Math.sqrt(Math.max(0, s.outletQ + s.drainQ) / 1));
+}
+
 let live = 0;
 let created = 0;
 declare global {
@@ -125,6 +140,13 @@ export class CityController {
   private ro: ResizeObserver;
   private disposed = false;
   private sound = false;
+  /** Sonido de la tormenta (sintetizado; sigue la lluvia y el caudal calculados). */
+  private audio = new StormAudio();
+  /** Grabación de video en curso y último video guardado. */
+  private recorder: ClipRecorder | null = null;
+  lastClip: { name: string; mb: number; seconds: number } | null = null;
+  /** Rótulo de la toma «Cine» en curso (null si no hay secuencia). */
+  cinemaShot: string | null = null;
   private flying = false;
   private speedSamples: { real: number; sim: number }[] = [];
   /** Cada cambio de escala incrementa la época; las cargas asíncronas viejas se descartan. */
@@ -211,9 +233,16 @@ export class CityController {
     if (this.opts.renderer === 'webgl') {
       const { SectorScene } = await import('./render/sectorScene');
       if (this.disposed || epoch !== this.epoch) return;
-      this.view = new SectorScene(this.opts.container, sc, c, { reducedMotion: this.opts.reducedMotion, quality: this.opts.quality });
-      this.view.labels.setEnabled(this.labelsPref);
-      this.view.setOrtho(this.orthoPref);
+      const v = new SectorScene(this.opts.container, sc, c, { reducedMotion: this.opts.reducedMotion, quality: this.opts.quality });
+      this.view = v;
+      v.labels.setEnabled(this.labelsPref);
+      v.setOrtho(this.orthoPref);
+      // el trueno de cada rayo llega con el retraso del sonido
+      v.onStrike = (q) => this.audio.thunder(q.distM);
+      v.onCinemaEnd = () => {
+        this.cinemaShot = null;
+        this.notify(true);
+      };
     } else {
       const { SectorMap2D } = await import('./render/map2d');
       if (this.disposed || epoch !== this.epoch) return;
@@ -463,6 +492,14 @@ export class CityController {
   waterBlue(): boolean {
     return this.view && 'waterBlue' in this.view ? this.view.waterBlue : true;
   }
+  /** Lodo calculado (agua con sedimento y lodo depositado). Solo en la escena 3D. */
+  setMud(on: boolean): void {
+    if (this.view && 'mudOn' in this.view) this.view.mudOn = on;
+    this.notify(true);
+  }
+  mud(): boolean {
+    return this.view && 'mudOn' in this.view ? this.view.mudOn : false;
+  }
   camera(cmd: 'general' | 'calle' | 'arriba' | 'valle' | 'izq' | 'der' | 'acercar' | 'alejar'): void {
     if (this.valley) {
       if (cmd === 'general') this.valley.home(true);
@@ -561,8 +598,93 @@ export class CityController {
 
   setSound(on: boolean): void {
     this.sound = on;
-    if (on) startAmbient();
-    else stopAmbient();
+    if (on) void this.audio.enable();
+    else this.audio.disable();
+  }
+  soundOn(): boolean {
+    return this.sound;
+  }
+
+  // ------------------------------------------------------------ cine y video
+  /** ¿Se puede usar «Cine»? (escena 3D y sin movimiento reducido) */
+  canCinema(): boolean {
+    return this.opts.renderer === 'webgl' && !this.opts.reducedMotion && !!this.view && 'startCinema' in this.view;
+  }
+  setCinema(on: boolean): void {
+    const v = this.view;
+    if (!v || !('startCinema' in v)) return;
+    if (on && this.canCinema()) {
+      v.setTreeCutaway(null);
+      v.startCinema();
+      this.cinemaShot = v.cinemaShot;
+    } else v.stopCinema();
+    this.notify(true);
+  }
+  cinemaOn(): boolean {
+    return !!this.view && 'cinemaOn' in this.view && this.view.cinemaOn;
+  }
+  /** ¿El navegador puede grabar un video de la maqueta? */
+  canRecord(): boolean {
+    return this.opts.renderer === 'webgl' && recordingSupported();
+  }
+  recording(): { seconds: number } | null {
+    return this.recorder?.active ? { seconds: this.recorder.elapsed } : null;
+  }
+  /** Empieza a grabar la maqueta (hasta 60 s); al detenerse, el video se descarga en el equipo. */
+  startRecording(): boolean {
+    const v = this.view;
+    const sc = this.sc;
+    if (!v || !sc || !('onAfterRender' in v) || this.recorder?.active || !this.canRecord()) return false;
+    const stamp = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const base = `tormenta-${sc.id}-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}`;
+    try {
+      const rec = new ClipRecorder(
+        v.renderer.domElement,
+        () => this.overlay(),
+        this.sound ? this.audio.stream() : null,
+        (blob, mime) => {
+          const name = `${base}.${mime.includes('mp4') ? 'mp4' : 'webm'}`;
+          if (blob.size > 0) downloadBlob(blob, name);
+          this.lastClip = { name, mb: blob.size / 1e6, seconds: Math.round(rec.elapsed) };
+          if ('onAfterRender' in v && this.recorder === rec) v.onAfterRender = null;
+          this.recorder = null;
+          this.notify(true);
+        },
+      );
+      this.recorder = rec;
+      v.onAfterRender = (canvas) => rec.frame(canvas);
+      this.lastClip = null;
+      this.notify(true);
+      return true;
+    } catch {
+      this.recorder = null;
+      return false;
+    }
+  }
+  stopRecording(): void {
+    this.recorder?.stop();
+  }
+  /** Rótulo fijo del video: qué sector, qué lluvia calculada, en qué momento, y la aclaración. */
+  private overlay(): Overlay {
+    const sim = this.displayed();
+    const sc = this.sc!;
+    const lines: string[] = [];
+    if (sim) {
+      const d = describeRain(this.shared.rain);
+      lines.push(d.charAt(0).toUpperCase() + d.slice(1));
+      const mmh = this.status === 'corriendo' ? sim.rainAt(sim.t) : 0;
+      lines.push(`Lluvia en este momento: ${fmtNum(mmh, 0)} mm/h · tiempo simulado ${fmtClock(sim.t, sim.endT)}${this.cinemaShot ? ` · ${this.cinemaShot}` : ''}`);
+      if (this.pair) lines.push(this.show === 'A' ? 'Comparación: A · referencia' : 'Comparación: B · tu barrio');
+    }
+    const amp = this.amplify();
+    if (amp > 1) lines.push(`Láminas delgadas dibujadas hasta ×${amp} (máx. +${ampMaxCm(amp)} cm): los valores calculados no cambian`);
+    const kind = sc.provenance.kind === 'datos-reales' ? 'Sector con datos abiertos' : (sc.provenance.badge ?? 'Escenario didáctico');
+    return {
+      title: `Medellín: laboratorio de lluvia · ${sc.shortTitle}`,
+      lines,
+      foot: `${kind} · cálculo hecho en el navegador, no es un pronóstico oficial · rayos y truenos ilustrativos`,
+    };
   }
 
   // ------------------------------------------------------------ ciclo
@@ -607,10 +729,11 @@ export class CityController {
     this.view.setRain(raining);
     this.view.update(sim, this.tracers, this.paused ? 0 : dt);
     this.view.render(this.opts.reserved());
-    if (this.sound) {
-      const q = sim.samples.length ? sim.samples[sim.samples.length - 1].outletQ : 0;
-      setAmbient({ wind: 0.15, rain: Math.min(1, raining / 100), river: Math.min(1, q / 0.2) });
+    if ('cinemaShot' in this.view && this.view.cinemaShot !== this.cinemaShot) {
+      this.cinemaShot = this.view.cinemaShot;
+      this.notify(true);
     }
+    if (this.sound) this.audio.update({ rainMmH: raining, flow: this.status === 'corriendo' ? flowLevel(sim) : 0 });
     if (now - this.lastNotify > 250) this.notify();
   };
 
@@ -620,6 +743,8 @@ export class CityController {
   }
 
   private disposeView(): void {
+    this.recorder?.stop();
+    this.cinemaShot = null;
     if (this.view) {
       this.view.dispose();
       this.view = null;
@@ -641,7 +766,7 @@ export class CityController {
     this.pair = null;
     this.single = null;
     this.tracers = null;
-    if (this.sound) stopAmbient();
+    this.audio.dispose();
     live--;
     window.__cityDebug = { live, created, lastDisposed: { geometries: info.geometries, textures: info.textures }, controller: null };
   }

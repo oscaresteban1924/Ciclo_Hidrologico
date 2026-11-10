@@ -8,7 +8,7 @@ import type { Scenario } from './scenario';
 import { circ, normalDepth, type CompiledSewer } from './sewer';
 
 /** Coeficiente de impermeabilidad I por cobertura (EPM, tabla 6-3, aproximado por tipo de superficie). */
-const IMPERV: Record<string, number> = { asfalto: 0.9, concreto: 0.9, techo: 0.9, anden: 0.9, cancha: 0.9, adoquin_permeable: 0.6, grama: 0.3, zona_verde: 0.3, jardin_lluvia: 0.3, cauce: 0.3 };
+const IMPERV: Record<string, number> = { asfalto: 0.9, concreto: 0.9, techo: 0.9, anden: 0.9, cancha: 0.9, adoquin_permeable: 0.6, grama: 0.3, zona_verde: 0.3, jardin_lluvia: 0.3, cauce: 0.3, tierra: 0.5 };
 
 export interface EpmCheck {
   id: string;

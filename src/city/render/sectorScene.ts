@@ -13,7 +13,7 @@ import type { Pt, Scenario } from '../sim/scenario';
 import type { TracerSet } from '../sim/tracers';
 import { prng } from '../scenarios/primitives';
 import { LabelLayer, type LabelItem } from './labels';
-import { depthColor, fmtDepth, hexToRgb } from './palette';
+import { depthColor, drawDepth, fmtDepth, hexToRgb } from './palette';
 import { buildBackdrop, crownGeometry, type Backdrop, type SectorFit } from './backdrop';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SECTOR_SPOTS, toKm } from './aburra';
@@ -23,6 +23,8 @@ import { facadeAtlas, glassTexture, glowTexture, plasterTexture, roofTexture, ty
 import { SewerView } from './sewerView';
 import type { NetFilter } from './sewerColors';
 import { FloodView } from './floodView';
+import { StormSky, type StrikeInfo } from './lightning';
+import { buildShots, type Shot } from './cinema';
 
 export type ViewMode = 'realista' | 'materiales' | 'resultados' | 'peligro';
 export type Pick =
@@ -149,6 +151,17 @@ export class SectorScene {
   private labelItems: (LabelItem & { at: THREE.Vector3 })[] = [];
   private pinned: { id: string; at: Pt; text: string } | null = null;
   onSelectProbe: ((p: Pick) => void) | null = null;
+  /** Techo de nubes y rayos ilustrativos (solo en la vista realista). */
+  private sky: StormSky | null = null;
+  /** Rayo dibujado (para el trueno). */
+  onStrike: ((s: StrikeInfo) => void) | null = null;
+  /** Secuencia «Cine» en curso. */
+  private cine: { shots: Shot[]; i: number; start: number } | null = null;
+  /** Se llama cuando la secuencia «Cine» se detiene (por la persona o por el programa). */
+  onCinemaEnd: (() => void) | null = null;
+  /** Se llama justo después de dibujar cada cuadro (para grabar el video). */
+  onAfterRender: ((canvas: HTMLCanvasElement) => void) | null = null;
+  private lastSim: CitySim | null = null;
 
   constructor(container: HTMLElement, sc: Scenario, c: Compiled, opts: { reducedMotion: boolean; quality: 'alta' | 'ligera' }) {
     this.container = container;
@@ -178,6 +191,9 @@ export class SectorScene {
     this.controls.minDistance = 4;
     this.controls.maxDistance = 420;
     this.controls.listenToKeyEvents(this.renderer.domElement);
+    // la secuencia «Cine» se detiene en cuanto la persona mueve la cámara (ratón, toque, rueda o teclado)
+    this.controls.addEventListener('start', () => this.stopCinema());
+    this.renderer.domElement.addEventListener('keydown', () => this.stopCinema());
     this.controls.keyPanSpeed = 14;
 
     this.scene.background = new THREE.Color('#c9dcea');
@@ -225,6 +241,8 @@ export class SectorScene {
       sh.uniforms.uWet = this.fx.u.uWet;
       sh.uniforms.uWetTrail = this.fx.u.uWetTrail;
       sh.uniforms.uField = this.fx.u.uField;
+      sh.uniforms.uSed = this.fx.u.uSed;
+      sh.uniforms.uSedOn = this.fx.u.uSedOn;
       sh.uniforms.uHalf = this.fx.u.uHalf;
       sh.uniforms.uRainGeo = this.fx.u.uRainGeo;
       sh.uniforms.uOrtho = this.orthoU.uOrtho;
@@ -235,7 +253,7 @@ export class SectorScene {
         .replace('#include <common>', '#include <common>\nattribute float aPat;\nattribute float aTop;\nattribute float aCut;\nvarying float vPat;\nvarying float vTop;\nvarying float vCut;\nvarying vec3 vWPos;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPat = aPat;\nvTop = aTop;\nvCut = aCut;\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uPat;\nuniform float uWet;\nuniform float uWetTrail;\nuniform sampler2D uField;\nuniform vec2 uHalf;\nuniform vec4 uRainGeo;\nuniform sampler2D uOrtho;\nuniform float uOrthoOn;\nuniform vec4 uOrthoBox;\nuniform float uReal;\nvarying float vPat;\nvarying float vTop;\nvarying float vCut;\nvarying vec3 vWPos;\nfloat th21(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }')
+        .replace('#include <common>', '#include <common>\nuniform float uPat;\nuniform float uWet;\nuniform float uWetTrail;\nuniform sampler2D uField;\nuniform sampler2D uSed;\nuniform float uSedOn;\nuniform vec2 uHalf;\nuniform vec4 uRainGeo;\nuniform sampler2D uOrtho;\nuniform float uOrthoOn;\nuniform vec4 uOrthoBox;\nuniform float uReal;\nvarying float vPat;\nvarying float vTop;\nvarying float vCut;\nvarying vec3 vWPos;\nfloat th21(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }')
         .replace(
           '#include <color_fragment>',
           `#include <color_fragment>
@@ -278,7 +296,18 @@ export class SectorScene {
           float trailT = texture2D(uField, clamp(fuvT, 0.0, 1.0)).a;
           float rainHereT = uRainGeo.w > 0.5 ? 1.0 - smoothstep(uRainGeo.z - 1.0, uRainGeo.z + 1.0, distance(vWPos.xz, uRainGeo.xy)) : 1.0;
           float wetT = clamp(max(uWet * rainHereT, trailT * uWetTrail * 0.9), 0.0, 1.0);
-          diffuseColor.rgb *= mix(1.0, 0.64, wetT);`,
+          diffuseColor.rgb *= mix(1.0, 0.64, wetT);
+          // lodo depositado (calculado): una capa café que cubre el suelo desde unos 0,3 kg/m² (0,2 mm) y se
+          // vuelve espesa y uniforme desde 15 kg/m² (≈ 1 cm); se dibuja con grietas suaves al secarse
+          if (uSedOn > 0.5 && vTop > 0.75) {
+            float dep = texture2D(uSed, clamp(fuvT, 0.0, 1.0)).g;
+            float mudA = smoothstep(0.3, 15.0, dep);
+            if (mudA > 0.002) {
+              float n = th21(floor(vWPos.xz * 3.0));
+              vec3 mudC = mix(vec3(0.47, 0.36, 0.24), vec3(0.36, 0.27, 0.18), wetT) * (0.92 + 0.12 * n);
+              diffuseColor.rgb = mix(diffuseColor.rgb, mudC, clamp(mudA * 0.92, 0.0, 0.92));
+            }
+          }`,
         )
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.24, wetT);')
         // los escalones verticales del terreno, vistos casi de canto desde arriba, reflejaban el cielo (Fresnel) y
@@ -392,7 +421,12 @@ export class SectorScene {
       this.backdrop = buildBackdrop({ baseY: fit.baseY, clearX: this.W / 2 + m, clearZ: this.H / 2 + m, quality: this.quality, sector: fit.sector, spot: this.spot(), maqueta: real });
       this.scene.add(this.backdrop.group);
       this.textures.push(...this.backdrop.textures);
+      const bd = this.backdrop;
+      this.sky = new StormSky(fit.baseY, 7919 + this.sc.id.length * 31, (x, z) => bd.groundY(x, z));
+      this.sky.onStrike = (q) => this.onStrike?.(q);
+      this.scene.add(this.sky.group);
     } else this.backdrop?.refreshApron();
+    this.setTreeCutaway(this.cutSeg, this.cutR);
     this.fx.rebuild();
     if (first) this.buildDecor();
     this.buildProbes();
@@ -420,6 +454,15 @@ export class SectorScene {
   set waterBlue(v: boolean) {
     this.blueWater = v;
     this.fx.u.uNat.value = v ? 0 : 1;
+  }
+
+  /** Lodo calculado: agua con sedimento y lodo depositado (capa «Lodo»). */
+  get mudOn(): boolean {
+    return this.fx.u.uSedOn.value > 0.5;
+  }
+
+  set mudOn(v: boolean) {
+    this.fx.u.uSedOn.value = v ? 1 : 0;
   }
 
   /**
@@ -660,7 +703,7 @@ export class SectorScene {
       // no cambia: solo cambian el color y la normal.
       m.onBeforeCompile = (sh) => {
         const u = this.fx.u;
-        Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uRampN: u.uRampN, uNat: u.uNat, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode, uMud: u.uMud, uHaz: u.uHaz });
+        Object.assign(sh.uniforms, { uField: u.uField, uRamp: u.uRamp, uRampN: u.uRampN, uNat: u.uNat, uNoise: u.uNoise, uHalf: u.uHalf, uTime: u.uTime, uFlowT: u.uFlowT, uRainAmt: u.uRainAmt, uRainGeo: u.uRainGeo, uMode: u.uMode, uMud: u.uMud, uHaz: u.uHaz, uSed: u.uSed, uSedOn: u.uSedOn });
         sh.vertexShader = sh.vertexShader
           .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
           .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
@@ -668,9 +711,9 @@ export class SectorScene {
           .replace(
             '#include <common>',
             `#include <common>
-            uniform sampler2D uField, uRamp, uRampN, uNoise;
+            uniform sampler2D uField, uRamp, uRampN, uNoise, uSed;
             uniform vec2 uHalf;
-            uniform float uTime, uFlowT, uRainAmt, uMode, uNat, uMud;
+            uniform float uTime, uFlowT, uRainAmt, uMode, uNat, uMud, uSedOn;
             uniform vec3 uHaz[7];
             uniform vec4 uRainGeo;
             varying vec3 vWPos;`,
@@ -696,8 +739,16 @@ export class SectorScene {
               for (int m = 1; m < 7; m++) if (m == hc) hcol = uHaz[m];
               diffuseColor = vec4(hcol, hc == 0 ? 0.35 : 0.93);
             }
-            // agua de la creciente con lodo: el agua honda se vuelve café espeso (solo el color)
-            if (uMode < 0.5 && nat > 0.5 && uMud > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.31, 0.2), uMud * 0.75 * smoothstep(0.25, 1.0, hs));
+            // lodo en el agua (concentración calculada en cada celda): de agua turbia a café espeso; en las vistas
+            // realista y de resultados, con la capa de sedimentos encendida
+            if (uMode < 1.5 && uSedOn > 0.5) {
+              float conc = texture2D(uSed, fuv).r;
+              float mk = smoothstep(2.0, 120.0, conc);
+              if (mk > 0.001) {
+                diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.45, 0.33, 0.21), mk * 0.85);
+                diffuseColor.a = max(diffuseColor.a, mk * 0.75 * smoothstep(0.0005, 0.004, hs));
+              }
+            }
             vec2 vel = uMode > 2.5 ? vec2(0.0) : F.gb;
             float spd = length(vel);
             float streak = 0.0, foam = 0.0, nflow = 0.5, kflow = 0.0, rough = 0.0, chop = 0.5;
@@ -1790,6 +1841,8 @@ export class SectorScene {
    * el punto mirado (en planta), para que no tapen la sección de la quebrada. `null` los vuelve a mostrar.
    */
   setTreeCutaway(seg: [[number, number], [number, number]] | null, r = 7): void {
+    this.cutSeg = seg;
+    this.cutR = r;
     const ti = this.treeInst;
     if (!ti) return;
     const zero = new THREE.Matrix4().makeScale(0, 0, 0).elements;
@@ -1797,6 +1850,18 @@ export class SectorScene {
     aT.set(ti.mT);
     aC.set(ti.mC);
     let hidden = 0;
+    // en un lote en obra (tierra suelta) no quedan árboles
+    const c = this.c;
+    if (c) {
+      const tierra = COVER_LIST.indexOf('tierra');
+      ti.xy.forEach(([x, y], n) => {
+        const i = Math.floor(x / c.dx), j = Math.floor(y / c.dx);
+        if (i >= 0 && j >= 0 && i < c.nx && j < c.ny && c.cover[j * c.nx + i] === tierra) {
+          aT.set(zero, n * 16);
+          aC.set(zero, n * 16);
+        }
+      });
+    }
     if (seg) {
       const [[ax, ay], [bx, by]] = seg;
       const vx = bx - ax, vy = by - ay, L2 = vx * vx + vy * vy || 1;
@@ -1815,6 +1880,8 @@ export class SectorScene {
   }
   /** Árboles ocultos por el corte de la vista actual. */
   treesCut = 0;
+  private cutSeg: [[number, number], [number, number]] | null = null;
+  private cutR = 7;
 
   /** Hay ortofoto del sector (sectores reales). */
   get hasOrtho(): boolean {
@@ -1920,8 +1987,15 @@ export class SectorScene {
       this.lampPoolMat.opacity = 0.3 * lit * (0.4 + 0.6 * this.fx.u.uWet.value);
       for (const o of this.decorGroup.children) if (o.userData.lampFx) o.visible = lit > 0.01;
     }
-    this.hemi.intensity = 1.1 * (1 - storm * 0.28);
-    this.hemi.color.set('#e8f2ff').lerp(new THREE.Color('#a9b6c3'), storm);
+    // techo de nubes y rayos (ilustrativos; su frecuencia sigue la lluvia calculada). Solo en la vista realista.
+    const realista = this.view === 'realista';
+    if (this.sky) {
+      this.sky.group.visible = realista;
+      this.sky.update(dtReal, realista ? this.rainMmh : 0, storm, this.reducedMotion);
+    }
+    const flash = realista ? (this.sky?.flash ?? 0) : 0;
+    this.hemi.intensity = 1.1 * (1 - storm * 0.28) + 1.8 * flash;
+    this.hemi.color.set('#e8f2ff').lerp(new THREE.Color('#a9b6c3'), storm * (1 - flash));
     // fachadas y techos se oscurecen al mojarse (lo hacen sus sombreadores con el mojado de la lluvia);
     // la luz cae con la tormenta
     const wet = this.fx.u.uWet.value;
@@ -1937,7 +2011,8 @@ export class SectorScene {
       this.terrainMat.envMapIntensity = wet * (0.95 - 0.35 * storm);
       for (let i = 0; i < 4 && i < this.buildingMats.length; i++) (this.buildingMats[i] as THREE.MeshStandardMaterial).envMapIntensity = 0.25 + 0.5 * wet;
     }
-    this.renderer.toneMappingExposure = 1.05 * (1 - 0.16 * storm);
+    this.renderer.toneMappingExposure = 1.05 * (1 - 0.16 * storm) * (1 + 0.3 * flash);
+    this.lastSim = sim;
 
     if (sim.t !== this.lastWaterT || this.amplify !== this.lastAmp) {
       this.updateWater(sim);
@@ -2025,7 +2100,7 @@ export class SectorScene {
           cnt++;
         }
         const hc = Math.max(sh / cnt, h * 0.35);
-        P[o + m * 3 + 1] = cz[k * 4 + m] - zr + hc * amp + 0.008;
+        P[o + m * 3 + 1] = cz[k * 4 + m] - zr + drawDepth(hc, amp) + 0.008;
         C.set(tmp, q * 16 + m * 4);
       }
     }
@@ -2057,7 +2132,7 @@ export class SectorScene {
     for (const a of arrows) {
       if (n >= 900) break;
       const k = Math.floor(a.y / sim.c.dx) * sim.c.nx + Math.floor(a.x / sim.c.dx);
-      this.w(a.x, a.y, sim.c.z[k] + a.depth * this.amplify + 0.03, p);
+      this.w(a.x, a.y, sim.c.z[k] + drawDepth(a.depth, this.amplify) + 0.03, p);
       // en el mundo, +y del modelo es −z
       q.setFromAxisAngle(up, Math.atan2(a.uy, a.ux));
       const L = Math.min(1.9, 0.55 + a.speed * 1.1) * Math.min(1, stride * sim.c.dx / 2.2);
@@ -2084,11 +2159,12 @@ export class SectorScene {
     if (c.solid[k] && bi >= 0) return c.buildings[bi].baseZ + this.sc.buildings[bi].heightM + 0.15;
     const u = fx - i, v = fy - j, cz = this.cornerZ;
     const z = (cz[k * 4] * (1 - u) + cz[k * 4 + 1] * u) * (1 - v) + (cz[k * 4 + 3] * (1 - u) + cz[k * 4 + 2] * u) * v;
-    return z + sim.h[k] * this.amplify + 0.08;
+    return z + drawDepth(sim.h[k], this.amplify) + 0.08;
   }
 
   // ------------------------------------------------------------ cámara
   goto(where: 'general' | 'calle' | 'arriba' | 'valle', animate = true): void {
+    this.stopCinema();
     const span = Math.max(this.W, this.H);
     let to: { p: THREE.Vector3; t: THREE.Vector3 };
     if (where === 'calle') {
@@ -2121,6 +2197,7 @@ export class SectorScene {
   }
 
   focusOn(x: number, y: number): void {
+    this.stopCinema();
     const t = this.w(x, y, this.groundAt(x, y));
     const dir = this.camera.position.clone().sub(this.controls.target).normalize();
     const p = t.clone().add(dir.multiplyScalar(38));
@@ -2133,6 +2210,7 @@ export class SectorScene {
 
   /** Lleva la cámara a un punto de vista (coordenadas del modelo: x, y en planta y cota z). */
   lookFrom(eye: [number, number, number], target: [number, number, number]): void {
+    this.stopCinema();
     const p = this.w(eye[0], eye[1], eye[2]);
     const t = this.w(target[0], target[1], target[2]);
     if (this.reducedMotion) {
@@ -2143,6 +2221,7 @@ export class SectorScene {
   }
 
   orbit(deg: number): void {
+    this.stopCinema();
     const off = this.camera.position.clone().sub(this.controls.target);
     off.applyAxisAngle(new THREE.Vector3(0, 1, 0), (deg * Math.PI) / 180);
     this.camera.position.copy(this.controls.target).add(off);
@@ -2150,6 +2229,7 @@ export class SectorScene {
   }
 
   zoom(f: number): void {
+    this.stopCinema();
     const off = this.camera.position.clone().sub(this.controls.target).multiplyScalar(f);
     const d = off.length();
     if (d < this.controls.minDistance || d > this.controls.maxDistance) return;
@@ -2200,9 +2280,73 @@ export class SectorScene {
     this.camera.updateProjectionMatrix();
   }
 
+  // ------------------------------------------------------------ cine
+  get cinemaOn(): boolean {
+    return this.cine !== null;
+  }
+  /** Toma actual de la secuencia «Cine» (rótulo), o null. */
+  get cinemaShot(): string | null {
+    return this.cine ? this.cine.shots[this.cine.i].label : null;
+  }
+
+  /** Empieza la secuencia «Cine» (se repite hasta que la persona toca la maqueta o la detiene). */
+  startCinema(): void {
+    if (this.reducedMotion || this.disposed) return;
+    const span = Math.max(this.W, this.H);
+    const shots = buildShots({
+      W: this.W,
+      H: this.H,
+      fitA: this.fitA,
+      street: this.sc.streetView,
+      groundAt: (x, y) => this.groundAt(x, y),
+      roofAt: (x, y) => this.roofAt(x, y),
+      w: (x, y, z) => this.w(x, y, z),
+      deepest: () => this.deepest(),
+      valle: { p: new THREE.Vector3(-span * 1.75, this.fitA + span * 0.78, span * 0.38), t: new THREE.Vector3(span * 1.6, this.fitA + span * 0.18, -span * 0.35) },
+    });
+    this.tween = null;
+    this.cine = { shots, i: 0, start: performance.now() };
+    shots[0].pose(0);
+  }
+
+  stopCinema(): void {
+    if (!this.cine) return;
+    this.cine = null;
+    this.onCinemaEnd?.();
+  }
+
+  /** Celda con más agua en este momento (fuera de las construcciones). */
+  private deepest(): [number, number, number] | null {
+    const sim = this.lastSim;
+    if (!sim) return null;
+    let best = -1, hb = 0.02;
+    for (let k = 0; k < sim.h.length; k++) if (this.c.building[k] < 0 && sim.h[k] > hb) {
+      hb = sim.h[k];
+      best = k;
+    }
+    if (best < 0) return null;
+    return [((best % this.c.nx) + 0.5) * this.c.dx, (Math.floor(best / this.c.nx) + 0.5) * this.c.dx, hb];
+  }
+
+  private stepCinema(): void {
+    const cn = this.cine!;
+    let sh = cn.shots[cn.i];
+    let u = (performance.now() - cn.start) / 1000 / sh.dur;
+    if (u >= 1) {
+      cn.i = (cn.i + 1) % cn.shots.length;
+      cn.start = performance.now();
+      sh = cn.shots[cn.i];
+      u = 0;
+    }
+    const pose = sh.pose(Math.min(1, u));
+    this.camera.position.copy(pose.p);
+    this.controls.target.copy(pose.t);
+  }
+
   render(reserved: DOMRect[] = []): void {
     if (this.disposed) return;
-    if (this.tween) {
+    if (this.cine) this.stepCinema();
+    else if (this.tween) {
       const k = Math.min(1, (performance.now() - this.tween.start) / this.tween.dur);
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       this.camera.position.lerpVectors(this.tween.from.p, this.tween.to.p, e);
@@ -2212,6 +2356,7 @@ export class SectorScene {
     this.controls.update();
     if (this.envPending > 0 && --this.envPending === 0) this.captureEnv();
     this.renderer.render(this.scene, this.camera);
+    this.onAfterRender?.(this.renderer.domElement);
     // etiquetas
     const w = this.container.clientWidth, h = this.container.clientHeight;
     const pos = new Map<string, { x: number; y: number; visible: boolean }>();
@@ -2268,6 +2413,9 @@ export class SectorScene {
     });
     this.textures.forEach((t) => t.dispose());
     this.fx.dispose();
+    this.sky?.dispose();
+    this.cine = null;
+    this.onAfterRender = null;
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();

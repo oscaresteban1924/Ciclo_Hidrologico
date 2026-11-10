@@ -44,7 +44,7 @@ export function loadCity(): CitySaved {
     }
     for (const [id, m] of Object.entries(d.missions ?? {})) if (m && typeof m.done === 'boolean') out.missions[id] = { done: m.done, prediction: typeof m.prediction === 'string' ? m.prediction : undefined, outcome: typeof m.outcome === 'string' ? m.outcome : null };
     if (typeof d.lastScenario === 'string' && allScenarios()[d.lastScenario]) out.lastScenario = d.lastScenario;
-    if ([15, 30, 60, 120].includes(d.speed as number)) out.speed = d.speed as number;
+    if ([15, 30, 60, 120, 240, 480].includes(d.speed as number)) out.speed = d.speed as number;
     for (const [id, list] of Object.entries(d.budget ?? {})) if (Array.isArray(list)) out.budget[id] = list.filter((q) => typeof q === 'string').slice(0, 30);
     if (d.renderer === 'webgl' || d.renderer === '2d') out.renderer = d.renderer;
     if (d.coach === true) out.coach = true;

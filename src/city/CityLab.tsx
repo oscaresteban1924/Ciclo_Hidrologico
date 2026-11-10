@@ -9,9 +9,9 @@ import { baseInterventions, cloneInterventions, type Interventions, type Scenari
 import { COVERS, COVER_LIST, H_WET } from './sim/constants';
 import { MISSIONS, budgetItems, type Mission } from './content/missions';
 import { takeCityIntent } from './intent';
-import { DEPTH_STOPS, VALLEY_EXAGGERATION, cssDepthGradient, fmtDepth, fmtNum, fmtTime } from './render/palette';
+import { DEPTH_STOPS, VALLEY_EXAGGERATION, ampMaxCm, cssDepthGradient, fmtClock, fmtDepth, fmtNum, fmtTime } from './render/palette';
 import { CompareTab, MissionsTab, TeacherTab, ToolsTab, WordsTab, type LabApi, type MissionUi, type TabId, type ToolId } from './ui/Panels';
-import { RainBudget } from './ui/RainBudget';
+import { RainBudget, SedBudget } from './ui/RainBudget';
 import { compile } from './sim/compile';
 import { SEWER_COLORS } from './render/sewerColors';
 import { HAZARD, HAZARD_SOURCE, exposureOf, hazardClass as hazardClassOf } from './sim/hazard';
@@ -352,6 +352,7 @@ export default function CityLab() {
         <div className="panel-scroll" id="city-tabpanel" role="tabpanel" aria-labelledby={`tab-${tab}`} ref={scrollRef}>
           {inSector && api && <StateSummary api={api} />}
           {inSector && api && sim && (tab === 'herramientas' || tab === 'misiones') && <RainBudget bal={sim.bal} title={ctrl?.pair ? `¿Adónde fue la lluvia? (${ctrl.show})` : undefined} />}
+          {inSector && api && sim && sim.sed && (tab === 'herramientas' || tab === 'misiones') && <SedBudget sed={sim.sed.updateBalance()} title={ctrl?.pair ? `¿Adónde fue la tierra? (${ctrl.show})` : undefined} />}
           {!api ? (
             <p>Cargando…</p>
           ) : tab === 'misiones' ? (
@@ -447,7 +448,7 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
         <div className="sim-clock" aria-live="off">
           <span className="phase">{phase}</span>
           <span>
-            {fmtTime(sim.t)} / {fmtTime(sim.endT)} min
+            {fmtTime(sim.t, sim.endT >= 3600)} / {fmtClock(sim.endT, sim.endT)}
           </span>
           <span>{rainNow > 0 ? `${fmtNum(rainNow, 0)} mm/h` : 'sin lluvia'}</span>
         </div>
@@ -460,7 +461,7 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
               api.setSaved((s) => ({ ...s, speed: Number(e.target.value) }));
             }}
           >
-            {[15, 30, 60, 120].map((v) => (
+            {[15, 30, 60, 120, 240, 480].map((v) => (
               <option key={v} value={v}>
                 ×{v}
               </option>
@@ -481,9 +482,10 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
       {ctrl.selection && <SelectionCard api={api} />}
       {!api.saved.coach && ctrl.status === 'listo' && sim.t === 0 && <Coach api={api} />}
       <div className="city-banners">
+        <CineBar api={api} />
         {ctrl.amplify() > 1 && (
           <p className="city-ov banner is-warn" role="status">
-            Profundidad dibujada ×{ctrl.amplify()} para verla mejor. Los números no cambian.
+            Láminas delgadas dibujadas hasta ×{ctrl.amplify()} para verlas mejor; el agua honda, casi a escala (como máximo +{ampMaxCm(ctrl.amplify())} cm). Los números no cambian.
           </p>
         )}
         {ctrl.pending && (
@@ -522,7 +524,7 @@ function SectorOverlays({ api, sc }: { api: LabApi; sc: Scenario }) {
 }
 
 /** Íconos de la barra de cámara (trazos simples, 20×20). */
-function CamIcon({ name }: { name: 'mas' | 'menos' | 'izq' | 'der' | 'arriba' | 'calle' | 'valle' | 'inicio' }) {
+function CamIcon({ name }: { name: 'mas' | 'menos' | 'izq' | 'der' | 'arriba' | 'calle' | 'valle' | 'inicio' | 'cine' | 'sonido' | 'mudo' | 'grabar' | 'detener' }) {
   const st = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   const d: Record<typeof name, ReactNode> = {
     mas: <path d="M10 4.5 V15.5 M4.5 10 H15.5" {...st} strokeWidth={2.3} />,
@@ -561,6 +563,28 @@ function CamIcon({ name }: { name: 'mas' | 'menos' | 'izq' | 'der' | 'arriba' | 
         <path d="M3.5 9.5 L10 4 L16.5 9.5 M5.5 8 V16 H14.5 V8" />
       </g>
     ),
+    cine: (
+      <g {...st}>
+        <rect x="3" y="7" width="10" height="9" rx="1.5" />
+        <path d="M13 10 L17.5 7.5 V15.5 L13 13" />
+        <circle cx="5.5" cy="4.6" r="1.6" />
+        <circle cx="10" cy="4.6" r="1.6" />
+      </g>
+    ),
+    sonido: (
+      <g {...st}>
+        <path d="M3.5 8 H6.5 L10.5 4.5 V15.5 L6.5 12 H3.5 Z" />
+        <path d="M13 7.5 A3.5 3.5 0 0 1 13 12.5 M15 5.5 A6.3 6.3 0 0 1 15 14.5" />
+      </g>
+    ),
+    mudo: (
+      <g {...st}>
+        <path d="M3.5 8 H6.5 L10.5 4.5 V15.5 L6.5 12 H3.5 Z" />
+        <path d="M13 8 L17 12 M17 8 L13 12" />
+      </g>
+    ),
+    grabar: <circle cx="10" cy="10" r="5.2" fill="#c0392b" stroke="none" />,
+    detener: <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" fill="#c0392b" stroke="none" />,
   };
   return (
     <svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
@@ -628,7 +652,8 @@ function ViewBar({ api }: { api: LabApi }) {
     });
   layers.push({ id: 'flechas', label: 'Flechas', hint: 'Dirección del agua donde corre', on: ctrl.arrowsOn(), set: () => ctrl.setArrows(!ctrl.arrowsOn()) });
   if (webgl && v === 'realista') layers.push({ id: 'azul', label: 'Agua en azul', hint: 'Colorear el agua según su profundidad', on: ctrl.waterBlue(), set: () => ctrl.setWaterBlue(!ctrl.waterBlue()) });
-  if (webgl) layers.push({ id: 'x5', label: 'Agua ×5', hint: 'Dibujar el agua cinco veces más gruesa (solo el dibujo)', on: ctrl.amplify() > 1, set: () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5) });
+  if (webgl) layers.push({ id: 'lodo', label: 'Lodo', hint: 'Agua con tierra y lodo depositado (calculados)', on: ctrl.mud(), set: () => ctrl.setMud(!ctrl.mud()) });
+  if (webgl) layers.push({ id: 'x5', label: 'Agua ×5', hint: 'Dibujar más gruesas las láminas delgadas (hasta cinco veces; el agua honda casi no cambia; solo el dibujo)', on: ctrl.amplify() > 1, set: () => ctrl.setAmplify(ctrl.amplify() > 1 ? 1 : 5) });
   layers.push({
     id: 'bajo',
     label: 'Bajo la calle',
@@ -676,12 +701,16 @@ function ViewBar({ api }: { api: LabApi }) {
 /** Cámara: columna de botones con ícono en el borde derecho de la maqueta. */
 function CameraRail({ api }: { api: LabApi }) {
   const { ctrl } = api;
+  const { state, dispatch } = useStore();
   if (api.renderer !== 'webgl') return null;
-  const b = (icon: Parameters<typeof CamIcon>[0]['name'], label: string, f: () => void) => (
-    <button type="button" className="cam-btn" aria-label={label} title={label} onClick={f}>
+  const b = (icon: Parameters<typeof CamIcon>[0]['name'], label: string, f: () => void, pressed?: boolean, disabled = false) => (
+    <button type="button" className={`cam-btn${pressed ? ' is-on' : ''}`} aria-label={label} title={label} onClick={f} aria-pressed={pressed} disabled={disabled}>
       <CamIcon name={icon} />
     </button>
   );
+  const cine = ctrl.cinemaOn();
+  const rec = ctrl.recording();
+  const sound = state.prefs.sound;
   return (
     <div className="city-ov city-camrail" role="group" aria-label="Cámara">
       {b('mas', 'Acercar', () => ctrl.camera('acercar'))}
@@ -694,6 +723,55 @@ function CameraRail({ api }: { api: LabApi }) {
       {b('calle', 'Vista a nivel de calle', () => ctrl.camera('calle'))}
       {b('valle', 'Mirar el valle desde la ladera, con el sector adelante', () => ctrl.camera('valle'))}
       {b('inicio', 'Volver a la vista general', () => ctrl.camera('general'))}
+      <span className="cam-sep" aria-hidden="true" />
+      {b(
+        'cine',
+        ctrl.canCinema() ? (cine ? 'Detener el modo cine' : 'Modo cine: la cámara recorre la tormenta sola (se detiene al tocar la maqueta)') : 'Modo cine no disponible con movimiento reducido',
+        () => ctrl.setCinema(!cine),
+        cine,
+        !ctrl.canCinema(),
+      )}
+      {b(sound ? 'sonido' : 'mudo', sound ? 'Apagar el sonido de la tormenta' : 'Encender el sonido de la tormenta (sigue la lluvia y el caudal calculados)', () => dispatch({ type: 'pref', key: 'sound', value: !sound }), sound)}
+      {ctrl.canRecord() &&
+        b(rec ? 'detener' : 'grabar', rec ? 'Detener la grabación y guardar el video' : 'Grabar un video de la maqueta (hasta 60 s, queda en tu equipo)', () => (rec ? ctrl.stopRecording() : void ctrl.startRecording()), !!rec)}
+    </div>
+  );
+}
+
+/** Estado del modo cine y de la grabación (primer aviso de la maqueta, arriba a la izquierda). */
+function CineBar({ api }: { api: LabApi }) {
+  const { ctrl } = api;
+  const rec = ctrl.recording();
+  const shot = ctrl.cinemaShot;
+  const clip = ctrl.lastClip;
+  if (!rec && !shot && !clip) return null;
+  const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  return (
+    <div className="city-ov banner city-cinebar" role="status">
+      {rec && (
+        <span className="cb-rec">
+          <span className="cb-dot" aria-hidden="true" /> Grabando {mmss(rec.seconds)} de 1:00
+          <button type="button" className="link" onClick={() => ctrl.stopRecording()}>
+            Detener y guardar
+          </button>
+        </span>
+      )}
+      {shot && (
+        <span className="cb-shot">
+          Cine · {shot}
+          <button type="button" className="link" onClick={() => ctrl.setCinema(false)}>
+            Detener
+          </button>
+        </span>
+      )}
+      {!rec && clip && (
+        <span className="cb-clip">
+          Video guardado en tu equipo: {clip.name} ({fmtNum(clip.mb, 1)} MB, {clip.seconds} s)
+          <button type="button" className="link" onClick={() => (ctrl.lastClip = null)} aria-label="Cerrar el aviso del video">
+            ×
+          </button>
+        </span>
+      )}
     </div>
   );
 }
@@ -774,7 +852,7 @@ function Legend({ api }: { api: LabApi }) {
           <span key={s.label}>{s.label}</span>
         ))}
       </div>
-      <small>{ctrl.amplify() > 1 ? `Dibujo ×${ctrl.amplify()} (los valores no cambian)` : 'Profundidad a escala real'} · flechas y vetas: velocidad calculada</small>
+      <small>{ctrl.amplify() > 1 ? `Láminas delgadas ×${ctrl.amplify()} (máx. +${ampMaxCm(ctrl.amplify())} cm; los valores no cambian)` : 'Profundidad a escala real'} · flechas y vetas: velocidad calculada</small>
       {ctrl.cutOn() && sim.sewer && (
         <ul className="mat-legend sewer-legend" aria-label="Bajo la calle">
           <li>
@@ -918,7 +996,7 @@ function StateSummary({ api }: { api: LabApi }) {
     <details className="city-summary">
       <summary>Qué está pasando (en texto)</summary>
       <p>
-        Minuto {fmtTime(sim.t)}. Han caído {fmtNum(b.precipitation, 1)} m³ de lluvia. En la superficie hay {fmtNum(b.surface, 1)} m³; se infiltraron {fmtNum(b.infiltrated, 1)} m³; los sumideros captaron {fmtNum(b.drained, 1)} m³ y salieron por el borde bajo {fmtNum(b.boundaryOut, 1)} m³.
+        Tiempo {fmtClock(sim.t, sim.endT)}. Han caído {fmtNum(b.precipitation, 1)} m³ de lluvia. En la superficie hay {fmtNum(b.surface, 1)} m³; se infiltraron {fmtNum(b.infiltrated, 1)} m³; los sumideros captaron {fmtNum(b.drained, 1)} m³ y salieron por el borde bajo {fmtNum(b.boundaryOut, 1)} m³.
       </p>
       <p>
         {wet.length ? `Hay agua en ${wet.map((p) => `«${p.name}» (${fmtDepth(p.now)})`).join(', ')}.` : 'Los medidores fijos están secos.'}{' '}

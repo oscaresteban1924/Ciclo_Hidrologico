@@ -1,7 +1,8 @@
 // Formato versionado de escenario y de configuración del laboratorio de lluvia urbana.
 // Coordenadas locales en metros: x hacia el este, y hacia el norte, origen en la esquina suroeste.
 
-import { COVER_LIST, DURATION_RANGE, RAIN_RANGE, type CoverId } from './constants';
+import { COVER_LIST, DURATION_RANGE, RAIN_RANGE, SIM_MAX_MIN, type CoverId } from './constants';
+import { DESIGN_DURATIONS, DESIGN_RETURNS, WARMING_LEVELS, eventById } from './storms';
 import { BASIN_COVER_LIST, type BasinCover, type BasinSpec } from './basin';
 
 export type Pt = [number, number];
@@ -414,10 +415,20 @@ export interface Decor {
 
 // ---------------------------------------------------------------- configuración
 
+export type RainPattern = 'constante' | 'pico' | 'diseno' | 'evento';
+
 export interface RainConfig {
+  /** Intensidad media [mm/h] (en las tormentas de diseño y los aguaceros reconstruidos, la media calculada). */
   intensityMmH: number;
   durationMin: number;
-  pattern: 'constante' | 'pico';
+  /** Inventada (constante o con pico), de diseño con la curva IDF de Medellín o un aguacero reconstruido. */
+  pattern: RainPattern;
+  /** Tormenta de diseño: periodo de retorno [años]. */
+  returnYears?: number;
+  /** Aguacero reconstruido. */
+  eventId?: string;
+  /** Nivel de calentamiento global [°C sobre 1850–1900]; ausente o 1,1: clima actual. */
+  warmingC?: number;
   spatial: 'uniforme' | 'localizada';
   center: Pt;
   radiusM: number;
@@ -451,6 +462,8 @@ export interface Interventions {
   culverts?: Record<string, CulvertState>;
   /** Cobertura de la cuenca de la quebrada aguas arriba (creciente desde la lluvia). */
   basinCover?: BasinCover;
+  /** Planificador: fracción del suelo abierto de concreto (patios, antejardines) que pasa a pasto (0–0,3). */
+  greening?: number;
 }
 
 export interface CityConfig {
@@ -472,6 +485,7 @@ export function baseInterventions(sc: Scenario): Interventions {
     erradas: false,
     culverts: Object.fromEntries((sc.culverts ?? []).map((c) => [c.id, { obstruction: 0, progressive: false }])),
     basinCover: 'mixta',
+    greening: 0,
   };
 }
 
@@ -484,6 +498,7 @@ export function cloneInterventions(iv: Interventions): Interventions {
     erradas: iv.erradas ?? false,
     culverts: Object.fromEntries(Object.entries(iv.culverts ?? {}).map(([k, v]) => [k, { ...v }])),
     basinCover: iv.basinCover ?? 'mixta',
+    greening: iv.greening ?? 0,
   };
 }
 
@@ -511,14 +526,23 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
   const r = sh.rain as Partial<RainConfig> | undefined;
   if (!r) errors.push('Falta la lluvia.');
   else {
-    if (!isNum(r.intensityMmH, RAIN_RANGE.min, RAIN_RANGE.max)) errors.push(`Intensidad fuera del rango ${RAIN_RANGE.min}–${RAIN_RANGE.max} mm/h.`);
-    if (!isNum(r.durationMin, DURATION_RANGE.min, DURATION_RANGE.max)) errors.push(`Duración fuera del rango ${DURATION_RANGE.min}–${DURATION_RANGE.max} min.`);
-    if (r.pattern !== 'constante' && r.pattern !== 'pico') errors.push('Patrón de lluvia desconocido.');
+    if (r.pattern === 'constante' || r.pattern === 'pico') {
+      if (!isNum(r.intensityMmH, RAIN_RANGE.min, RAIN_RANGE.max)) errors.push(`Intensidad fuera del rango ${RAIN_RANGE.min}–${RAIN_RANGE.max} mm/h.`);
+      if (!isNum(r.durationMin, DURATION_RANGE.min, DURATION_RANGE.max)) errors.push(`Duración fuera del rango ${DURATION_RANGE.min}–${DURATION_RANGE.max} min.`);
+    } else if (r.pattern === 'diseno') {
+      if (!(DESIGN_RETURNS as readonly number[]).includes(r.returnYears as number)) errors.push(`Periodo de retorno no disponible: se admiten ${DESIGN_RETURNS.join(', ')} años.`);
+      if (!(DESIGN_DURATIONS as readonly number[]).includes(r.durationMin as number)) errors.push(`Duración de la tormenta de diseño no disponible: se admiten ${DESIGN_DURATIONS.join(', ')} min.`);
+    } else if (r.pattern === 'evento') {
+      const ev = eventById(r.eventId);
+      if (!ev) errors.push(`Aguacero desconocido: «${String(r.eventId)}».`);
+      else if (r.durationMin !== ev.durationMin) errors.push(`La duración del aguacero «${ev.name}» es ${ev.durationMin} min.`);
+    } else errors.push('Patrón de lluvia desconocido.');
+    if (r.warmingC != null && !(WARMING_LEVELS as readonly number[]).includes(r.warmingC)) errors.push(`Nivel de calentamiento no disponible: se admiten ${WARMING_LEVELS.join(', ')} °C.`);
     if (r.spatial !== 'uniforme' && r.spatial !== 'localizada') errors.push('Distribución espacial desconocida.');
     if (!Array.isArray(r.center) || r.center.length !== 2 || !isNum(r.center[0]) || !isNum(r.center[1])) errors.push('Centro de lluvia inválido.');
     if (!isNum(r.radiusM, 5, 500)) errors.push('Radio de lluvia fuera de rango (5–500 m).');
   }
-  if (!isNum(sh.simMinutes, 10, 120)) errors.push('Tiempo simulado fuera de rango (10–120 min).');
+  if (!isNum(sh.simMinutes, 10, SIM_MAX_MIN)) errors.push(`Tiempo simulado fuera de rango (10–${SIM_MAX_MIN} min).`);
   if (r && isNum(sh.simMinutes) && isNum(r.durationMin) && sh.simMinutes < r.durationMin) errors.push('El tiempo simulado debe ser mayor o igual que la duración de la lluvia.');
   if (sh.soilInitial !== 'seco' && sh.soilInitial !== 'humedo') errors.push('Humedad inicial desconocida.');
   if (!isNum(sh.inflowLps, 0, 500)) errors.push('Entrada externa fuera de rango (0–500 L/s).');
@@ -555,6 +579,7 @@ export function validateConfig(raw: unknown, scenarios: Record<string, Scenario>
       if (iv.erradas !== undefined && typeof iv.erradas !== 'boolean') errors.push(`${key}: «conexiones erradas» debe ser sí o no.`);
       if (iv.erradas && !sc.sewer) errors.push(`${key}: este escenario no tiene red separada (conexiones erradas).`);
       if (iv.basinCover !== undefined && !BASIN_COVER_LIST.includes(iv.basinCover)) errors.push(`${key}: cobertura de la cuenca desconocida.`);
+      if (iv.greening !== undefined && !isNum(iv.greening, 0, 0.3)) errors.push(`${key}: fracción verde fuera de rango (0–0,3).`);
       for (const [cid, st] of Object.entries(iv.culverts ?? {})) {
         if (!(sc.culverts ?? []).some((c) => c.id === cid)) errors.push(`${key}: cobertura desconocida «${cid}».`);
         if (!st || !isNum(st.obstruction, 0, 1) || typeof st.progressive !== 'boolean') errors.push(`${key}: estado de la cobertura «${cid}» mal definido (fracción tapada 0–1 y si se tapa con la creciente).`);

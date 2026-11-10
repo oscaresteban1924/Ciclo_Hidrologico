@@ -1,7 +1,7 @@
 // Paneles del laboratorio de lluvia: herramientas, comparación, misiones, palabras clave y docente.
 
 import { Fragment, useMemo, useState, type ReactNode, type RefObject } from 'react';
-import { COVERS, DURATION_RANGE, ENGINE, NUMERICS, RAIN_RANGE, type CoverId } from '../sim/constants';
+import { COVERS, ENGINE, NUMERICS, type CoverId } from '../sim/constants';
 import { baseInterventions, cloneInterventions, validateConfig, validateScenario, type Interventions, type Scenario } from '../sim/scenario';
 import { change } from '../sim/compare';
 import { runQuickTests, type QuickResult } from '../sim/quicktests';
@@ -9,7 +9,7 @@ import { allScenarios, registerScenario } from '../scenarios/index';
 import type { Capabilities, CityController, RendererKind } from '../controller';
 import type { CitySaved } from '../persist';
 import { BUDGET, MISSIONS, budgetItems, type Mission } from '../content/missions';
-import { fmtDepth, fmtDuration, fmtNum, fmtTime } from '../render/palette';
+import { fmtClock, fmtDepth, fmtDuration, fmtNum } from '../render/palette';
 import { LineChart, type Series } from './Chart';
 import { Disclosure, Segmented } from '../../components/ui';
 import { GLOSSARY } from '../../content/glossary';
@@ -18,12 +18,13 @@ import { useStore } from '../../state/store';
 import { downloadText } from '../../lib/download';
 import report from '../content/test-report.json';
 import { RainBudget } from './RainBudget';
-import { Range } from './Range';
+import { RainTool, describeRain } from './RainTool';
+import { PlanTool } from './PlanTool';
 import { CreekTool, SewerTeacher, SewerTool, culvertStateText } from './SewerPanel';
 import { HAZARD_SOURCE } from '../sim/hazard';
 import { TRACER_COLORS, TRACER_TRAIL_MOVING } from '../render/tracerColors';
 
-export type ToolId = 'lluvia' | 'superficies' | 'jardin' | 'deposito' | 'sumideros' | 'quebrada' | 'trazadores' | 'medir';
+export type ToolId = 'lluvia' | 'plan' | 'superficies' | 'jardin' | 'deposito' | 'sumideros' | 'quebrada' | 'trazadores' | 'medir';
 export type TabId = 'misiones' | 'herramientas' | 'comparar' | 'palabras' | 'docente';
 
 export interface MissionUi {
@@ -59,7 +60,8 @@ const m3 = (v: number) => `${fmtNum(v, v < 10 ? 2 : 1)}\u00a0m³`;
 const lps = (v: number) => `${fmtNum(v * 1000, 1)}\u00a0L/s`;
 
 export const TOOL_LIST: { id: ToolId; label: string; hint: string }[] = [
-  { id: 'lluvia', label: 'Crear lluvia', hint: 'Intensidad, duración y dónde llueve.' },
+  { id: 'lluvia', label: 'Crear lluvia', hint: 'Inventada, de diseño o un aguacero real.' },
+  { id: 'plan', label: 'Planificar', hint: 'Obras con presupuesto, probadas con una tormenta.' },
   { id: 'superficies', label: 'Superficies', hint: 'Cambia asfalto, concreto, grama…' },
   { id: 'jardin', label: 'Jardín de lluvia', hint: 'Guarda agua hasta llenarse.' },
   { id: 'deposito', label: 'Depósito', hint: 'Recoge la lluvia de un techo.' },
@@ -105,7 +107,8 @@ export function ToolsTab({ api }: { api: LabApi }) {
         ))}
       </div>
       <Pending api={api} />
-      {api.tool === 'lluvia' && <RainTool api={api} />}
+      {api.tool === 'lluvia' && <RainTool ctrl={api.ctrl} sc={api.sc!} />}
+      {api.tool === 'plan' && <PlanTool key={sc.id} ctrl={api.ctrl} sc={sc} saved={api.saved} setSaved={api.setSaved} />}
       {api.tool === 'superficies' && <SurfaceTool api={api} />}
       {api.tool === 'jardin' && <GardenTool api={api} />}
       {api.tool === 'deposito' && <TankTool api={api} />}
@@ -120,53 +123,6 @@ export function ToolsTab({ api }: { api: LabApi }) {
         Los cambios se hacen en <strong>B, tu barrio</strong>. {ctrl.compare ? 'Estás comparando A y B.' : 'En la pestaña «Comparar» puedes correr A y B con la misma lluvia.'}
       </p>
     </div>
-  );
-}
-
-function RainTool({ api }: { api: LabApi }) {
-  const { ctrl, sc } = api;
-  const r = ctrl.shared.rain;
-  const depth = r.intensityMmH * (r.durationMin / 60);
-  const area = sc!.extent.width * sc!.extent.height;
-  const vol = (depth / 1000) * (r.spatial === 'uniforme' ? area : Math.min(area, Math.PI * r.radiusM * r.radiusM));
-  const set = (patch: Partial<typeof r>) => {
-    const rain = { ...r, ...patch };
-    const sim = Math.max(ctrl.shared.simMinutes, rain.durationMin + 10);
-    ctrl.update({ shared: { rain, simMinutes: Math.min(120, sim) } });
-  };
-  return (
-    <section className="tool-body" aria-label="Crear lluvia">
-      <h3>Crear lluvia</h3>
-      <div className="chip-row" role="group" aria-label="Lluvias de ejemplo">
-        {[
-          ['Llovizna', 5],
-          ['Moderada', 20],
-          ['Fuerte', 60],
-          ['Muy fuerte', 100],
-        ].map(([l, v]) => (
-          <button key={l} type="button" className={`chip${r.intensityMmH === v ? ' is-on' : ''}`} aria-pressed={r.intensityMmH === v} onClick={() => set({ intensityMmH: v as number })}>
-            {l} · {v} mm/h
-          </button>
-        ))}
-      </div>
-      <Range label="Intensidad" value={r.intensityMmH} min={RAIN_RANGE.min} max={RAIN_RANGE.max} step={RAIN_RANGE.step} unit="mm/h" onChange={(v) => set({ intensityMmH: v })} />
-      <Range label="Duración" value={r.durationMin} min={DURATION_RANGE.min} max={DURATION_RANGE.max} step={DURATION_RANGE.step} unit="min" onChange={(v) => set({ durationMin: v })} />
-      <Range label="Tiempo simulado" value={ctrl.shared.simMinutes} min={Math.max(10, r.durationMin)} max={120} step={5} unit="min" onChange={(v) => ctrl.update({ shared: { simMinutes: v } })} help="Incluye el tiempo después de la lluvia, mientras el agua termina de escurrir." />
-      <Segmented label="Forma de la lluvia" value={r.pattern} options={[{ value: 'constante', label: 'Constante' }, { value: 'pico', label: 'Con pico' }]} onChange={(v) => set({ pattern: v })} help={r.pattern === 'pico' ? 'Mismo total de agua, pero con un máximo de hasta el doble de la intensidad media al primer tercio.' : undefined} />
-      <Segmented label="Dónde llueve" value={r.spatial} options={[{ value: 'uniforme', label: 'En todo el sector' }, { value: 'localizada', label: 'En un lugar' }]} onChange={(v) => set({ spatial: v })} />
-      {r.spatial === 'localizada' && (
-        <>
-          <p className="city-small">Toca la maqueta para elegir el centro del aguacero.</p>
-          <Range label="Radio" value={r.radiusM} min={10} max={60} step={5} unit="m" onChange={(v) => set({ radiusM: v })} />
-        </>
-      )}
-      <Segmented label="Suelo al empezar" value={ctrl.shared.soilInitial} options={[{ value: 'seco', label: 'Seco' }, { value: 'humedo', label: 'Húmedo' }]} onChange={(v) => ctrl.update({ shared: { soilInitial: v } })} help="Un suelo húmedo ya tiene ocupada parte de su capacidad de guardar agua." />
-      {sc!.inflows.length > 0 && <Range label={sc!.inflows[0].name} value={ctrl.shared.inflowLps} min={0} max={200} step={10} unit="L/s" onChange={(v) => ctrl.update({ shared: { inflowLps: v } })} help="Entrada externa al sector; se cuenta aparte en el balance." />}
-      <p className="city-fact">
-        Caerán <strong>{fmtNum(depth, 1)} mm</strong> de lluvia: {fmtNum(depth, 1)} litros por cada metro cuadrado, unos <strong>{fmtNum(vol, 1)} m³</strong> en {r.spatial === 'uniforme' ? 'todo el sector' : 'la zona del aguacero'}.
-      </p>
-      <p className="city-small">Rangos didácticos ({RAIN_RANGE.min}–{RAIN_RANGE.max} mm/h; {DURATION_RANGE.min}–{DURATION_RANGE.max} min). No son curvas de diseño de Medellín.</p>
-    </section>
   );
 }
 
@@ -482,7 +438,7 @@ export function ResultTable({ api }: { api: LabApi }) {
   return (
     <table className="city-table">
       <caption>
-        Resultados a los {fmtTime(Math.min(a.t, b.t))} min de simulación{ctrl.status === 'terminado' ? ' (final)' : ' (en curso)'}
+        Resultados a los {fmtClock(Math.min(a.t, b.t), ctrl.shared.simMinutes * 60)} de simulación{ctrl.status === 'terminado' ? ' (final)' : ' (en curso)'}
       </caption>
       <thead>
         <tr>
@@ -572,7 +528,7 @@ export function CompareTab({ api }: { api: LabApi }) {
         </div>
       </div>
       <p className="city-fact">
-        Lluvia: {fmtNum(ctrl.shared.rain.intensityMmH, 0)} mm/h durante {ctrl.shared.rain.durationMin} min ({ctrl.shared.rain.spatial === 'uniforme' ? 'en todo el sector' : 'localizada'}); se simulan {ctrl.shared.simMinutes} min; celdas de {fmtNum(ctrl.shared.dx, 1)} m.
+        Lluvia: {describeRain(ctrl.shared.rain)} ({ctrl.shared.rain.spatial === 'uniforme' ? 'en todo el sector' : 'localizada'}); se simulan {ctrl.shared.simMinutes} min; celdas de {fmtNum(ctrl.shared.dx, 1)} m.
       </p>
       <Pending api={api} />
       <div className="btn-row">
@@ -760,8 +716,8 @@ function MissionView({ api }: { api: LabApi }) {
           {m.change.kind === 'presupuesto' && <BudgetPicker api={api} sel={sel} setSel={setSel} />}
           <p className="city-small">
             {m.change.kind === 'ninguno'
-              ? `Se simulará una lluvia de ${m.rain.intensityMmH} mm/h durante ${m.rain.durationMin} min.`
-              : `A y B recibirán exactamente la misma lluvia: ${m.rain.intensityMmH} mm/h durante ${m.rain.durationMin} min, y se simulan ${m.simMinutes} min.`}
+              ? `Se simulará una lluvia de ${describeRain({ ...ctrl.shared.rain, ...m.rain })}.`
+              : `A y B recibirán exactamente la misma lluvia: ${describeRain({ ...ctrl.shared.rain, ...m.rain })}, y se simulan ${m.simMinutes} min.`}
           </p>
           <button
             type="button"
@@ -778,7 +734,7 @@ function MissionView({ api }: { api: LabApi }) {
       {mission!.step === 3 && !finished && (
         <div role="status">
           <p>Calculando… mira la maqueta: {m.change.kind === 'ninguno' ? 'la lluvia está cayendo.' : 'puedes alternar entre A y B en la pestaña «Comparar».'}</p>
-          <p className="city-small">Tiempo simulado: {fmtTime(ctrl.displayed()?.t ?? 0)} de {m.simMinutes}:00.</p>
+          <p className="city-small">Tiempo simulado: {fmtClock(ctrl.displayed()?.t ?? 0, m.simMinutes * 60)} de {fmtClock(m.simMinutes * 60, m.simMinutes * 60)}.</p>
           <button type="button" className="btn-ghost small" onClick={() => ctrl.runToEnd(6000)}>
             Ver el resultado ya
           </button>

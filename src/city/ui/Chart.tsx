@@ -42,7 +42,7 @@ export function LineChart({
 }) {
   const id = useId();
   const multi = series.length > 1;
-  const W = 340, H = height, L = 46, R = multi ? 66 : 14, T = 12, B = 26;
+  const W = 340, H = height, R = multi ? 66 : 14, T = 12, B = 26;
   const [hover, setHover] = useState<number | null>(null);
   const { xMax, yMax } = useMemo(() => {
     let xm = 1, ym = 0;
@@ -54,6 +54,8 @@ export function LineChart({
     if (refY && refY.y > ym) ym = refY.y;
     return { xMax: xm, yMax: ym > 0 ? ym * 1.12 : 1 };
   }, [series, refY, xMaxFixed]);
+  // margen izquierdo según el rótulo más largo del eje vertical (unos 5,6 px por carácter)
+  const L = Math.max(46, Math.ceil(10 + 5.6 * Math.max(...[0, yMax / 2, yMax].map((v) => fmtY(v).length))));
   const sx = (x: number) => L + (x / xMax) * (W - L - R);
   const sy = (y: number) => T + (1 - y / yMax) * (H - T - B);
   const ticksY = [0, yMax / 2, yMax];

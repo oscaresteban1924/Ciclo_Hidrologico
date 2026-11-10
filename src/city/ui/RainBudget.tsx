@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import type { Balance } from '../sim/engine';
+import type { SedBalance } from '../sim/sediment';
 import { fmtNum } from '../render/palette';
 
 /** Orden fijo de las categorías y sus colores (paleta categórica validada). */
@@ -97,6 +98,67 @@ export function RainBudget({ bal, title = '¿Adónde fue la lluvia?' }: { bal: B
             {Math.abs(bal.residual) + Math.abs(bal.sewer ? bal.netResidual : 0) < 0.0005
               ? 'La cuenta cierra: lo que entró es igual a la suma de las partes (diferencia menor que medio litro).'
               : `Diferencia entre lo que entró y la suma de las partes: ${m3(Math.abs(bal.residual) + Math.abs(bal.sewer ? bal.netResidual : 0))}. El panel docente muestra el balance completo.`}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Partes del reparto del sedimento (mismo orden y colores que el del agua: en el agua, salió, suelo, red). */
+export const SED_PARTS = [
+  { id: 'agua', label: 'Va en el agua', color: '#2a78d6', kid: 'tierra que el agua lleva ahora (agua café)' },
+  { id: 'salida', label: 'Salió del sector', color: '#eb6834', kid: 'se fue calle o quebrada abajo' },
+  { id: 'suelo', label: 'Quedó como lodo', color: '#1baf7a', kid: 'se asentó donde el agua se frenó, y la mugre que la lluvia no alcanzó a mover' },
+  { id: 'red', label: 'Entró a los sumideros', color: '#eda100', kid: 'va por el alcantarillado y puede llenar las cajas y los tubos' },
+] as const;
+
+const kgTxt = (x: number) => (x >= 1000 ? `${fmtNum(x / 1000, x >= 10000 ? 0 : 1)} t` : `${fmtNum(x, x < 10 ? 1 : 0)} kg`);
+
+/** «¿Adónde fue la tierra?»: reparto en vivo del sedimento calculado (balance cerrado). */
+export function SedBudget({ sed, title = '¿Adónde fue la tierra?' }: { sed: SedBalance; title?: string }) {
+  const [hover, setHover] = useState<string | null>(null);
+  const v = { agua: sed.suspended, salida: sed.out, suelo: sed.loose, red: sed.drained } as Record<(typeof SED_PARTS)[number]['id'], number>;
+  const total = sed.loose0 + sed.eroded + sed.inflow;
+  const moved = sed.eroded + sed.inflow;
+  const pct = (x: number) => (total > 1e-9 ? (x / total) * 100 : 0);
+  const shown = SED_PARTS.filter((p) => v[p.id] > 1e-6);
+  const focus = SED_PARTS.find((p) => p.id === hover);
+  return (
+    <section className="rain-budget sed-budget" aria-labelledby="sb-title">
+      <h3 id="sb-title">{title}</h3>
+      {moved < 0.05 && sed.out + sed.drained < 0.05 ? (
+        <p className="city-small">Todavía el agua no ha movido tierra. La lluvia arranca tierra donde el suelo está desnudo, el agua arrastra la mugre de las calles y una creciente con lodo trae sedimento.</p>
+      ) : (
+        <>
+          <p className="city-small">
+            Tierra en juego: <strong>{kgTxt(total)}</strong> (la lluvia y el agua arrancaron {kgTxt(sed.eroded)}
+            {sed.splash > 0.5 ? `, ${kgTxt(sed.splash)} por el golpe de las gotas` : ''}; mugre suelta de calles y andenes {kgTxt(sed.loose0)}
+            {sed.inflow > 0.5 ? `; lodo que trajo la creciente ${kgTxt(sed.inflow)}` : ''}). Así se repartió:
+          </p>
+          <div className="rb-bar" role="img" aria-label={`Reparto de la tierra: ${SED_PARTS.map((p) => `${p.label} ${fmtNum(pct(v[p.id]), 0)} %`).join(', ')}.`}>
+            {shown.map((p) => (
+              <span key={p.id} className={`rb-seg${hover === p.id ? ' is-on' : ''}`} style={{ flexGrow: Math.max(v[p.id], total * 0.004), background: p.color }} onPointerEnter={() => setHover(p.id)} onPointerLeave={() => setHover(null)} />
+            ))}
+          </div>
+          <p className="rb-read" aria-live="polite">
+            {focus ? `${focus.label}: ${kgTxt(v[focus.id])} (${fmtNum(pct(v[focus.id]), 0)} %), ${focus.kid}.` : 'Pasa el puntero por la barra o por la lista para leer cada parte.'}
+          </p>
+          <ul className="rb-legend">
+            {SED_PARTS.map((p) => (
+              <li key={p.id}>
+                <button type="button" className={hover === p.id ? 'is-on' : ''} onFocus={() => setHover(p.id)} onBlur={() => setHover(null)} onPointerEnter={() => setHover(p.id)} onPointerLeave={() => setHover(null)}>
+                  <span className="rb-swatch" style={{ background: p.color }} aria-hidden="true" />
+                  <span className="rb-name">{p.label}</span>
+                  <span className="rb-val">
+                    {kgTxt(v[p.id])} · {fmtNum(pct(v[p.id]), 0)}&nbsp;%
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="city-small rb-check">
+            {Math.abs(sed.residual) < 0.001 * Math.max(1, total) ? 'La cuenta de la tierra también cierra.' : `Diferencia en la cuenta de la tierra: ${kgTxt(Math.abs(sed.residual))}.`} Valores estimados: la erosión no está calibrada para Medellín.
           </p>
         </>
       )}

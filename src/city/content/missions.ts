@@ -561,6 +561,50 @@ export const MISSIONS: Mission[] = [
     explain: 'Una quebrada con una cuenca pequeña crece poco, aunque llueva muy fuerte. En un barrio de ladera muy construido, el agua que moja las casas suele llegar antes por las calles, las escaleras y los techos que por la quebrada. Por eso importan los sumideros limpios, las cunetas y que el agua de los techos vaya bien conducida.',
     terms: ['escorrentia', 'cuenca', 'creciente', 'sumidero'],
   },
+  {
+    id: 'lote-en-obra',
+    title: 'El lote en obra',
+    scenarioId: 'ladera-quebrada',
+    question: 'En la ladera hay un parque con árboles. Si lo pelan para una obra y queda la tierra suelta, ¿qué pasa con un aguacero de 60 mm/h durante 30 minutos?',
+    context: 'A y B reciben exactamente la misma lluvia. En A el parque tiene árboles y hojarasca; en B es un lote en obra con tierra suelta. Activa la capa «Lodo» para ver la tierra en el agua y el lodo que queda.',
+    options: [
+      { id: 'igual', text: 'Casi lo mismo: la tierra se moja y ya' },
+      { id: 'mas-agua', text: 'Corre un poco más de agua, pero limpia' },
+      { id: 'lodo', text: 'Corre más agua y lleva mucha tierra: deja lodo en la calle y lo mete a los sumideros' },
+    ],
+    rain: { intensityMmH: 60, durationMin: 30, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 45,
+    change: {
+      kind: 'auto',
+      describe: 'En B, el parque de la ladera es un lote en obra: tierra suelta, sin pasto ni árboles.',
+      apply: (iv) => {
+        iv.zones.parque = 'tierra';
+      },
+    },
+    evaluate: (a, b) => {
+      const kg = (v: number) => (v >= 1000 ? `${fmtNum(v / 1000, 1)} t` : `${fmtNum(v, 0)} kg`);
+      const bb = b!;
+      const more = bb.sed.eroded > 5 * Math.max(1, a.sed.eroded);
+      return {
+        outcome: !more ? 'igual' : bb.mudArea > a.mudArea + 10 || bb.sed.drained > a.sed.drained * 1.2 ? 'lodo' : 'mas-agua',
+        observed: [
+          `La lluvia y el agua arrancaron ${kg(a.sed.eroded)} de tierra en A y ${kg(bb.sed.eroded)} en B.`,
+          `Lodo que quedó sobre calles y andenes (1 kg/m² o más): A ${fmtNum(a.mudArea, 0)} m²; B ${fmtNum(bb.mudArea, 0)} m².`,
+          `Tierra que entró a los sumideros: A ${kg(a.sed.drained)}; B ${kg(bb.sed.drained)}. Tierra que salió del sector: A ${kg(a.sed.out)}; B ${kg(bb.sed.out)}.`,
+        ],
+        rows: [
+          { label: 'Tierra arrancada', a: kg(a.sed.eroded), b: kg(bb.sed.eroded), change: changeText(a.sed.eroded, bb.sed.eroded, 0.5, kg) },
+          { label: 'Lodo sobre el suelo (área)', a: `${fmtNum(a.mudArea, 0)} m²`, b: `${fmtNum(bb.mudArea, 0)} m²`, change: changeText(a.mudArea, bb.mudArea, 0.5, (v) => `${fmtNum(v, 0)} m²`) },
+          { label: 'Tierra a los sumideros', a: kg(a.sed.drained), b: kg(bb.sed.drained), change: changeText(a.sed.drained, bb.sed.drained, 0.5, kg) },
+          { label: 'Tierra que salió del sector', a: kg(a.sed.out), b: kg(bb.sed.out), change: changeText(a.sed.out, bb.sed.out, 0.5, kg) },
+          ...baseRows(a, bb).slice(1, 3),
+        ],
+        caveat: 'Erosión estimada con métodos publicados (Govers, LISEM y WEPP), sin calibrar para los suelos de Medellín. El lote y su capa de tierra suelta son hipotéticos.',
+      };
+    },
+    explain: 'Las raíces y la hojarasca sujetan el suelo y lo protegen de las gotas. Sin ellas, las gotas sueltan la tierra y el agua se la lleva como lodo: tapa sumideros y tubos, ensucia la quebrada y deja barro en las calles. Por eso las obras deben cubrir la tierra, construir cunetas con trampas de sedimento y no dejar los lotes pelados en temporada de lluvias.',
+    terms: ['erosion-hidrica', 'sedimento', 'escorrentia', 'sumidero'],
+  },
 ];
 
 /** Costos del juego para la misión de presupuesto (puntos, no dinero). */
@@ -568,7 +612,8 @@ export function budgetItems(sc: Scenario): { id: string; label: string; cost: nu
   const items: { id: string; label: string; cost: number; kind: 'zona' | 'jardin' | 'deposito' | 'sumidero'; target: string; value?: string }[] = [];
   for (const d of sc.drains) items.push({ id: `sum:${d.id}`, label: `Limpiar «${d.name}»`, cost: 10, kind: 'sumidero', target: d.id });
   for (const g of sc.gardens) items.push({ id: `jar:${g.id}`, label: g.name, cost: g.cost, kind: 'jardin', target: g.id });
-  for (const t of sc.tanks) items.push({ id: `dep:${t.id}`, label: t.name, cost: t.cost, kind: 'deposito', target: t.id });
-  for (const z of sc.zones) for (const o of z.options) if (o !== z.cover) items.push({ id: `zona:${z.id}:${o}`, label: `${z.name}: ${o === 'adoquin_permeable' ? 'pavimento permeable' : o === 'grama' ? 'grama' : 'zona verde'}`, cost: z.cost, kind: 'zona', target: z.id, value: o });
+  for (const t of sc.tanks) if (!t.id.startsWith('plan-tanque-')) items.push({ id: `dep:${t.id}`, label: t.name, cost: t.cost, kind: 'deposito', target: t.id });
+  // la tierra suelta (lote en obra) no es una mejora: no entra al presupuesto
+  for (const z of sc.zones) for (const o of z.options) if (o !== z.cover && o !== 'tierra') items.push({ id: `zona:${z.id}:${o}`, label: `${z.name}: ${o === 'adoquin_permeable' ? 'pavimento permeable' : o === 'grama' ? 'grama' : 'zona verde'}`, cost: z.cost, kind: 'zona', target: z.id, value: o });
   return items;
 }

@@ -14,7 +14,7 @@ import type { Compiled } from '../sim/compile';
 import type { CitySim } from '../sim/engine';
 import type { Scenario } from '../sim/scenario';
 import { prng } from '../scenarios/primitives';
-import { depthColor } from './palette';
+import { AMP_SHEET_M, depthColor } from './palette';
 import { HAZARD } from '../sim/hazard';
 import { FIELD_CHANNELS, drainFlows, flowLevel, outletFlows, packField, spoutFlows, tankFx } from './fxData';
 
@@ -54,6 +54,10 @@ export interface FxUniforms {
   /** Lodo de la creciente [0–1] (tiñe el agua honda de la quebrada) y colores de las clases de peligro. */
   uMud: { value: number };
   uHaz: { value: THREE.Color[] };
+  /** Sedimento por celda: R concentración suspendida [kg/m³], G lodo depositado [kg/m²]. */
+  uSed: { value: THREE.DataTexture | null };
+  /** 1: dibujar el lodo (capa «Lodo y sedimentos»). */
+  uSedOn: { value: number };
 }
 
 export const FLOW_CYCLE = 1.6; // s: periodo de reinicio de las vetas (técnica de dos fases)
@@ -183,7 +187,9 @@ void main() {
   vec3 p = vec3(aPos.x + (0.15 + 0.7 * j.x) * uDx, aPos.y, aPos.z - (0.15 + 0.7 * j.y) * uDx);
   vec2 fuv = vec2((p.x + uHalf.x) / (2.0 * uHalf.x), (uHalf.y - p.z) / (2.0 * uHalf.y));
   float hs = aSeed.w > 0.5 ? 0.0 : texture2D(uField, fuv).r;
-  p.y += hs * uAmp + 0.012;
+  // misma amplificación que la lámina (solo engrosa las láminas delgadas; ver drawDepth en palette.ts)
+  float ex = exp(-2.0 * hs / ${AMP_SHEET_M.toFixed(3)});
+  p.y += hs + (uAmp - 1.0) * ${AMP_SHEET_M.toFixed(3)} * (1.0 - ex) / (1.0 + ex) + 0.012;
   float m = 1.0;
   if (uRainGeo.w > 0.5) m = step(distance(p.xz, uRainGeo.xy), uRainGeo.z);
   vec3 toCam = cameraPosition - p;
@@ -403,6 +409,8 @@ export class StormFx {
   private host: FxHost;
   private textures: THREE.Texture[] = [];
   private fieldData = new Float32Array(0);
+  private sed: THREE.DataTexture | null = null;
+  private sedHalf = new Uint16Array(0);
   private fieldHalf = new Uint16Array(0);
   private field: THREE.DataTexture | null = null;
   private noise: THREE.DataTexture;
@@ -470,6 +478,8 @@ export class StormFx {
       uAmp: { value: 1 },
       uMud: { value: 0 },
       uHaz: { value: HAZARD.map((c) => new THREE.Color(c.color)) },
+      uSed: { value: null },
+      uSedOn: { value: 1 },
     };
     const alta = host.quality === 'alta';
     this.rainFar = this.makeRain(alta ? 7000 : 2600, { len: 1.3, width: 0.032 });
@@ -608,6 +618,15 @@ export class StormFx {
       t.needsUpdate = true;
       this.field = t;
       this.u.uField.value = t;
+      this.sed?.dispose();
+      this.sedHalf = new Uint16Array(N * 2);
+      const st = new THREE.DataTexture(this.sedHalf, c.nx, c.ny, THREE.RGFormat, THREE.HalfFloatType);
+      st.magFilter = THREE.LinearFilter;
+      st.minFilter = THREE.LinearFilter;
+      st.wrapS = st.wrapT = THREE.ClampToEdgeWrapping;
+      st.needsUpdate = true;
+      this.sed = st;
+      this.u.uSed.value = st;
     }
     this.lastFieldT = -1;
     // Salpicaduras: puntos sobre techos y suelo (celda de origen y cota)
@@ -992,6 +1011,16 @@ export class StormFx {
     const toHalf = THREE.DataUtils.toHalfFloat;
     for (let i = 0; i < f.length; i++) hf[i] = toHalf(f[i]);
     this.field.needsUpdate = true;
+    // lodo: concentración suspendida (o la máxima, en la vista de resultados) y lodo depositado
+    if (this.sed && sim.sed) {
+      const sd = sim.sed, h = sim.h, sh = this.sedHalf;
+      for (let k = 0; k < h.length; k++) {
+        const conc = useMax ? sd.cMax[k] : h[k] > 1e-4 ? sd.m[k] / h[k] : 0;
+        sh[2 * k] = toHalf(Math.min(900, conc));
+        sh[2 * k + 1] = toHalf(Math.min(4000, useMax ? sd.depoMax[k] : sd.loose[k]));
+      }
+      this.sed.needsUpdate = true;
+    }
     this.lastFieldT = sim.t;
     this.lastFieldMax = useMax;
   }

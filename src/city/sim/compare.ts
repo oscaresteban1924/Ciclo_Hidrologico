@@ -1,6 +1,7 @@
 // Comparación reproducible A/B: las dos corridas comparten exactamente lluvia, estado inicial, tiempo
 // simulado, dominio, bordes, resolución, umbral y semilla. Solo cambian las intervenciones.
 
+import type { SedBalance } from './sediment';
 import { compile, type Compiled } from './compile';
 import { CitySim, hydroAt, type SimOptions } from './engine';
 import { warningEvents, type WarningEvent } from './basin';
@@ -8,6 +9,9 @@ import { AFFECTED_DEPTH_M, damageSummary, exposureOf, hazardAreas } from './haza
 import type { Interventions, Scenario, Shared } from './scenario';
 
 export interface Indicators {
+  /** Sedimento: balance [kg] y área con lodo depositado de 1 kg/m² o más (≈ 0,6 mm) [m²]. */
+  sed: SedBalance;
+  mudArea: number;
   precipitation: number;
   inflow: number;
   infiltrated: number;
@@ -70,7 +74,12 @@ export function indicators(sim: CitySim): Indicators {
     gIn += sim.gardenIn[k];
     gOut += sim.gardenOut[k];
   }
+  const sb = sim.sed.updateBalance();
+  let mud = 0;
+  for (let k = 0; k < sim.sed.loose.length; k++) if (sim.sed.loose[k] >= 1) mud++;
   return {
+    sed: { ...sb },
+    mudArea: mud * sim.c.area,
     precipitation: b.precipitation,
     inflow: b.inflow,
     infiltrated: b.infiltrated,

@@ -116,7 +116,11 @@ En el laboratorio, los estudiantes pueden:
 - calcular la creciente **desde la lluvia en la cuenca** (bosque, mixta o urbanizada; métodos del NRCS) y seguir el **aviso temprano**: una estación aguas arriba con alertas amarilla, naranja y roja, y el tiempo que queda para avisar antes de que el agua llegue a las casas;
 - ver el **peligro** de cada lugar (clases H1–H6 según profundidad y velocidad; referencia técnica, no el mapa oficial de amenaza);
 - seguir el agua con gotas trazadoras y medir la profundidad en el tiempo;
-- comparar A y B con exactamente la misma lluvia.
+- comparar A y B con exactamente la misma lluvia;
+- elegir **tormentas de diseño** de 2 a 100 años y de 30 min a 6 h con la curva IDF de Olaya Herrera (IDEAM), un **aguacero real** reconstruido (28 de enero de 2026, El Poblado) y un clima más cálido (7 % más lluvia intensa por grado);
+- ver el **transporte de sedimentos**: la tierra que suelta la lluvia, la que arrastra el agua, dónde se deposita como lodo y cuánta llega a los sumideros (panel «¿Adónde fue la tierra?» y capa «Lodo»);
+- **planificar** el barrio con 100 puntos de presupuesto y probar el plan con la misma tormenta (A: como está; B: con el plan);
+- vivir la **tormenta**: techo de nubes, rayos ilustrativos y sonido sintetizado que sigue la lluvia y el caudal calculados; modo **cine** (la cámara recorre la tormenta sola) y **video** de hasta un minuto que se guarda en el equipo con un rótulo que aclara que no es un pronóstico.
 
 Además hay:
 - una barra en vivo «¿Adónde fue la lluvia?», que muestra qué parte del agua sigue sobre el suelo, cuál salió, cuál entró al suelo, cuál tomaron los sumideros y cuál guardan los depósitos;

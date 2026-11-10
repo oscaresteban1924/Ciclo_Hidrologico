@@ -214,6 +214,7 @@ export function laderaScenario(): Scenario {
       { id: 'parqueadero', name: 'Parqueadero comunal', polygon: rect(96, 38, 126, 47), cover: 'asfalto', options: ['asfalto', 'adoquin_permeable', 'grama'], cost: 40 },
       { id: 'patio', name: 'Patio del colegio', polygon: rect(98, 73, 105.5, 94), cover: 'concreto', options: ['concreto', 'adoquin_permeable', 'grama'], cost: 30 },
       { id: 'plazoleta', name: 'Plazoleta', polygon: rect(59, 28, 73, 44), cover: 'concreto', options: ['concreto', 'adoquin_permeable', 'zona_verde'], cost: 30 },
+      { id: 'parque', name: 'Parque de la ladera (o lote en obra)', polygon: rect(2, 28, 40, 45), cover: 'zona_verde', options: ['zona_verde', 'grama', 'tierra'], cost: 0 },
     ],
     gardens: [
       { id: 'jardin-calle', name: 'Jardín de lluvia en la calle', polygon: rect(64.5, 50.5, 79, 55.8), inlet: rect(65, 56, 78.5, 58), depthM: 0.15, cost: 30 },

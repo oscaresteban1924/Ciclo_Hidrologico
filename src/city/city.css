@@ -394,6 +394,45 @@
   margin: 3px 0;
   background: var(--line);
 }
+.cam-btn.is-on {
+  background: var(--water-wash);
+  box-shadow: inset 0 0 0 1.5px var(--water);
+}
+.cam-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* Modo cine y grabación: primer aviso de la maqueta */
+.city-banners .city-cinebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.city-cinebar > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.city-cinebar .link {
+  font-size: 0.82rem;
+}
+.cb-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c0392b;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cb-dot {
+    animation: cb-blink 1.6s ease-in-out infinite;
+  }
+}
+@keyframes cb-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
 .vm:focus-visible,
 .cam-btn:focus-visible,
 .vm-layer:focus-within,
@@ -715,6 +754,18 @@
 }
 .city-note p {
   margin: 0 0 6px;
+}
+/* aguacero reconstruido en «Crear lluvia» */
+.city-event {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid #2f78c4;
+  border-radius: 0 var(--r-s) var(--r-s) 0;
+  background: #fff;
+  font-size: 0.88rem;
+}
+.city-event p {
+  margin: 6px 0 0;
 }
 .city-summary {
   margin: 0 0 14px;
@@ -1220,6 +1271,8 @@
     bottom: 84px;
     transform: none;
     flex-direction: row;
+    flex-wrap: wrap;
+    max-width: calc(100% - 16px);
   }
   .cam-sep {
     width: 1px;
@@ -1945,4 +1998,54 @@
 }
 .prov-log a {
   word-break: break-all;
+}
+
+/* Planificador */
+.plan-items {
+  list-style: none;
+  margin: 6px 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.plan-items .check span {
+  display: grid;
+  gap: 1px;
+  font-size: 0.88rem;
+}
+.plan-items .check b {
+  font-weight: 650;
+}
+.plan-items .check small {
+  display: inline;
+  margin-left: 4px;
+}
+.plan-items .check em {
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.plan-label {
+  margin: 10px 0 4px;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.plan-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: #fff;
+}
+.plan-result h4 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+.plan-result td.is-good {
+  color: #1d6b40;
+  font-weight: 650;
+}
+.plan-result td.is-bad {
+  color: #a3321f;
+  font-weight: 650;
 }

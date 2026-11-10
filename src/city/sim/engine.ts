@@ -12,6 +12,8 @@
 //  · Tiempo de simulación separado del tiempo de dibujo; los pasos no se recortan por los cuadros de
 //    animación (solo por cambios de lluvia y tiempos de registro), así cada corrida es reproducible.
 
+import { alternatingBlocks, climateFactor, eventById, eventMinutes } from './storms';
+import { SED, SedimentModel } from './sediment';
 import { G, H_FLOW_MIN, H_WET, INLET, NUMERICS, mmhToMs } from './constants';
 import { creekCell, type Compiled } from './compile';
 import { SchematicNetwork, type DrainExchange, type DrainNetworkAdapter } from './drainage';
@@ -57,10 +59,42 @@ export interface Hyetograph {
   mmh: number[];
 }
 
-/** Hietograma: constante o con pico (triangular discretizado por minuto, mismo volumen total). */
+/**
+ * Hietograma: constante, con pico (triangular discretizado por minuto, mismo volumen total), tormenta de diseño
+ * (bloques alternos de la curva IDF de Olaya Herrera) o aguacero reconstruido; todos multiplicados por el factor
+ * de cambio climático del nivel de calentamiento elegido.
+ */
 export function hyetograph(r: RainConfig): Hyetograph {
+  const h = baseHyetograph(r);
+  const k = climateFactor(r.warmingC);
+  return k === 1 ? h : { times: h.times, mmh: h.mmh.map((v) => v * k) };
+}
+
+/** Lámina total de la lluvia [mm] (con el factor de clima). */
+export function rainDepthMm(r: RainConfig): number {
+  const { times, mmh } = hyetograph(r);
+  let s = 0;
+  for (let k = 0; k < mmh.length; k++) s += (mmh[k] * (times[k + 1] - times[k])) / 3600;
+  return s;
+}
+
+/** Intensidad máxima del hietograma [mm/h]. */
+export const rainPeakMmH = (r: RainConfig): number => Math.max(...hyetograph(r).mmh);
+
+function baseHyetograph(r: RainConfig): Hyetograph {
   const D = r.durationMin * 60;
-  if (r.pattern === 'constante') return { times: [0, D], mmh: [r.intensityMmH] };
+  if (r.pattern === 'diseno') {
+    const b = alternatingBlocks(r.returnYears ?? 10, r.durationMin);
+    return { times: [...b.mmh.map((_, k) => k * b.dtMin * 60), D], mmh: b.mmh };
+  }
+  if (r.pattern === 'evento') {
+    const ev = eventById(r.eventId);
+    if (ev) {
+      const m = eventMinutes(ev);
+      return { times: [...m.map((_, k) => k * 60), m.length * 60], mmh: m };
+    }
+  }
+  if (r.pattern === 'constante' || r.pattern === 'evento') return { times: [0, D], mmh: [r.intensityMmH] };
   const n = Math.max(1, Math.round(r.durationMin));
   const tp = D / 3;
   const peak = 2 * r.intensityMmH;
@@ -191,6 +225,8 @@ export interface Sample {
   creek?: { qin: number; qChannel: number; qOutside: number; level: number };
   /** Coberturas: caudal por el cajón y sobre la vía [m³/s], nivel aguas arriba [m] y fracción tapada. */
   culverts?: { q: number; over: number; up: number; obs: number }[];
+  /** Sedimento: lodo que sale del sector [kg/s] y a la red [kg/s] en el intervalo; suspendido [kg]. */
+  sed?: { out: number; drained: number; suspended: number };
 }
 
 export interface Diagnostics {
@@ -285,6 +321,11 @@ export class CitySim {
   onStep: ((dt: number) => void) | null = null;
   /** Celda del medidor del estudiante (−1 si no hay). No afecta el cálculo. */
   extraProbe = -1;
+  /** Transporte de sedimentos (tierra que arranca la lluvia, lodo que lleva el agua y que se deposita). */
+  sed!: SedimentModel;
+  private lastSampleSedOut = 0;
+  private lastSampleSedDr = 0;
+  private drainH: Float64Array = new Float64Array(0);
 
   constructor(c: Compiled, shared: Shared, opts: SimOptions = {}) {
     this.c = c;
@@ -370,6 +411,10 @@ export class CitySim {
     this.gardenIn.fill(0);
     this.network.reset();
     this.sewer?.reset();
+    this.sed = new SedimentModel(c);
+    this.lastSampleSedOut = 0;
+    this.lastSampleSedDr = 0;
+    if (this.drainH.length !== c.drains.length) this.drainH = new Float64Array(c.drains.length);
     this.lastSampleSewer = { out: [0, 0], overflow: [0, 0], toCreek: 0 };
     this.t = 0;
     this.lastDt = 0;
@@ -519,6 +564,9 @@ export class CitySim {
       for (const k of c.creek.cells) h[k] += per;
       bal.inflow += vol;
       bal.creekIn += vol;
+      // la creciente con lodo trae sedimento: concentración = fracción en volumen × densidad del grano
+      const cv = this.shared.creek?.sedimentCv ?? 0;
+      if (cv > 0) this.sed.addInflow(c.creek.cells, vol, cv * SED.rhoS);
     }
     // Aportes a la red separada en este paso: aguas residuales, lluvia de conexiones erradas de arriba
     if (this.sewer) {
@@ -606,13 +654,16 @@ export class CitySim {
         if (u > umax) umax = u;
       }
     }
-    // Caras de salida: profundidad normal, acotada por el caudal crítico
+    // Caras de salida: profundidad normal con la pendiente del terreno junto al borde (el cauce o la calle siguen
+    // bajando fuera del sector), acotada con el mismo límite de Froude de las caras interiores. Antes se acotaba
+    // en régimen crítico (Fr = 1) y con la pendiente escrita en el escenario: en un cauce empinado el agua que
+    // llega en régimen supercrítico no podía salir y se represaba junto al borde.
     for (const o of c.outlets) {
       const hc = h[o.cell];
       let q = 0;
       if (hc > H_FLOW_MIN) {
         const qn = (Math.pow(hc, 5 / 3) * Math.sqrt(o.slope)) / nArr[o.cell];
-        const qc = Math.sqrt(G) * Math.pow(hc, 1.5);
+        const qc = frMax * hc * Math.sqrt(G * hc);
         q = qn < qc ? qn : qc;
         const u = q / hc;
         if (u > umax) umax = u;
@@ -647,6 +698,9 @@ export class CitySim {
         }
       }
     }
+
+    // --- 4b) Sedimento: se mueve con los mismos caudales de cara, con la lámina antes de la continuidad
+    this.sed.advect(qx, qy, h, dt);
 
     // --- 5) Continuidad
     const k_ = dt / dx;
@@ -704,6 +758,11 @@ export class CitySim {
     // --- 6b) Coberturas: el agua pasa de la entrada a la salida por el cajón (transferencia interna)
     if (c.culverts.length) this.stepCulverts(dt);
 
+    // --- 6c) Sedimento: salpicadura, arranque y depósito con la lámina y los caudales del final del paso
+    this.sed.exchange(h, qx, qy, R, c.rainWeight, dt, num.froudeMax);
+    const dH = this.drainH;
+    for (let d = 0; d < c.drains.length; d++) dH[d] = h[c.drains[d].cell];
+
     // --- 7) Sumideros y descarga de depósitos hacia la red
     if (this.sewer) {
       this.stepSewer(dt);
@@ -755,6 +814,11 @@ export class CitySim {
     }
     bal.drained += dr;
     bal.returned += ret;
+    }
+    // el agua que captan los sumideros se lleva su lodo suspendido
+    for (let d = 0; d < c.drains.length; d++) {
+      const acc = this.lastDrain[d];
+      if (acc > 0 && dH[d] > 0) this.sed.capture(c.drains[d].cell, acc / (dH[d] * area));
     }
 
     // --- 8) Estado, máximos y balance (incluido el peligro profundidad × velocidad por celda)
@@ -946,7 +1010,10 @@ export class CitySim {
         const V = Q * dt;
         if (V > 0 && hFrom > 0) {
           for (const k of from) h[k] -= (V * (h[k] / hFrom)) / area;
+          const hTo = to.map((k) => h[k]);
           fillLowest(to, V / area, z, h);
+          // el lodo viaja con el agua por el cajón
+          this.sed.transfer(from, V / (hFrom * area), to, to.map((k, q) => h[k] - hTo[q]));
         }
         if (!fwd) Q = -Q;
       }
@@ -1102,6 +1169,10 @@ export class CitySim {
       }
     }
     if (this.culv.length) s.culverts = this.culv.map((u) => ({ q: u.q, over: u.over, up: u.up, obs: u.obs }));
+    const sb = this.sed.updateBalance();
+    s.sed = { out: dtS > 0 ? (sb.out - this.lastSampleSedOut) / dtS : 0, drained: dtS > 0 ? (sb.drained - this.lastSampleSedDr) / dtS : 0, suspended: sb.suspended };
+    this.lastSampleSedOut = sb.out;
+    this.lastSampleSedDr = sb.drained;
     this.samples.push(s);
     this.lastSampleT = this.t;
     this.lastSampleB = this.bal.boundaryOut;

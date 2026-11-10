@@ -394,6 +394,38 @@ La procedencia de los sectores reales escribe ahora los decimales con coma, como
 
 `npm run test:quality`: **13 de 13** (nueva Q13: los once procesos completos, en orden, en la escena, con valores válidos en 18 combinaciones, con las citas de la Resolución 0330 y con el IRCA calculado).
 
+## 4 quaterdecies. Medellín al siguiente nivel: tormentas reales, sedimentos y planificador (ejecutada)
+
+**Pedido.** «Tormentas reales y clima», «Modo planificador» y «más dinámicas del flujo: lluvias aún más largas, niveles más complejos y grandes, y transporte de sedimentos».
+
+**Tormentas.** La curva IDF del IDEAM para Olaya Herrera (DTS 2022 de la Alcaldía, numeral 2.2.5) da tormentas de diseño de 2 a 100 años y de 30 min a 6 h por bloques alternos. La ecuación de la ficha deja de crecer en lámina después de unas 2,8 h para 100 años; por eso de 1 a 6 h se sigue la tabla impresa (L1). Aguacero real: 28 de enero de 2026, 87 mm en 44 min (SIATA, citado por la prensa; forma supuesta). Clima: 7 % por grado de calentamiento global (IPCC AR6). La lluvia inventada dura hasta 6 h, se simulan hasta 8 h y la velocidad llega a ×480. Una tormenta de 10 años y 3 h corre en la ladera con celdas de 2 m en unos 11 s de cálculo (L5).
+
+**Sedimentos.** Erosión, transporte y depósito con la capacidad de transporte de Govers (LISEM), la salpicadura de WEPP y la caída de Ferguson y Church (T1–T3). En la ladera con 60 mm/h por 30 min: el parque con árboles pierde unos 67 kg (solo salpicadura) y el lote en obra unos 3 t, con lodo en unos 250 m² y lodo en los sumideros; una creciente con 20 % de lodo deja lodo en más de 3 700 m². El balance de la tierra cierra (residuo ≈ 10⁻¹⁵). Capturas: `/tmp/mud.py` y `/tmp/mud2.py` (lote en obra desde arriba; creciente con lodo, antes y después).
+
+**Planificador.** En La Iguaná, con tanques en 10 techos, 10 % de patios verdes y la cuenca reforestada (100 puntos) y una tormenta de 10 años y 1 h: mejoran 6 de 7 indicadores (edificaciones con agua 15 → 13; pico de la quebrada 110,9 → 36,8 m³/s); la tierra que se lleva el agua casi no cambia. P1 revisa las obras y el balance.
+
+**Interfaz.** «Crear lluvia» con tres tipos (inventada, de diseño, aguacero real), clima, hietograma y curva IDF para docentes; panel «¿Adónde fue la tierra?»; capa «Lodo»; misión «El lote en obra»; herramienta «Planificar». Capturas en escritorio sin errores de consola.
+
+`npm run test:city`: **57 de 57** (nuevas L1–L5, T1–T3 y P1).
+
+## 4 quindecies. Tormenta viva, cine y video; corrección del torrente y de «Agua ×5» (ejecutada)
+
+**Pedido.** «Cine, sonido y tormenta viva».
+
+**Tormenta viva.** Techo de nubes y rayos ilustrativos en la vista realista. Su frecuencia sigue la lluvia calculada: ninguno por debajo de 35 mm/h y como máximo 8 por minuto, nunca dos con menos de 4 s entre sí. Cada rayo es un solo destello, sin parpadeo, y con movimiento reducido no hay ninguno (E1). El sonido se sintetiza: la lluvia y el agua que corre siguen la intensidad y el caudal calculados, y el trueno llega con el retraso del sonido (E2). Captura de un rayo con la simulación en pausa: `tools/verificacion/tormenta_rayo.py`.
+
+**Cine y video.** Cinco tomas: sobre el barrio, en la calle, donde más agua hay, subiendo y el valle. Ninguna atraviesa el terreno ni los techos en los dos sectores didácticos (E2). El cine se detiene al arrastrar la maqueta o al usar un botón de cámara.
+
+El video (WebM, hasta 60 s) se descarga con un rótulo en cada cuadro: sector, lluvia, intensidad del momento, tiempo simulado y la aclaración de que no es un pronóstico. En Chromium sin tarjeta gráfica se grabó y descargó `tormenta-ladera-quebrada-….webm` (VP9) con el rótulo legible. Lo verifica `tools/verificacion/tormenta_viva.py`, que muestra la consola sin errores.
+
+**Corrección pedida por el usuario («esa cresta y concentración no tiene sentido, el agua no se comportaría así»).** Tenía razón, y había tres causas:
+
+1. **Dibujo.** «Agua ×5» multiplicaba toda la profundidad. En la quebrada, 2 m se dibujaban como 10 m, mientras la orilla, con 30 cm, quedaba en 1,5 m: un lomo de agua por encima de las orillas. Ahora engrosa solo las láminas delgadas: 1 cm se dibuja ×4,9 y nunca se agregan más de 16 cm. La superficie dibujada queda nivelada de orilla a orilla, con una diferencia menor que 10⁻⁵ cm frente a 6,8 m antes (A1). Los avisos dicen cuánto se amplifica.
+2. **Salida de la quebrada.** Tenía una pendiente escrita de 3 %, aunque el cauce baja casi 9 %, y un tope en régimen crítico. El agua supercrítica no podía salir y se represaba en los últimos 15 m: 2,0 m en el borde frente a 1,65 m aguas arriba. Ahora la pendiente se mide en el terreno junto al borde y el tope es el mismo de las caras interiores. En el borde la lámina ya no crece (F1).
+3. **Límite de Froude (no se cambió).** El límite Fr ≤ 1,5 deja la creciente del tramo de 10 % más honda y lenta que su profundidad normal: con 60 m³/s, 2,06 m frente a 1,39 m (F1). Se probó relajarlo hasta 3 en agua honda. La profundidad llegaba a la normal (1,41 m), pero contra el terraplén de la carrera aparecían oleadas espurias: el caudal por los cajones saltaba entre 3 y 30 m³/s y pasaba agua sobre la vía con solo 60 % de la capacidad. Fallaban C1, K3 y H5. Con un límite de 2, la profundidad casi no mejoraba (≈ 1,76 m, porque el límite seguía actuando). Se dejó en 1,5 y el sesgo quedó documentado. Corregirlo requiere agregar la aceleración convectiva al momento, y esa es la etapa siguiente (dinámicas del flujo: resaltos, cascadas).
+
+`npm run test:city`: **61 de 61** (nuevas F1, A1, E1 y E2). `npm run test:quality`: 13 de 13. La versión de un solo archivo funciona sin conexión y sin peticiones externas (`tools/verificacion/single_city.py`).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

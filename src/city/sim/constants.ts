@@ -17,8 +17,10 @@ export const H_WET = 1e-3;
 
 /** Rango documentado de intensidad para la herramienta «Crear lluvia» [mm/h]. */
 export const RAIN_RANGE = { min: 5, max: 150, step: 5 } as const;
-/** Rango documentado de duración [min]. */
-export const DURATION_RANGE = { min: 5, max: 60, step: 5 } as const;
+/** Rango documentado de duración [min] de la lluvia inventada (hasta 6 h). */
+export const DURATION_RANGE = { min: 5, max: 360, step: 5 } as const;
+/** Tiempo simulado máximo [min] (lluvia de 6 h más 2 h de escurrimiento). */
+export const SIM_MAX_MIN = 480;
 
 export type CoverId =
   | 'asfalto'
@@ -30,7 +32,8 @@ export type CoverId =
   | 'jardin_lluvia'
   | 'cauce'
   | 'cancha'
-  | 'techo';
+  | 'techo'
+  | 'tierra';
 
 export interface CoverParams {
   id: CoverId;
@@ -188,6 +191,19 @@ export const COVERS: Record<CoverId, CoverParams> = {
     pattern: 'liso',
     kid: 'La lluvia del techo baja por la bajante al andén o a un depósito.',
     basis: 'El techo no almacena agua en este modelo: su lluvia llega a la bajante en el mismo paso de cálculo.',
+  },
+  tierra: {
+    id: 'tierra',
+    name: 'Tierra suelta (obra)',
+    manning: 0.05,
+    ksMmH: 6,
+    storageM: 0.02,
+    permeable: true,
+    color: '#9a7652',
+    matColor: '#c39a63',
+    pattern: 'rayas',
+    kid: 'Tierra sin pasto, como en una obra: la lluvia la golpea y el agua se la lleva como lodo.',
+    basis: 'Suelo desnudo compactado de obra: Ks ≈ 6 mm/h (suelos urbanos compactados, del orden de unos pocos mm/h); almacenamiento 0,02 m; n = 0,05 (TR-55, suelo en barbecho sin residuos). Erosionable (sim/sediment.ts).',
   },
 };
 

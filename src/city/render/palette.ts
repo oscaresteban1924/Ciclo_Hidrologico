@@ -78,6 +78,22 @@ export function cssDepthGradient(natural = false): string {
 export const hexToRgb = hex;
 
 /** Formato de profundidad para niñas y niños: mm por debajo de 1 cm, cm por encima. */
+/**
+ * Amplificación del dibujo («Agua ×5»): engrosa las láminas delgadas para verlas, sin levantar el agua honda.
+ * Lámina dibujada = h + (k − 1)·h₀·tanh(h/h₀), con h₀ = 4 cm: 1 cm se dibuja ≈ ×4,9; lo más que se agrega es
+ * (k − 1)·h₀ (16 cm con ×5). Multiplicar toda la profundidad por k, como antes, levantaba el agua de una
+ * quebrada de 2 m a 10 m mientras la orilla, con 30 cm, quedaba en 1,5 m: un lomo de agua por encima de las
+ * orillas, físicamente imposible. Así la superficie libre sigue casi horizontal de orilla a orilla.
+ */
+export const AMP_SHEET_M = 0.04;
+export function drawDepth(h: number, amp: number): number {
+  return amp <= 1 || h <= 0 ? h : h + (amp - 1) * AMP_SHEET_M * Math.tanh(h / AMP_SHEET_M);
+}
+/** Lo más que la amplificación agrega a la lámina dibujada [cm]. */
+export function ampMaxCm(amp: number): number {
+  return Math.round((amp - 1) * AMP_SHEET_M * 100);
+}
+
 export function fmtDepth(h: number): string {
   if (h < 0.0005) return 'seco';
   if (h < 0.01) return `${(h * 1000).toFixed(0)}\u00a0mm`;
@@ -94,8 +110,19 @@ export function fmtDuration(sec: number): string {
   return m > 0 ? (s > 0 ? `${m}\u00a0min ${s}\u00a0s` : `${m}\u00a0min`) : `${s}\u00a0s`;
 }
 
-export function fmtTime(t: number): string {
-  const m = Math.floor(t / 60);
+/** Reloj m:ss o, si `long` (por defecto, desde 1 h), h:mm:ss. */
+export function fmtTime(t: number, long = t >= 3600): string {
   const s = Math.floor(t % 60);
+  if (long) {
+    const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  const m = Math.floor(t / 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Reloj con su unidad: «12:30 min» o, si la corrida pasa de 1 h, «1:12:30 h». */
+export function fmtClock(t: number, endT: number): string {
+  const long = endT >= 3600;
+  return `${fmtTime(t, long)}\u00a0${long ? 'h' : 'min'}`;
 }

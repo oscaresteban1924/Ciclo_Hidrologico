@@ -1,5 +1,6 @@
 // Creciente desde la lluvia en la cuenca y aviso temprano (dentro de la herramienta «Creciente»).
 
+import { SIM_MAX_MIN } from '../sim/constants';
 import { useId, useMemo } from 'react';
 import { Segmented } from '../../components/ui';
 import type { CityController } from '../controller';
@@ -42,7 +43,7 @@ export function basinMinutes(sc: Scenario, rain: Shared['rain'], cover: BasinCov
   const b = sc.creek?.basin;
   if (!b || !sc.creek) return current;
   const r = basinHydrograph(hyetograph(rain), b, cover, soil, sc.creek.baseM3s, 0);
-  return Math.max(current, Math.min(240, Math.max(110, Math.ceil((r.tPeak / 60 + 30) / 10) * 10)));
+  return Math.max(current, Math.min(SIM_MAX_MIN, Math.max(110, Math.ceil((r.tPeak / 60 + 30) / 10) * 10)));
 }
 
 /** Selector del origen de la creciente: hidrograma de ejemplo o lluvia en la cuenca. */

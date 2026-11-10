@@ -19,12 +19,22 @@ import { DEPTH_STOPS, NATURAL_STOPS, depthColor } from '../../src/city/render/pa
 import { depthRampTexture } from '../../src/city/render/stormFx';
 import { SewerModel, buildNodeTable, circ, fullFlow, inletCapture, normalDepth, windowK, type CompiledSewer, type SNode, type SPipe } from '../../src/city/sim/sewer';
 import { epmChecks } from '../../src/city/sim/sewerCheck';
-import { creekHydrograph, hyetograph } from '../../src/city/sim/engine';
+import { creekHydrograph, hyetograph, rainDepthMm, rainPeakMmH } from '../../src/city/sim/engine';
+import { applyPlan, planCost, planItems, PLAN_BUDGET } from '../../src/city/content/planner';
+import { coverIndex } from '../../src/city/sim/constants';
+import { SED, SED_COVERS, SedimentModel, goversCoeffs, settlingVelocity, transportCapacity } from '../../src/city/sim/sediment';
+import { DESIGN_DURATIONS, DESIGN_RETURNS, IDF_OLAYA, STORM_EVENTS, WARMING_LEVELS, alternatingBlocks, climateFactor, eventMinutes, idfDepth, idfEquation, idfIntensity } from '../../src/city/sim/storms';
 import { BASIN_COVER_LIST, basinHydrograph, curveNumber, lagHours, scsRunoff } from '../../src/city/sim/basin';
 import { barrelR, criticalDepth, culvertFlow, inletHeadwater, inletRating, qInlet, type CulvertGeom } from '../../src/city/sim/culvert';
 import { HAZARD, bulkingFactor, buildingRings, buildingExposure, damageSummary, exposureOf, hazardClass } from '../../src/city/sim/hazard';
 import { budgetTotal, budgetValues } from '../../src/city/ui/RainBudget';
 import * as THREE from 'three';
+import { MIN_GAP_S, StormSky, strikeRate } from '../../src/city/render/lightning';
+import { buildShots } from '../../src/city/render/cinema';
+import { flowLevel } from '../../src/city/controller';
+import { NUMERICS } from '../../src/city/sim/constants';
+import { AMP_SHEET_M, drawDepth } from '../../src/city/render/palette';
+import { yq } from '../../src/city/scenarios/ladera';
 
 interface Result {
   id: string;
@@ -1181,6 +1191,341 @@ const froude: { fr: number; B: number; D: number; esq: number; lim: number }[] =
     froude.push({ fr, B: sim.bal.boundaryOut, D: sim.bal.drained, esq: sim.probeMax[0].depth, lim: sim.diag.froudeLimited / sim.diag.faceUpdates });
   }
   record({ id: 'R1', kind: 'revision', name: 'Sensibilidad al límite de Froude (ladera, 10 % de pendiente)', tolerance: 'informativa: se documenta, no se exige', measured: froude.map((f) => `Fr ≤ ${f.fr > 1e6 ? '∞' : f.fr}: salida ${fmt(f.B, 1)} m³, drenado ${fmt(f.D, 1)} m³, esquina ${fmt(f.esq * 100, 2)} cm, caras limitadas ${(100 * f.lim).toFixed(1)} %`).join(' | '), pass: true });
+}
+
+// ---------------------------------------------------------------- Lluvias de diseño, aguacero reconstruido y clima
+{
+  const c = IDF_OLAYA;
+  // L1) La ecuación de la ficha reproduce la tabla impresa; la curva del laboratorio sigue la tabla en duraciones largas
+  const e5 = Math.max(...c.returns.map((T, i) => Math.abs(idfEquation(T, 5) - c.printed5[i])));
+  let eShort = 0, eLong = 0;
+  for (const [D, row] of Object.entries(c.printed)) {
+    c.returns.forEach((T, i) => {
+      const rel = Math.abs(idfIntensity(T, +D) - row[i]) / row[i];
+      if (+D <= 60) eShort = Math.max(eShort, rel);
+      else eLong = Math.max(eLong, rel);
+    });
+  }
+  let mono = true;
+  for (const T of c.returns) {
+    let prev = 0;
+    for (let D = 5; D <= 360; D += 1) {
+      const P = idfDepth(T, D);
+      if (P <= prev) mono = false;
+      prev = P;
+    }
+  }
+  const eqStops = (36.805 / (1.221 - 1)).toFixed(0);
+  record({ id: 'L1', kind: 'verificacion', name: 'Curva IDF de Olaya Herrera (IDEAM): ecuación y tabla de la ficha', tolerance: 'intensidades de 5 min iguales a la tabla del DTS (error < 0,1 mm/h); de 15 a 60 min, error < 3 % frente a la tabla impresa; de 2 a 6 h, error < 3 %; la lámina crece con la duración para los siete periodos de retorno (de 5 a 360 min, cada minuto)', measured: `5 min: error máx. ${fmt(e5, 3)} mm/h; 15–60 min: ${(100 * eShort).toFixed(2)} %; 2–6 h: ${(100 * eLong).toFixed(2)} %; lámina creciente: ${mono ? 'sí' : 'NO'} (la ecuación sola deja de crecer después de ${eqStops} min para 100 años)`, pass: e5 < 0.1 && eShort < 0.03 && eLong < 0.03 && mono });
+
+  // L2) Bloques alternos: cada ventana centrada de k bloques tiene la lámina de la curva para k·Δt
+  let worst = 0, contiguous = true, n = 0;
+  for (const T of DESIGN_RETURNS)
+    for (const D of DESIGN_DURATIONS) {
+      const b = alternatingBlocks(T, D);
+      const depths = b.mmh.map((v) => (v * b.dtMin) / 60);
+      const idx = depths.map((d, i) => [d, i] as const).sort((x, y) => y[0] - x[0]);
+      let acc = 0;
+      const used: number[] = [];
+      idx.forEach(([d, i], k) => {
+        acc += d;
+        used.push(i);
+        const lo = Math.min(...used), hi = Math.max(...used);
+        if (hi - lo !== k) contiguous = false;
+        worst = Math.max(worst, Math.abs(acc - idfDepth(T, (k + 1) * b.dtMin)));
+      });
+      n++;
+    }
+  record({ id: 'L2', kind: 'obligatoria', name: 'Tormenta de diseño por bloques alternos', tolerance: 'en las 30 tormentas (6 periodos de retorno × 5 duraciones), los k bloques mayores son contiguos y suman la lámina de la curva para k·Δt (error < 10⁻⁹ mm); la lámina total es la de la curva para la duración', measured: `${n} tormentas; error máximo ${worst.toExponential(1)} mm; bloques mayores contiguos: ${contiguous ? 'sí' : 'NO'}; ejemplo 100 años y 6 h: ${fmt(idfDepth(100, 360), 1)} mm, bloque mayor ${fmt(Math.max(...alternatingBlocks(100, 360).mmh), 0)} mm/h (10 min)`, pass: worst < 1e-9 && contiguous });
+
+  // L3) Aguacero reconstruido: total, pico y duración reportados
+  const ev = STORM_EVENTS[0];
+  const m = eventMinutes(ev);
+  const tot = m.reduce((a, v) => a + v, 0) / 60;
+  const rEv = { intensityMmH: 0, durationMin: ev.durationMin, pattern: 'evento' as const, eventId: ev.id, spatial: 'uniforme' as const, center: [0, 0] as [number, number], radiusM: 10 };
+  record({ id: 'L3', kind: 'obligatoria', name: 'Aguacero del 28 de enero de 2026 (El Poblado): total y pico reportados', tolerance: `lámina ${ev.totalMm} mm (error < 0,01 mm), pico ${ev.peakMmH} mm/h (error < 0,01), duración ${ev.durationMin} min; el hietograma del motor da la misma lámina`, measured: `lámina ${fmt(tot, 3)} mm; pico ${fmt(Math.max(...m), 3)} mm/h; ${m.length} min; motor ${fmt(rainDepthMm(rEv), 3)} mm`, pass: Math.abs(tot - ev.totalMm) < 0.01 && Math.abs(Math.max(...m) - ev.peakMmH) < 0.01 && m.length === ev.durationMin && Math.abs(rainDepthMm(rEv) - ev.totalMm) < 0.01 });
+
+  // L4) Clima: factor de 7 % por grado sobre el clima actual, aplicado a toda la lluvia
+  const base = { intensityMmH: 0, durationMin: 60, pattern: 'diseno' as const, returnYears: 10, spatial: 'uniforme' as const, center: [0, 0] as [number, number], radiusM: 10 };
+  const ks = WARMING_LEVELS.map((w) => climateFactor(w));
+  const scaled = WARMING_LEVELS.every((w) => Math.abs(rainDepthMm({ ...base, warmingC: w }) / rainDepthMm(base) - climateFactor(w)) < 1e-12 && Math.abs(rainPeakMmH({ ...base, warmingC: w }) / rainPeakMmH(base) - climateFactor(w)) < 1e-12);
+  const inv = { ...base, pattern: 'pico' as const, intensityMmH: 60, durationMin: 30 };
+  const invOk = Math.abs(rainDepthMm({ ...inv, warmingC: 3 }) - 30 * climateFactor(3)) < 1e-9;
+  record({ id: 'L4', kind: 'obligatoria', name: 'Cambio climático: aguaceros 7 % más intensos por grado de calentamiento', tolerance: 'factor 1,07^(nivel − 1,1 °C): 1 con el clima de hoy; la lámina y el pico de cualquier lluvia se multiplican exactamente por el factor (error < 10⁻¹²)', measured: `factores ${WARMING_LEVELS.map((w, i) => `${w} °C → ${ks[i].toFixed(3)}`).join(', ')}; tormenta de 10 años y 1 h ${scaled ? 'escalada' : 'NO escalada'}; lluvia inventada con pico de 60 mm/h y 30 min con 3 °C: ${fmt(rainDepthMm({ ...inv, warmingC: 3 }), 2)} mm`, pass: Math.abs(ks[0] - 1) < 1e-12 && Math.abs(ks[2] - Math.pow(1.07, 0.9)) < 1e-12 && scaled && invOk });
+
+  // L5) Lluvia larga en el motor: tormenta de 10 años y 3 h en la ladera (celdas de 2 m) con el balance cerrado
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const rain = { ...sc.defaults.rain, pattern: 'diseno' as const, returnYears: 10, durationMin: 180, intensityMmH: Math.round((idfDepth(10, 180) / 3) * 10) / 10 };
+  const shL: Shared = { ...sc.defaults, dx: 2, rain, simMinutes: 210 };
+  const t0 = performance.now();
+  const simL = new CitySim(compile(sc, shL, baseInterventions(sc)), shL);
+  simL.advanceTo(simL.endT);
+  const ms = performance.now() - t0;
+  const bL = simL.bal;
+  const resL = Math.abs(bL.residual) / (bL.precipitation + bL.inflow);
+  const Pexp = (rainDepthMm(rain) / 1000) * sc.extent.width * sc.extent.height;
+  const shN: Shared = { ...shL, rain: { ...rain, warmingC: 3 } };
+  const vShared = validateConfig({ format: 'medellin-lluvia/config', version: 1, shared: shN, A: baseInterventions(sc), B: baseInterventions(sc) }, builtinScenarios());
+  const vBad = validateConfig({ format: 'medellin-lluvia/config', version: 1, shared: { ...shL, rain: { ...rain, returnYears: 7, durationMin: 90 } }, A: baseInterventions(sc), B: baseInterventions(sc) }, builtinScenarios());
+  record({ id: 'L5', kind: 'obligatoria', name: 'Lluvia larga: tormenta de 10 años y 3 h en la ladera, con el balance cerrado', tolerance: 'lluvia que entra = lámina del hietograma × área (error < 10⁻⁶); residuo del balance < 10⁻⁹ del agua que entró; sin valores no finitos; la configuración con 3 °C se acepta y una de 7 años y 90 min se rechaza', measured: `${fmt(idfDepth(10, 180), 1)} mm en 3 h; lluvia ${fmt(bL.precipitation, 1)} m³ frente a ${fmt(Pexp, 1)} m³; residuo/entrada ${resL.toExponential(1)}; infiltrado ${fmt(bL.infiltrated, 0)} m³, drenado ${fmt(bL.drained, 0)} m³, salida ${fmt(bL.boundaryOut, 0)} m³; ${simL.diag.steps} pasos en ${(ms / 1000).toFixed(1)} s; 3 °C ${vShared.ok ? 'aceptada' : 'RECHAZADA'}; 7 años/90 min ${vBad.ok ? 'ACEPTADA' : `rechazada (${vBad.errors.length} errores)`}`, pass: Math.abs(bL.precipitation - Pexp) / Pexp < 1e-6 && resL < 1e-9 && Number.isFinite(bL.residual) && vShared.ok && !vBad.ok });
+}
+
+// ---------------------------------------------------------------- Sedimentos
+{
+  // T1) Constantes publicadas: velocidad de caída y capacidad de transporte de Govers
+  const ws = settlingVelocity(SED.d50um * 1e-6);
+  const stokes = (1.65 * 9.81 * Math.pow(SED.d50um * 1e-6, 2)) / (18 * 1e-6);
+  const gc = goversCoeffs(SED.d50um);
+  const tcs = [0.001, 0.003, 0.004, 0.01, 0.05, 0.2, 1].map((om) => transportCapacity(om, 1));
+  const mono = tcs.every((v, i) => i === 0 || v >= tcs[i - 1]);
+  record({ id: 'T1', kind: 'verificacion', name: 'Sedimento: velocidad de caída (Ferguson y Church) y capacidad de transporte (Govers, como en LISEM)', tolerance: 'para 60 µm, la velocidad de caída está entre 0,9 y 1 vez la de Stokes (granos finos); c y d de Govers según las fórmulas de LISEM; la capacidad es 0 por debajo de 0,4 cm/s de potencia unitaria, crece con ella y no pasa de 848 kg/m³', measured: `Vs = ${fmt(ws * 1000, 3)} mm/s (Stokes ${fmt(stokes * 1000, 3)} mm/s); c = ${gc.c.toFixed(4)}, d = ${gc.d.toFixed(4)}; capacidad para ω = 0,1 · 0,3 · 0,4 · 1 · 5 · 20 · 100 cm/s: ${tcs.map((v) => fmt(v, 0)).join(' · ')} kg/m³`, pass: ws / stokes > 0.9 && ws / stokes <= 1 && Math.abs(gc.c - Math.pow(65 / 0.32, -0.6)) < 1e-12 && tcs[0] === 0 && tcs[2] === 0 && tcs[3] > 0 && mono && Math.max(...tcs) <= SED.maxConc });
+
+  // T2) Agua quieta con tierra: se asienta como exp(−Vs·t/h), sin perder masa
+  {
+    const scS = builtinScenarios()['calle-de-prueba'];
+    const shS: Shared = { ...scS.defaults, dx: 1 };
+    const cS = compile(scS, shS, baseInterventions(scS));
+    const sm = new SedimentModel(cS);
+    const N = cS.nx * cS.ny;
+    const hS = new Float64Array(N), qxS = new Float64Array((cS.nx + 1) * cS.ny), qyS = new Float64Array(cS.nx * (cS.ny + 1)), rw = new Float64Array(N);
+    let k0 = -1;
+    for (let k = 0; k < N && k0 < 0; k++) if (!cS.solid[k]) k0 = k;
+    hS[k0] = 0.2;
+    sm.m[k0] = 0.2 * 5; // 5 kg/m³
+    const m0 = sm.m[k0], l0 = sm.loose[k0];
+    for (let t = 0; t < 60; t += 0.5) sm.exchange(hS, qxS, qyS, 0, rw, 0.5, 1.2);
+    const theory = m0 * Math.exp((-ws * 60) / 0.2);
+    const kept = sm.m[k0] + sm.loose[k0] - l0;
+    record({ id: 'T2', kind: 'obligatoria', name: 'Sedimento en agua quieta: se asienta como exp(−Vs·t/h)', tolerance: 'con velocidad cero, después de 60 s la masa suspendida coincide con m₀·exp(−Vs·t/h) con error menor de 1 % (con 5 kg/m³ la caída frenada por la concentración la retrasa menos de 1 %) y lo que deja de estar suspendido queda depositado en la misma celda', measured: `suspendido ${sm.m[k0].toFixed(6)} kg/m² frente a ${theory.toFixed(6)} (teoría); suspendido + depositado ${kept.toFixed(9)} de ${m0.toFixed(9)} kg/m²`, pass: Math.abs(sm.m[k0] / theory - 1) < 0.01 && Math.abs(kept - m0) < 1e-12 });
+  }
+
+  // T3) Balance cerrado y lote en obra: la tierra suelta pierde mucho más que el parque con árboles
+  {
+    const scL = builtinScenarios()['ladera-quebrada'];
+    const run = (tierra: boolean, creek = false) => {
+      const iv = baseInterventions(scL);
+      if (tierra) iv.zones.parque = 'tierra';
+      const shT: Shared = { ...scL.defaults, dx: 2, rain: { ...scL.defaults.rain, intensityMmH: 60, durationMin: 30 }, simMinutes: 40, creek: creek ? { source: 'ejemplo', peakM3s: 150, timeToPeakMin: 8, startMin: 2, sedimentCv: 0.2 } : null };
+      const sm = new CitySim(compile(scL, shT, iv), shT);
+      sm.advanceTo(sm.endT);
+      let neg = 0;
+      for (let k = 0; k < sm.sed.m.length; k++) if (!(sm.sed.m[k] >= 0) || !(sm.sed.loose[k] >= 0) || !(sm.sed.pool[k] >= 0)) neg++;
+      let mud = 0;
+      for (let k = 0; k < sm.sed.loose.length; k++) if (sm.sed.loose[k] >= 1) mud++;
+      return { b: sm.sed.updateBalance(), neg, mud: mud * sm.c.area, w: sm.bal.residual };
+    };
+    const A = run(false), B = run(true), Cc = run(false, true);
+    const rel = (r: typeof A) => Math.abs(r.b.residual) / Math.max(1, r.b.loose0 + r.b.eroded + r.b.inflow);
+    const kgs = (v: number) => (v >= 1000 ? `${fmt(v / 1000, 1)} t` : `${fmt(v, 1)} kg`);
+    record({ id: 'T3', kind: 'obligatoria', name: 'Sedimento: balance cerrado; el lote en obra pierde mucho más tierra que el parque; la creciente con lodo deja lodo en el barrio', tolerance: 'residuo del balance de sedimento < 10⁻⁹ de lo que entró en las tres corridas, sin masas negativas ni no finitas; el agua sigue cerrando (< 10⁻⁹ m³ por m³); con el lote en obra la tierra arrancada es más de 10 veces la del parque y aparece lodo sobre el suelo; la creciente con 20 % de lodo deja lodo (≥ 1 kg/m²) en más de 100 m² y mete lodo a los sumideros', measured: `parque: arrancada ${kgs(A.b.eroded)}, lodo en ${fmt(A.mud, 0)} m², residuo ${rel(A).toExponential(1)} | lote en obra: arrancada ${kgs(B.b.eroded)}, lodo en ${fmt(B.mud, 0)} m², a sumideros ${kgs(B.b.drained)}, salió ${kgs(B.b.out)}, residuo ${rel(B).toExponential(1)} | creciente con lodo: entró ${kgs(Cc.b.inflow)}, depositado ${kgs(Cc.b.loose)}, lodo en ${fmt(Cc.mud, 0)} m², a sumideros ${kgs(Cc.b.drained)}, residuo ${rel(Cc).toExponential(1)}; masas negativas ${A.neg + B.neg + Cc.neg}`, pass: rel(A) < 1e-9 && rel(B) < 1e-9 && rel(Cc) < 1e-9 && A.neg + B.neg + Cc.neg === 0 && B.b.eroded > 10 * A.b.eroded && B.mud > A.mud && Cc.mud > 100 && Cc.b.drained > 0 && Math.abs(A.w) < 1e-6 && Math.abs(B.w) < 1e-6 });
+    void SED_COVERS;
+  }
+}
+
+// ---------------------------------------------------------------- Planificador
+{
+  const sc = builtinScenarios()['la-iguana-el-pesebre'];
+  const items = planItems(sc);
+  const A = baseInterventions(sc);
+  const sel = ['tanques-techos', 'verde-20'];
+  const B = cloneInterventions(A);
+  applyPlan(sc, B, sel);
+  const shP: Shared = { ...sc.defaults, dx: 2, rain: { ...sc.defaults.rain, pattern: 'diseno', returnYears: 10, durationMin: 60, intensityMmH: 49.8 }, simMinutes: 70 };
+  const cA = compile(sc, shP, A), cB = compile(sc, shP, B);
+  const gr = coverIndex('grama'), co = coverIndex('concreto');
+  let gA = 0, gB = 0, open = 0;
+  for (let k = 0; k < cA.cover.length; k++) {
+    if (cA.cover[k] === gr) gA++;
+    if (cB.cover[k] === gr) gB++;
+    if (!cA.solid[k] && cA.building[k] < 0 && cA.cover[k] === co) open++;
+  }
+  const sA = new CitySim(cA, shP), sB = new CitySim(cB, shP);
+  sA.advanceTo(sA.endT);
+  sB.advanceTo(sB.endT);
+  const keptA = sA.bal.infiltrated + sA.bal.devices, keptB = sB.bal.infiltrated + sB.bal.devices;
+  const ok = validateConfig({ format: 'medellin-lluvia/config', version: 1, shared: shP, A, B }, builtinScenarios()).ok;
+  const bad = validateConfig({ format: 'medellin-lluvia/config', version: 1, shared: shP, A, B: { ...B, greening: 0.5 } }, builtinScenarios()).ok;
+  record({ id: 'P1', kind: 'obligatoria', name: 'Planificador: obras aplicadas, presupuesto y efecto en el agua (La Iguaná)', tolerance: 'el 20 % verde convierte exactamente round(0,2 × suelo abierto de concreto) celdas en pasto; los 10 tanques de los techos quedan activos; el plan cuesta lo que suman sus obras y cabe en el presupuesto; con la tormenta de 10 años y 1 h, B guarda o infiltra más agua que A y ambos balances cierran (< 10⁻⁹); la configuración con 20 % verde se acepta y una con 50 % se rechaza', measured: `obras disponibles: ${items.map((i) => i.id).join(', ')}; celdas de pasto A ${gA}, B ${gB} (+${gB - gA}; esperado ${Math.round(0.2 * open)}); tanques activos en B ${Object.values(B.tanks).filter((t) => t.on).length}; costo ${planCost(sc, sel)} de ${PLAN_BUDGET}; guardado o infiltrado A ${fmt(keptA, 1)} m³, B ${fmt(keptB, 1)} m³ (depósitos ${fmt(sB.bal.devices, 1)} m³); residuos ${(Math.abs(sA.bal.residual) / sA.bal.precipitation).toExponential(1)} / ${(Math.abs(sB.bal.residual) / sB.bal.precipitation).toExponential(1)}; 20 % ${ok ? 'aceptada' : 'RECHAZADA'}; 50 % ${bad ? 'ACEPTADA' : 'rechazada'}`, pass: gB - gA === Math.round(0.2 * open) && Object.values(B.tanks).filter((t) => t.on).length === 10 && planCost(sc, sel) === 70 && keptB > keptA && Math.abs(sA.bal.residual) / sA.bal.precipitation < 1e-9 && Math.abs(sB.bal.residual) / sB.bal.precipitation < 1e-9 && ok && !bad });
+}
+
+// ---------------------------------------------------------------- Torrente empinado y dibujo amplificado
+{
+  // F1: en la quebrada de la ladera (10 % de pendiente) una creciente casi estable debe ir en flujo uniforme (a la
+  // profundidad normal del propio modelo: Manning por celda con su límite de Froude) y no represarse junto a la
+  // salida. Se informa también la profundidad normal de Manning sin límite (sesgo conocido del método).
+  const sc = builtinScenarios()['ladera-quebrada'];
+  const sh: Shared = { ...sc.defaults, rain: { ...sc.defaults.rain, intensityMmH: 0, durationMin: 5 }, simMinutes: 30, creek: { source: 'ejemplo', peakM3s: 60, timeToPeakMin: 25, startMin: 2, sedimentCv: 0 } };
+  const iv = baseInterventions(sc);
+  const c = compile(sc, sh, iv);
+  const sim = new CitySim(c, sh, {});
+  sim.advanceTo(27 * 60, 1e9);
+  const { nx, dx } = c;
+  const cellAt = (x: number, y: number) => Math.floor(y / dx) * nx + Math.floor(x / dx);
+  // sección a x = 26 m: caudal que pasa por la columna de caras y nivel en el lecho
+  const xs = 26, i = Math.round(xs / dx);
+  let Q = 0;
+  const col: number[] = [];
+  for (let j = 0; j < c.ny; j++) {
+    Q += sim.qx[j * (nx + 1) + i] * dx;
+    const k = j * nx + i;
+    if (!c.solid[k]) col.push(k);
+  }
+  const yc = yq(xs);
+  let etaMod = 0, nb = 0;
+  for (const k of col) {
+    const y = (Math.floor(k / nx) + 0.5) * dx;
+    if (Math.abs(y - yc) <= 1.5 && sim.h[k] > 0.01) {
+      etaMod += c.z[k] + sim.h[k];
+      nb++;
+    }
+  }
+  etaMod /= Math.max(1, nb);
+  const S = (c.z[cellAt(8, yq(8))] - c.z[cellAt(44, yq(44))]) / 36;
+  const qOf = (eta: number, frMax: number) => col.reduce((a, k) => {
+    const hh = eta - c.z[k];
+    if (hh <= 0) return a;
+    const qm = (Math.pow(hh, 5 / 3) * Math.sqrt(S)) / c.n[k];
+    return a + Math.min(qm, frMax * hh * Math.sqrt(9.81 * hh)) * dx;
+  }, 0);
+  const normalLevel = (frMax: number) => {
+    let lo = c.z[cellAt(xs, yc)], hi = lo + 6;
+    for (let it = 0; it < 80; it++) {
+      const mid = (lo + hi) / 2;
+      if (qOf(mid, frMax) < Q) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const etaN = normalLevel(NUMERICS.froudeMax), etaM = normalLevel(Infinity), bed = c.z[cellAt(xs, yc)];
+  // perfil junto a la salida: el agua no debe crecer hacia el borde
+  const W = nx * dx;
+  const hEdge = sim.h[cellAt(W - 0.5, yq(W - 0.5))], hUp = sim.h[cellAt(W - 10.5, yq(W - 10.5))];
+  const errRel = Math.abs(etaMod - etaN) / (etaN - bed);
+  record({
+    id: 'F1',
+    kind: 'obligatoria',
+    name: 'Torrente empinado: flujo uniforme en el tramo de 10 % y sin represamiento en la salida',
+    tolerance: 'con una creciente casi estable (60 m³/s, pico a los 27 min) en el tramo recto de 10 % de pendiente, el nivel calculado en el lecho difiere menos de 10 % de la profundidad normal del propio método para el caudal que pasa por esa sección (Manning por celda con el límite Fr ≤ 1,5); junto a la salida la profundidad en el borde no supera en más de 10 % la de 10 m aguas arriba; el balance cierra (< 10⁻⁹). Se informa, sin criterio, la profundidad normal de Manning sin límite',
+    measured: `pendiente ${fmt(S, 3)}; caudal en x = 26 m ${fmt(Q, 1)} m³/s; profundidad calculada ${fmt(etaMod - bed, 2)} m, normal del método ${fmt(etaN - bed, 2)} m (diferencia ${fmt(errRel * 100, 1)} %), normal de Manning sin límite ${fmt(etaM - bed, 2)} m (el método va ${fmt(((etaMod - bed) / (etaM - bed) - 1) * 100, 0)} % más hondo); salida: borde ${fmt(hEdge, 2)} m, 10 m aguas arriba ${fmt(hUp, 2)} m; residuo ${(Math.abs(sim.bal.residual) / Math.max(1, sim.bal.inflow)).toExponential(1)}`,
+    pass: errRel < 0.1 && hEdge <= 1.1 * hUp && Math.abs(sim.bal.residual) / Math.max(1, sim.bal.inflow) < 1e-9,
+    note: 'Prueba agregada al corregir un defecto que señaló el usuario («esa cresta y concentración no tienen sentido»). La salida de la quebrada, con 3 % de pendiente escrita (el cauce baja casi 9 %) y acotada en régimen crítico, represaba el agua en los últimos 15 m (2,0 m en el borde frente a 1,65 m aguas arriba); ahora usa la pendiente del terreno y el mismo límite de Froude de las caras interiores. Se probó además relajar el límite de Froude hasta 3 en agua honda: la creciente iba a su profundidad normal de Manning (1,41 m frente a 1,39 m), pero contra el terraplén de la carrera aparecían oleadas espurias (el caudal por los cajones saltaba entre 3 y 30 m³/s y pasaba agua sobre la vía con solo 60 % de la capacidad del cauce). Se descartó: el método inercial local no representa bien el resalto de un torrente que choca con una obra. Queda el sesgo conocido que informa esta prueba.',
+  });
+  // A1: la amplificación del dibujo engrosa láminas delgadas y deja nivelada la superficie del agua honda
+  const k5 = 5;
+  const thin = drawDepth(0.01, k5) / 0.01;
+  const extra = drawDepth(5, k5) - 5;
+  // misma superficie libre en el lecho (2 m) y en la orilla (30 cm): diferencia dibujada
+  const lvl = Math.abs((0 + drawDepth(2, k5)) - (1.7 + drawDepth(0.3, k5)));
+  const lvlOld = Math.abs(2 * k5 - (1.7 + 0.3 * k5));
+  let mono = true;
+  for (let h = 0; h < 3; h += 0.001) if (drawDepth(h + 0.001, k5) <= drawDepth(h, k5)) mono = false;
+  record({
+    id: 'A1',
+    kind: 'obligatoria',
+    name: '«Agua ×5» engrosa las láminas delgadas sin levantar el agua honda',
+    tolerance: 'una lámina de 1 cm se dibuja al menos ×4,5; a ninguna profundidad se agregan más de (5 − 1) × 4 cm = 16 cm; el dibujo crece con la profundidad; con la misma superficie libre en el lecho de una quebrada (2 m) y en su orilla (30 cm), las superficies dibujadas difieren menos de 1 cm',
+    measured: `1 cm → ×${fmt(thin, 2)}; 5 m → +${fmt(extra * 100, 1)} cm; creciente: ${mono ? 'sí' : 'NO'}; lecho y orilla con la misma superficie: diferencia dibujada ${fmt(lvl * 100, 2)} cm (multiplicando la profundidad, como antes: ${fmt(lvlOld, 1)} m)`,
+    pass: thin >= 4.5 && extra <= (k5 - 1) * AMP_SHEET_M + 1e-12 && mono && lvl < 0.01,
+  });
+}
+
+// ---------------------------------------------------------------- Tormenta viva y cine
+{
+  // E1: rayos ilustrativos: sin lluvia fuerte no hay; su frecuencia sigue la lluvia calculada con tope; nunca dos
+  // con menos de 4 s; con movimiento reducido no hay destellos; un solo destello por rayo
+  const run = (mmh: number, reduced: boolean, seconds: number) => {
+    const sky = new StormSky(0, 4242, null);
+    const times: number[] = [];
+    let t = 0, maxFlash = 0, rises = 0, prev = 0, rising = false;
+    sky.onStrike = () => times.push(t);
+    const dt = 1 / 30;
+    for (let i = 0; i < seconds / dt; i++) {
+      t += dt;
+      sky.update(dt, mmh, 1, reduced);
+      maxFlash = Math.max(maxFlash, sky.flash);
+      if (sky.flash > prev + 1e-9 && !rising) {
+        rises++;
+        rising = true;
+      } else if (sky.flash < prev) rising = false;
+      prev = sky.flash;
+    }
+    sky.dispose();
+    let gap = Infinity;
+    for (let i = 1; i < times.length; i++) gap = Math.min(gap, times[i] - times[i - 1]);
+    return { n: times.length, gap, maxFlash, rises };
+  };
+  const dry = run(20, false, 600), heavy = run(180, false, 1200), mid = run(80, false, 1200), red = run(180, true, 600);
+  const perMin = (n: number, s: number) => (n * 60) / s;
+  record({
+    id: 'E1',
+    kind: 'obligatoria',
+    name: 'Tormenta viva: los rayos ilustrativos siguen la lluvia calculada y respetan los límites de destellos',
+    tolerance: 'con 20 mm/h no hay rayos; con 180 mm/h hay como máximo 8 por minuto y más que con 80 mm/h; nunca dos con menos de 4 s entre sí; un solo destello por rayo (sin parpadeo) y de intensidad ≤ 0,7; con movimiento reducido no hay rayos ni destellos',
+    measured: `20 mm/h: ${dry.n} rayos; 80 mm/h: ${fmt(perMin(mid.n, 1200), 2)} por minuto; 180 mm/h: ${fmt(perMin(heavy.n, 1200), 2)} por minuto (tasa nominal ${fmt(strikeRate(180), 1)}), separación mínima ${fmt(heavy.gap, 2)} s, destellos ${heavy.rises} para ${heavy.n} rayos, destello máximo ${fmt(heavy.maxFlash, 2)}; movimiento reducido: ${red.n} rayos, destello máximo ${fmt(red.maxFlash, 2)}`,
+    pass: dry.n === 0 && heavy.n > mid.n && mid.n > 0 && perMin(heavy.n, 1200) <= 8 && heavy.gap >= MIN_GAP_S - 1e-9 && heavy.rises === heavy.n && heavy.maxFlash <= 0.7 && red.n === 0 && red.maxFlash === 0,
+  });
+}
+{
+  // E2: el sonido del agua sigue el caudal calculado (monótono, entre 0 y 1)
+  const mk = (s: object) => ({ samples: [s] }) as unknown as CitySim;
+  const qs = [0, 0.05, 0.2, 0.5, 1, 3];
+  const street = qs.map((q) => flowLevel(mk({ outletQ: q * 0.6, drainQ: q * 0.4 })));
+  const creek = [0, 2, 10, 30, 60, 120].map((q) => flowLevel(mk({ outletQ: 0, drainQ: 0, creek: { qin: q, qChannel: q * 0.8, qOutside: q * 0.2, level: 1 } })));
+  const mono = (a: number[]) => a.every((v, i) => i === 0 || v >= a[i - 1]);
+  const empty = flowLevel({ samples: [] } as unknown as CitySim);
+  // E2 (cont.): tomas de cine sin atravesar terreno ni construcciones, en los dos sectores didácticos
+  const shotRows: string[] = [];
+  let shotsOk = true;
+  for (const id of ['calle-de-prueba', 'ladera-quebrada']) {
+    const sc = builtinScenarios()[id];
+    const c = compile(sc, { ...sc.defaults, rain: { ...sc.defaults.rain } }, baseInterventions(sc));
+    const W = c.nx * c.dx, H = c.ny * c.dx;
+    let zRef = Infinity;
+    for (let k = 0; k < c.zGround.length; k++) zRef = Math.min(zRef, c.zGround[k], c.z[k]);
+    const cell = (x: number, y: number) => Math.min(c.ny - 1, Math.max(0, Math.floor(y / c.dx))) * c.nx + Math.min(c.nx - 1, Math.max(0, Math.floor(x / c.dx)));
+    const groundAt = (x: number, y: number) => (c.solid[cell(x, y)] ? c.zGround[cell(x, y)] : c.z[cell(x, y)]);
+    const roofAt = (x: number, y: number) => {
+      const b = c.building[cell(x, y)];
+      return b < 0 ? -Infinity : c.buildings[b].baseZ + c.buildings[b].heightM;
+    };
+    // el punto más bajo fuera de las construcciones hace las veces de «donde más agua hay»
+    let low = -1;
+    for (let k = 0; k < c.z.length; k++) if (c.building[k] < 0 && !c.solid[k] && (low < 0 || c.z[k] < c.z[low])) low = k;
+    const lx = ((low % c.nx) + 0.5) * c.dx, ly = (Math.floor(low / c.nx) + 0.5) * c.dx;
+    const shots = buildShots({
+      W,
+      H,
+      fitA: groundAt(W / 2, H / 2) - zRef,
+      street: sc.streetView,
+      groundAt,
+      roofAt,
+      w: (x, y, z) => new THREE.Vector3(x - W / 2, z - zRef, H / 2 - y),
+      deepest: () => [lx, ly, 0.3],
+      valle: { p: new THREE.Vector3(-W, 300, 0), t: new THREE.Vector3(W, 50, 0) },
+    });
+    let worst = Infinity, inside = 0, samples = 0;
+    for (const sh of shots.filter((q) => q.id === 'calle' || q.id === 'agua' || q.id === 'grua')) {
+      for (let i = 0; i <= 40; i++) {
+        const { p } = sh.pose(i / 40);
+        const x = p.x + W / 2, y = H / 2 - p.z, z = p.y + zRef;
+        if (x < 0 || y < 0 || x > W || y > H) continue;
+        samples++;
+        const clear = z - Math.max(groundAt(x, y), roofAt(x, y));
+        worst = Math.min(worst, clear);
+        if (clear < 1) inside++;
+      }
+    }
+    shotsOk &&= inside === 0 && samples > 60;
+    shotRows.push(`${sc.shortTitle}: ${samples} posiciones, holgura mínima ${fmt(worst, 2)} m, dentro de terreno o techos ${inside}`);
+  }
+  record({
+    id: 'E2',
+    kind: 'obligatoria',
+    name: 'Sonido ligado al cálculo y tomas de cine que no atraviesan la maqueta',
+    tolerance: 'el nivel del sonido del agua crece con el caudal calculado (calle y quebrada), queda entre 0 y 1 y es 0 sin datos; en las tomas de calle, del agua y de grúa la cámara queda al menos 1 m por encima del terreno y de los techos en los dos sectores didácticos',
+    measured: `calle (0–3 m³/s): ${street.map((v) => fmt(v, 2)).join(', ')}; quebrada (0–120 m³/s): ${creek.map((v) => fmt(v, 2)).join(', ')}; sin datos ${empty}; ${shotRows.join('; ')}`,
+    pass: mono(street) && mono(creek) && street[0] === 0 && creek[0] === 0 && Math.max(...street, ...creek) <= 1 && street[street.length - 1] === 1 && empty === 0 && shotsOk,
+  });
 }
 
 // ---------------------------------------------------------------- Informe
