@@ -20,6 +20,12 @@ export function StreetPart({ head }: { head: ReactNode }) {
   const [play, setPlay] = useState(-1);
   const raf = useRef(0);
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  // en teléfonos el dibujo se desplaza de lado: empieza mostrando las casas mal conectadas, el sumidero y la quebrada
+  const panRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = panRef.current;
+    if (el && el.scrollWidth > el.clientWidth + 2) el.scrollLeft = el.scrollWidth - el.clientWidth;
+  }, []);
   const rain = () => {
     cancelAnimationFrame(raf.current);
     if (state.prefs.reducedMotion) {
@@ -52,6 +58,7 @@ export function StreetPart({ head }: { head: ReactNode }) {
       head={head}
       stage={
         <div className="q-stage-street">
+          <div className="q-pan" ref={panRef}>
           <svg viewBox="0 0 1000 520" className="q-scene" role="img" aria-label={`Corte de una calle con ${STREET.houses} casas, ${inp.dryDays} días sin llover y ${inp.wrongHouses} casas con el desagüe conectado por error al tubo de aguas lluvias.`}>
             <defs>
               <linearGradient id="q-sky2" x1="0" y1="0" x2="0" y2="1">
@@ -109,6 +116,8 @@ export function StreetPart({ head }: { head: ReactNode }) {
             {raining && Array.from({ length: 90 }, (_, k) => <line key={k} x1={(k * 37) % 1000} y1={(k * 23) % 230} x2={((k * 37) % 1000) - 7} y2={((k * 23) % 230) + 18} stroke="#5d7f96" strokeWidth="1.3" opacity="0.55" />)}
             <text x="985" y="505" textAnchor="end" className="q-svg-note">Esquema de una cuadra (no a escala).</text>
           </svg>
+          </div>
+          <p className="q-pan-hint">Desliza el dibujo de lado para ver el sumidero y la quebrada.</p>
           <div className="q-probe-bar">
             <button type="button" className="btn btn-primary" onClick={rain}>
               {play < 0 ? `Que llueva (${fmt(rainMm, 0)} mm)` : raining ? `Lloviendo… minuto ${minute}` : 'Volver a llover'}

@@ -2,7 +2,7 @@
 // sonda mide en cualquier punto, se pueden tomar muestras para el laboratorio y levantar una piedra para ver
 // los bichos que viven debajo.
 
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Disclosure, Segmented, Toggle } from '../components/ui';
 import { useStore } from '../state/store';
 import { CritterGlyph } from './Glyphs';
@@ -73,7 +73,16 @@ export function CreekPart({ head, goStreet }: { head: ReactNode; goStreet: () =>
     return xs.map((x) => m.at(x));
   }, [m]);
   const svgRef = useRef<SVGSVGElement>(null);
+  const panRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  // en teléfonos el dibujo se desplaza de lado: se mantiene la sonda a la vista
+  const panScrolls = () => !!panRef.current && panRef.current.scrollWidth > panRef.current.clientWidth + 2;
+  useEffect(() => {
+    const el = panRef.current;
+    if (!el || !panScrolls()) return;
+    const target = (sxOf(probe) / 1000) * el.scrollWidth - el.clientWidth / 2;
+    el.scrollTo({ left: Math.max(0, target), behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }, [probe]);
   const moveProbe = (clientX: number) => {
     const el = svgRef.current;
     if (!el) return;
@@ -110,6 +119,7 @@ export function CreekPart({ head, goStreet }: { head: ReactNode; goStreet: () =>
       head={head}
       stage={
       <div className="q-stage-creek">
+        <div className="q-pan" ref={panRef}>
         <svg
           ref={svgRef}
           viewBox="0 0 1000 520"
@@ -117,6 +127,8 @@ export function CreekPart({ head, goStreet }: { head: ReactNode; goStreet: () =>
           role="img"
           aria-label={`Quebrada de montaña con ${inp.houses} casas que vierten su agua usada (${tr.name.toLowerCase()}). La sonda está ${where}.`}
           onPointerDown={(e) => {
+            // con el dedo, si el dibujo se desplaza de lado, el gesto mueve el dibujo y no la sonda
+            if (e.pointerType === 'touch' && panScrolls()) return;
             dragging.current = true;
             (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
             moveProbe(e.clientX);
@@ -223,6 +235,8 @@ export function CreekPart({ head, goStreet }: { head: ReactNode; goStreet: () =>
           </g>
           <text x="985" y="505" textAnchor="end" className="q-svg-note">Dibujo esquemático; la distancia no está a escala antes del tubo.</text>
         </svg>
+        </div>
+        <p className="q-pan-hint">Desliza el dibujo de lado; la sonda se mueve con el control de abajo.</p>
         <div className="q-probe-bar">
           <QRange label="Posición de la sonda" value={probe} min={X_MIN} max={X_MAX} step={10} unit="m" onChange={setProbe} help={`La sonda está ${where}. Arrástrala sobre la quebrada o toca una estación.`} />
           <div className="q-stations" role="group" aria-label="Estaciones de muestreo">

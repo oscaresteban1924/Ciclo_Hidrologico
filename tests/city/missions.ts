@@ -6,7 +6,8 @@ import { CitySim } from '../../src/city/sim/engine';
 import { baseInterventions, cloneInterventions, type Shared } from '../../src/city/sim/scenario';
 import { builtinScenarios } from '../../src/city/scenarios/index';
 
-for (const m of MISSIONS) {
+const only = process.argv.slice(2);
+for (const m of MISSIONS.filter((q) => !only.length || only.includes(q.id))) {
   const sc = builtinScenarios()[m.scenarioId];
   const A = baseInterventions(sc);
   m.setupA?.(A);

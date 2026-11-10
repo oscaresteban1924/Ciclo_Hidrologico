@@ -349,6 +349,14 @@ Las 31 anteriores siguen cumpliendo. S4 sigue en 15 de 15 criterios de EPM en ca
 
 **Módulo «Calidad del agua»** (`tools/verificacion/calidad.py`, escritorio 1440 × 900 y teléfono 390 × 844): en la estación B, en verano, la piedra da BMWP/Col 29 (clase IV); al conectar las casas al alcantarillado, 103 (clase I). Con la dosis de la mejor jarra y 1,5 mg/L de cloro, el agua cumple las cinco características (IRCA 0 %). La lluvia de la calle se anima y el botón «Misión: conexiones erradas» abre esa misión en el laboratorio de lluvia. Consola sin errores.
 
+**Teléfono (390 px).** Las escenas de 1000 unidades de ancho se reducían tanto que sus rótulos no se leían. La planta de potabilización tiene ahora una versión vertical; la quebrada y la calle se desplazan de lado y conservan el tamaño de sus rótulos (la quebrada sigue a la sonda; la calle empieza mostrando el sumidero y la quebrada). En el esquema de la planta de aguas residuales el valor quedaba encima de la barra: ahora va al lado.
+
+**Misiones nuevas en sectores reales** (`tests/city/missions.ts`, `tools/verificacion/misiones_reales.py`):
+- «La creciente que viene de lejos» (La Iguaná, 60 mm en una hora): el pico, de 159 m³/s, llega en el minuto 108, 48 min después de que para la lluvia; la alerta roja suena en el minuto 70 y el agua llega a la primera casa junto a la quebrada en el 71. Opción que coincide: «más de media hora después».
+- «¿De dónde viene el agua?» (Juan Bobo, 80 mm en una hora): la quebrada llega a 2,1 m³/s y queda 1,24 m por debajo del cauce lleno; el agua llega a la primera casa junto a la quebrada en el minuto 4, por el barrio. Opción que coincide: «la lluvia que corre por las calles».
+
+La procedencia de los sectores reales escribe ahora los decimales con coma, como el resto de la interfaz.
+
 `npm run test:city`: **48 de 48** (nueva D2; D1 cambia a los nuevos sectores y separa la lluvia del sector del agua de las laderas). `npm run test:quality`: **8 de 8** (`docs/calidad/PRUEBAS_CALIDAD.md`).
 
 ## 5. Rendimiento medido

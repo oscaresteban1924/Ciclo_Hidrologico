@@ -548,13 +548,51 @@
   border-radius: 8px;
   background: #8a5a2b;
 }
-.q-ptar-bar em {
-  position: absolute;
-  right: 6px;
-  top: -1px;
-  font-size: 0.78rem;
+.q-ptar-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.q-ptar-row em {
+  font-size: 0.8rem;
   font-style: normal;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.q-scene-v {
+  display: none;
+}
+/* escenas anchas en teléfonos: se desplazan de lado y conservan el tamaño de sus rótulos */
+.q-pan-hint {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .q-scene-h {
+    display: none;
+  }
+  .q-scene-v {
+    display: block;
+  }
+  .q-pan {
+    overflow-x: auto;
+    border-radius: var(--r-l);
+    scrollbar-width: thin;
+  }
+  .q-pan > .q-scene {
+    width: 780px;
+    max-width: none;
+    touch-action: pan-x pan-y;
+  }
+  .q-pan-hint {
+    display: block;
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--ink-3);
+    text-align: center;
+  }
 }
 
 @media (max-width: 900px) {

@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -648,7 +649,8 @@ def build(site: Site, with_creek: bool) -> dict:
             "sources": [{"label": "Alcaldía de Medellín, servicios de mapas (servidormapas). Respuestas guardadas en tools/geo/insumos con su SHA-256.", "url": "https://www.medellin.gov.co/servidormapas/rest/services"}] + srcs,
             "generatedBy": "tools/geo/sector_real.py",
             "generatedAt": man.get("createdAt"),
-            "log": log,
+            # decimales con coma, como en la interfaz (1.61 → 1,61); los números enteros no cambian
+            "log": [re.sub(r"(?<=\d)\.(?=\d)", ",", line) for line in log],
         },
         "extent": {"crs": "EPSG:9377", "origin": [site.domain[0], site.domain[1]], "lonLat": [round(lon, 6), round(lat, 6)], "width": W, "height": H},
         "units": {"length": "m", "elevation": "m", "rain": "mm/h", "time": "s", "flow": "L/s"},

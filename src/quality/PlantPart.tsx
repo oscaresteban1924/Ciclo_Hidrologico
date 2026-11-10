@@ -41,7 +41,7 @@ export function PlantPart({ head }: { head: ReactNode }) {
       head={head}
       stage={
         <div className="q-stage-plant">
-          <svg viewBox="0 0 1000 520" className="q-scene" role="img" aria-label={`Planta de potabilización con agua cruda de ${fmt(rw.turbidity, 0)} UNT. Después de los filtros sale con ${fmt(res.filtered, 2)} UNT y ${fmt(res.clExit, 2)} mg/L de cloro libre.`}>
+          <svg viewBox="0 0 1000 520" className="q-scene q-scene-h" role="img" aria-label={`Planta de potabilización con agua cruda de ${fmt(rw.turbidity, 0)} UNT. Después de los filtros sale con ${fmt(res.filtered, 2)} UNT y ${fmt(res.clExit, 2)} mg/L de cloro libre.`}>
             <rect width="1000" height="520" fill="#eef4f3" />
             <path d="M0 330 H1000" stroke="#b9cbcc" strokeWidth="2" />
             <text x="500" y="38" textAnchor="middle" className="q-svg-title">Del río a la llave</text>
@@ -96,6 +96,39 @@ export function PlantPart({ head }: { head: ReactNode }) {
                 </g>
               ))}
             </g>
+          </svg>
+          {/* versión vertical para pantallas angostas: los mismos pasos, de arriba abajo */}
+          <svg viewBox={`0 0 400 ${120 + steps.length * 92 + 150}`} className="q-scene q-scene-v" role="img" aria-label={`Planta de potabilización, de arriba abajo: agua cruda de ${fmt(rw.turbidity, 0)} UNT; después de los filtros, ${fmt(res.filtered, 2)} UNT; cloro libre ${fmt(res.clExit, 2)} mg/L al salir y ${fmt(res.clTap, 2)} mg/L en la llave.`}>
+            <rect width="400" height={120 + steps.length * 92 + 150} fill="#eef4f3" />
+            <text x="200" y="40" textAnchor="middle" className="q-svg-title">Del río a la llave</text>
+            <path d={`M70 80 V${80 + steps.length * 92 + 40}`} stroke="#7d8d99" strokeWidth="8" strokeLinecap="round" />
+            {steps.map((st, k) => {
+              const y = 70 + k * 92;
+              return (
+                <g key={st.id} className={bad(st.id) ? 'q-bad' : ''}>
+                  <rect x="24" y={y} width="92" height="70" rx="8" fill="#fbfdfc" stroke={bad(st.id) ? '#c0462a' : '#5b7183'} strokeWidth={bad(st.id) ? 3 : 1.5} />
+                  <rect x="30" y={y + 14} width="80" height="50" rx="4" fill={turbColor(st.t)} />
+                  {st.id === 'filtro' && <rect x="30" y={y + 40} width="80" height="24" fill="#d9c79f" />}
+                  {st.id === 'filtro' && res.clogged && <rect x="30" y={y + 34} width="80" height="7" fill="#7a5f3e" />}
+                  <text x="136" y={y + 30} className="q-svg-label">{st.name}</text>
+                  <text x="136" y={y + 54} className="q-svg-value">{`${fmt(st.t, st.t < 10 ? 1 : 0)} UNT`}{st.id === 'cloro' ? ` · cloro ${fmt(res.clExit, 2)} mg/L` : ''}</text>
+                  {k < steps.length - 1 && <path d={`M70 ${y + 76} l-7 -9 h14z`} fill="#46596b" />}
+                </g>
+              );
+            })}
+            {(() => {
+              const y = 70 + steps.length * 92;
+              return (
+                <g>
+                  <path d={`M30 ${y + 50} l40 -30 l40 30 v56 h-80z`} fill="#efe7d6" stroke="#7d6a58" />
+                  <path d={`M52 ${y + 70} h26 v8 h-9 v8`} fill="none" stroke="#46596b" strokeWidth="4" />
+                  <path d={`M69 ${y + 88} q3 8 0 14`} stroke={turbColor(res.filtered)} strokeWidth="4" />
+                  <text x="136" y={y + 62} className="q-svg-label">La llave</text>
+                  <text x="136" y={y + 86} className="q-svg-value">{`cloro ${fmt(res.clTap, 2)} mg/L`}</text>
+                  <text x="136" y={y + 112} className="q-svg-value" fill={okAll ? '#2c5d2a' : '#9b2f1b'}>{okAll ? '✓ cumple la norma' : `✗ no cumple (${res.checks.filter((c) => !c.ok).length} de 5)`}</text>
+                </g>
+              );
+            })()}
           </svg>
         </div>
       }
@@ -199,9 +232,11 @@ export function PlantPart({ head }: { head: ReactNode }) {
                     <strong>{s.name}</strong>
                     <span className="q-help">{s.what}</span>
                   </button>
-                  <span className="q-ptar-bar" aria-label={`queda ${Math.round(s.remain * 100)} % de la materia orgánica`}>
-                    <i style={{ width: `${s.remain * 100}%` }} />
-                    <em>{fmt(dboIn * s.remain, 0)} mg/L</em>
+                  <span className="q-ptar-row">
+                    <span className="q-ptar-bar" aria-hidden="true">
+                      <i style={{ width: `${s.remain * 100}%` }} />
+                    </span>
+                    <em>{`queda ${fmt(dboIn * s.remain, 0)} mg/L (${Math.round(s.remain * 100)} %)`}</em>
                   </span>
                 </li>
               ))}

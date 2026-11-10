@@ -482,6 +482,85 @@ export const MISSIONS: Mission[] = [
     explain: 'Con bosque, buena parte de la lluvia entra al suelo y el agua que corre tarda en llegar a la quebrada. Cuando la cuenca se llena de techos y vías, casi toda la lluvia corre y llega junta y rápido: la creciente es más grande y más temprana. Por eso importa cuidar los bosques de las cuencas y por eso existen las estaciones y las alertas: cada minuto de aviso sirve para salir de la orilla.',
     terms: ['cuenca', 'alerta-temprana', 'escorrentia', 'infiltracion', 'creciente', 'caudal-pico'],
   },
+  {
+    id: 'iguana-viene-de-lejos',
+    title: 'La creciente que viene de lejos',
+    scenarioId: 'la-iguana-el-pesebre',
+    question: 'Llueve fuerte durante una hora (60 mm) sobre El Pesebre y sobre toda la cuenca de La Iguaná, que sube hasta las montañas del occidente. ¿Cuándo crece más la quebrada frente al barrio?',
+    context: 'Sector real: terreno, foto aérea, casas y vías de la Alcaldía de Medellín. La cuenca de La Iguaná hasta este tramo mide unos 43 km² y se delineó con el modelo de elevación del Área Metropolitana. La lluvia dura 60 minutos; se simulan 140.',
+    options: [
+      { id: 'durante', text: 'Mientras llueve en el barrio' },
+      { id: 'al-parar', text: 'Justo cuando deja de llover' },
+      { id: 'despues', text: 'Más de media hora después de que deja de llover' },
+    ],
+    rain: { intensityMmH: 60, durationMin: 60, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 140,
+    creek: { fraction: 0, timeToPeakMin: 6, startMin: 0, source: 'cuenca' },
+    change: { kind: 'ninguno', describe: 'Sin intervención: se observa cuándo llega la creciente de la cuenca.' },
+    evaluate: (a) => {
+      const ba = a.basin!, w = a.warning!;
+      const m3s = (v: number) => `${fmtNum(v, v < 10 ? 1 : 0)}\u00a0m³/s`;
+      const after = ba.tPeak / 60 - 60;
+      const ev = (id: string) => w.events.find((e) => e.id === id);
+      const when = (id: string) => (ev(id) && ev(id)!.t >= 0 ? `minuto ${fmtNum(ev(id)!.t / 60, 0)}` : 'no llegó');
+      return {
+        outcome: ba.tPeak <= 60 * 60 ? 'durante' : after <= 30 ? 'al-parar' : 'despues',
+        observed: [
+          `Cayeron ${fmtNum(ba.rainMm, 0)} mm en la cuenca y corrieron hacia la quebrada ${fmtNum(ba.runoffMm, 0)} mm. La cuenca tarda unos ${fmtNum(ba.lagMin, 0)} min en responder.`,
+          `La lluvia paró en el minuto 60. El pico llegó al barrio en el minuto ${fmtNum(ba.tPeak / 60, 0)}${after > 0 ? `, ${fmtNum(after, 0)} min después` : ''}, con ${m3s(ba.peak)}.`,
+          `Avisos de la estación: por lluvia, ${when('lluvia')}; amarilla, ${when('amarilla')}; naranja, ${when('naranja')}; roja, ${when('roja')}.`,
+          a.creekOverBankMax > 0 ? `En la sección de control el agua pasó ${fmtNum(a.creekOverBankMax, 2)} m por encima del cauce lleno.` : 'En la sección de control el agua no pasó del cauce lleno.',
+          `Edificaciones con 10 cm de agua o más junto a sus muros: ${a.damage.affected}${w.firstWetT >= 0 ? `; la primera junto a la quebrada, en el minuto ${fmtNum(w.firstWetT / 60, 0)}` : ''}.`,
+        ],
+        rows: [
+          { label: 'Caudal pico en el barrio', a: m3s(ba.peak), b: '—', change: '—' },
+          { label: 'Minuto del pico', a: fmtNum(ba.tPeak / 60, 0), b: '—', change: '—' },
+          { label: 'Minutos entre el fin de la lluvia y el pico', a: fmtNum(Math.max(0, after), 0), b: '—', change: '—' },
+          { label: 'Edificaciones con agua', a: String(a.damage.affected), b: '—', change: '—' },
+        ],
+        caveat: 'Cuenca delineada con el modelo de elevación; cobertura mixta, suelo y lluvia pareja en toda la cuenca son supuestos. Métodos del NRCS. No es un pronóstico ni el sistema de alerta real del Valle de Aburrá.',
+      };
+    },
+    explain: 'La lluvia que cae lejos, en la parte alta de una cuenca grande, tarda en bajar por las laderas y por la quebrada. Por eso la creciente puede llegar al barrio cuando ya dejó de llover, incluso con el cielo despejado. Las estaciones de lluvia y de nivel aguas arriba sirven para avisar con tiempo.',
+    terms: ['cuenca', 'tiempo-de-retardo', 'creciente', 'hidrograma', 'alerta-temprana'],
+  },
+  {
+    id: 'juan-bobo-de-donde',
+    title: '¿De dónde viene el agua?',
+    scenarioId: 'andalucia-juan-bobo',
+    question: 'Cae un aguacero muy fuerte, 80 mm en una hora, sobre Andalucía y sobre la cuenca de la quebrada Juan Bobo. ¿Qué moja primero las casas junto a la quebrada?',
+    context: 'Sector real: terreno, foto aérea, casas y vías de la Alcaldía de Medellín. La cuenca de Juan Bobo hasta este tramo es muy pequeña, unos 0,13 km²; además entra el agua de las laderas vecinas por los bordes del sector.',
+    options: [
+      { id: 'quebrada', text: 'La creciente de la quebrada, que se sale del cauce' },
+      { id: 'barrio', text: 'La lluvia que corre por las calles, escaleras y techos del barrio' },
+      { id: 'nada', text: 'Nada: el agua no llega a esas casas' },
+    ],
+    rain: { intensityMmH: 80, durationMin: 60, pattern: 'constante', spatial: 'uniforme' },
+    simMinutes: 75,
+    creek: { fraction: 0, timeToPeakMin: 6, startMin: 0, source: 'cuenca' },
+    change: { kind: 'ninguno', describe: 'Sin intervención: se observa por dónde llega el agua.' },
+    evaluate: (a) => {
+      const ba = a.basin!, w = a.warning!;
+      const m3s = (v: number) => `${fmtNum(v, v < 10 ? 1 : 0)}\u00a0m³/s`;
+      const over = a.creekOverBankMax > 0;
+      return {
+        outcome: w.firstWetT < 0 ? 'nada' : over ? 'quebrada' : 'barrio',
+        observed: [
+          `La quebrada recogió la lluvia de su cuenca y llegó a un pico de ${m3s(ba.peak)} en el minuto ${fmtNum(ba.tPeak / 60, 0)}. ${over ? `Pasó ${fmtNum(a.creekOverBankMax, 2)} m por encima del cauce lleno.` : `Se quedó ${fmtNum(-a.creekOverBankMax, 2)} m por debajo del cauce lleno: no se salió.`}`,
+          w.firstWetT >= 0 ? `El agua llegó a 10 cm junto a la primera casa cercana a la quebrada en el minuto ${fmtNum(w.firstWetT / 60, 0)}, ${over ? 'con la quebrada ya desbordada' : 'mientras la quebrada seguía dentro de su cauce'}.` : 'El agua no llegó a 10 cm junto a ninguna casa cercana a la quebrada.',
+          `Edificaciones con 10 cm de agua o más junto a sus muros en todo el sector: ${a.damage.affected}. Esa agua viene de la lluvia en techos, calles y escaleras, y de las laderas vecinas.`,
+        ],
+        rows: [
+          { label: 'Caudal pico de la quebrada', a: m3s(ba.peak), b: '—', change: '—' },
+          { label: 'Altura sobre el cauce lleno', a: `${fmtNum(a.creekOverBankMax, 2)}\u00a0m`, b: '—', change: '—' },
+          { label: 'Edificaciones con agua', a: String(a.damage.affected), b: '—', change: '—' },
+        ],
+        caveat: 'Cuenca delineada con el modelo de elevación; la sección de control y el agua de las laderas son estimaciones; no hay red de alcantarillado en el cálculo. No es un estudio de amenaza.',
+      };
+    },
+    explain: 'Una quebrada con una cuenca pequeña crece poco, aunque llueva muy fuerte. En un barrio de ladera muy construido, el agua que moja las casas suele llegar antes por las calles, las escaleras y los techos que por la quebrada. Por eso importan los sumideros limpios, las cunetas y que el agua de los techos vaya bien conducida.',
+    terms: ['escorrentia', 'cuenca', 'creciente', 'sumidero'],
+  },
 ];
 
 /** Costos del juego para la misión de presupuesto (puntos, no dinero). */

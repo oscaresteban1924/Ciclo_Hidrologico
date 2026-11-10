@@ -121,7 +121,7 @@ En el laboratorio, los estudiantes pueden:
 Además hay:
 - una barra en vivo «¿Adónde fue la lluvia?», que muestra qué parte del agua sigue sobre el suelo, cuál salió, cuál entró al suelo, cuál tomaron los sumideros y cuál guardan los depósitos;
 - una guía de primeros pasos;
-- once misiones (pregunta, predicción, cambio y explicación);
+- trece misiones (pregunta, predicción, cambio y explicación), dos de ellas en los sectores reales de La Iguaná y Juan Bobo;
 - botones para ocultar las etiquetas de la maqueta y para contraer el panel derecho, de modo que la maqueta ocupe todo el ancho (se recuerdan en el dispositivo);
 - un panel docente con supuestos, balance de agua, fuentes y pruebas.
 
