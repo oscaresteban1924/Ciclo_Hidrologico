@@ -290,7 +290,7 @@ export default function CityLab() {
           <>
             <div className="city-ov city-crumb">
               <strong>Valle de Aburrá</strong>
-              <span>Relieve, río, quebradas y transporte con datos oficiales · relieve y edificios ×{fmtNum(VALLEY_EXAGGERATION, 1)} · edificios ilustrativos</span>
+              <span>Relieve, río, quebradas, transporte y calles con datos oficiales · alturas del catastro en Medellín · relieve y edificios ×{fmtNum(VALLEY_EXAGGERATION, 1)}</span>
             </div>
             {renderer === '2d' && <ValleyList api={api!} />}
             {panelHidden && (
@@ -426,7 +426,7 @@ function ValleyLegend() {
         ))}
       </ul>
       <p>
-        Datos: Alcaldía de Medellín y Área Metropolitana del Valle de Aburrá (modelo de elevación, red hídrica, red vial, transporte masivo, límites). Fuera del área metropolitana el relieve es un relleno suave, sin ciudad.
+        Datos: Alcaldía de Medellín y Área Metropolitana del Valle de Aburrá (modelo de elevación, red hídrica, red vial, transporte masivo, límites; en Medellín, pisos de las construcciones del catastro por barrio). Los edificios se ubican a lo largo de las calles reales; cada edificio es ilustrativo y fuera de Medellín sus alturas también. Fuera del área metropolitana el relieve es un relleno suave, sin ciudad.
       </p>
     </details>
   );

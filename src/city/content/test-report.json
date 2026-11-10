@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-11-10T19:13:31.727Z",
+  "generatedAt": "2026-11-10T21:54:35.996Z",
   "engine": "inercial-local-urbano 1.0.0",
   "node": "v22.23.4",
-  "passed": 63,
-  "total": 63,
+  "passed": 64,
+  "total": 64,
   "results": [
     {
       "id": "1",
@@ -111,7 +111,7 @@
       "kind": "revision",
       "name": "Revisión de sensibilidad a la resolución (calle de prueba: 2 m, 1 m, 0,5 m)",
       "tolerance": "criterio fijado antes de correr: balance cerrado (|residuo|/P < 1·10⁻⁹) en las tres; entre 1 m y 0,5 m: salida total difiere < 10 % y profundidad máxima en la esquina difiere < 1 cm",
-      "measured": "dx 2 m: P 89.60 m³, salida 35.25, drenado 49.65, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2336 pasos, 246 ms | dx 1 m: P 89.60 m³, salida 39.23, drenado 46.61, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3053 pasos, 1217 ms | dx 0.5 m: P 89.60 m³, salida 42.27, drenado 43.58, infiltrado 3.45, esquina 0.45 cm, pico 35.9 L/s, área ≥ 5 cm 0 m², 6064 pasos, 9746 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.30 cm",
+      "measured": "dx 2 m: P 89.60 m³, salida 35.25, drenado 49.65, infiltrado 3.51, esquina 0.02 cm, pico 30.1 L/s, área ≥ 5 cm 8 m², 2336 pasos, 252 ms | dx 1 m: P 89.60 m³, salida 39.23, drenado 46.61, infiltrado 3.45, esquina 0.16 cm, pico 33.3 L/s, área ≥ 5 cm 0 m², 3053 pasos, 1231 ms | dx 0.5 m: P 89.60 m³, salida 42.27, drenado 43.58, infiltrado 3.45, esquina 0.45 cm, pico 35.9 L/s, área ≥ 5 cm 0 m², 6064 pasos, 10029 ms → Δsalida 1 m vs 0,5 m = 7.2 %, Δesquina = 0.30 cm",
       "pass": true,
       "note": "Historia (se publica): en la primera ejecución NO cumplió (Δsalida 1 m vs 0,5 m = 20,2 %; drenado 12,3 / 15,0 / 27,0 m³ a 2 / 1 / 0,5 m). Causas encontradas: (1) la rejilla usaba la profundidad media de la celda, que depende del tamaño de celda; se agregó la reconstrucción de la profundidad junto al bordillo con la pendiente transversal de la cuneta (lámina triangular o trapezoidal), y (2) en la calle de prueba el sumidero no estaba en el punto más bajo de la esquina; se movió al fondo de la depresión. El criterio no se cambió. La captación sigue siendo la magnitud más sensible a la resolución; las comparaciones A/B se hacen siempre a la misma resolución."
     },
@@ -193,6 +193,14 @@
       "name": "El entorno de cada sector sigue el valle de referencia, sin escalones ni objetos dentro del sector",
       "tolerance": "unión con el borde del sector < 1 mm; relieve dibujado frente al de referencia: diferencia media < 2 m entre 0,3 y 2 km y < 15 m entre 2 y 8 km (la malla se abre con la distancia); ningún objeto del entorno dentro del sector; río en su posición (< 1 m)",
       "measured": "borde: 0.00 mm; relieve 0,3–2 km: media 0.6 m (máx. local 20 m); 2–8 km: media 11.7 m (máx. local 145 m, en cañones de quebradas); objetos dentro del sector: 0 de 21514; río: 0.00 m",
+      "pass": true
+    },
+    {
+      "id": "V10",
+      "kind": "verificacion",
+      "name": "Edificios del valle: franjas a lo largo de la red vial, fuera del cauce del río, con alturas del catastro en Medellín",
+      "tolerance": "todas las franjas se decodifican con números finitos, dentro del valle, con frente y fondo de al menos 4 m; ninguna esquina a menos de 35 m del eje del río; tantas franjas como el informe del generador y error de decodificación 0; cada zona con su distribución de pisos que suma 1 y su fracción construida entre 0,12 y 1; 292 zonas de Medellín con datos del catastro",
+      "measured": "79983 franjas (informe 79983); inválidas 0; esquinas a menos de 35 m del río 0 (mínimo 43 m); error de decodificación 0; zonas 300, del catastro 292; sumas fuera de 1: 0; fracciones fuera de rango: 0",
       "pass": true
     },
     {
@@ -433,7 +441,7 @@
       "kind": "obligatoria",
       "name": "Lluvia larga: tormenta de 10 años y 3 h en la ladera, con el balance cerrado",
       "tolerance": "lluvia que entra = lámina del hietograma × área (error < 10⁻⁶); residuo del balance < 10⁻⁹ del agua que entró; sin valores no finitos; la configuración con 3 °C se acepta y una de 7 años y 90 min se rechaza",
-      "measured": "58.4 mm en 3 h; lluvia 717.1 m³ frente a 717.1 m³; residuo/entrada 1.6e-14; infiltrado 105 m³, drenado 211 m³, salida 806 m³; 30992 pasos en 9.8 s; 3 °C aceptada; 7 años/90 min rechazada (2 errores)",
+      "measured": "58.4 mm en 3 h; lluvia 717.1 m³ frente a 717.1 m³; residuo/entrada 1.6e-14; infiltrado 105 m³, drenado 211 m³, salida 806 m³; 30992 pasos en 9.9 s; 3 °C aceptada; 7 años/90 min rechazada (2 errores)",
       "pass": true
     },
     {
@@ -530,7 +538,7 @@
       "area": 8,
       "res": -1.1368683772161603e-13,
       "steps": 2336,
-      "ms": 246.41657699999996
+      "ms": 252.3161889999992
     },
     {
       "dx": 1,
@@ -543,7 +551,7 @@
       "area": 0,
       "res": -4.263256414560601e-14,
       "steps": 3053,
-      "ms": 1217.29659
+      "ms": 1231.3241609999986
     },
     {
       "dx": 0.5,
@@ -556,7 +564,7 @@
       "area": 0,
       "res": 3.268496584496461e-13,
       "steps": 6064,
-      "ms": 9745.59367
+      "ms": 10029.328934000001
     }
   ],
   "froude": [

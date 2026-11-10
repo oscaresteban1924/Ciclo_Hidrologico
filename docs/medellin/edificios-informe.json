@@ -1,0 +1,43 @@
+{
+ "tramos": 35468,
+ "rasterOcupado": 0.0815,
+ "franjas": 81116,
+ "frenteKm": 2098.8,
+ "franjasConZona": 79983,
+ "verificacionDecodificacion": {
+  "errorMaximoUnidades": 0,
+  "nota": "posición decodificada frente a la codificada; 0 = exacta"
+ },
+ "datos": {
+  "bytes": 491919,
+  "comprimidos": 280117,
+  "flujos": [
+   85709,
+   83341,
+   79983,
+   80079,
+   79983,
+   82824
+  ]
+ },
+ "medellin": {
+  "barriosYVeredas": 292,
+  "huellaHa": 3468.8,
+  "pctHuellaPorPisos": {
+   "1": 35.91,
+   "2": 30.2,
+   "3": 19.44,
+   "4": 5.88,
+   "5": 3.0,
+   "6-8": 2.36,
+   "9-12": 1.52,
+   "13-18": 0.88,
+   "19-25": 0.62,
+   "26-45": 0.2
+  },
+  "fraccionConstruidaMediana": 1.0,
+  "areaFrentesHa": 2194.4,
+  "barriosConFrentesInsuficientes": 264
+ },
+ "zonas": 300
+}

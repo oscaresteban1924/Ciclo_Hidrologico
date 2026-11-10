@@ -16,6 +16,7 @@ import { prng } from '../scenarios/primitives';
 import { LabelLayer, type LabelItem } from './labels';
 import { VALLEY_COLORS, VALLEY_EXAGGERATION } from './palette';
 import { CARPET_GLSL } from './carpet';
+import { franjas, GRUPOS_PISOS, zona } from './edificios';
 import {
   CABLES,
   COMUNAS,
@@ -70,7 +71,22 @@ const TERRAIN_FS_COMMON = `#include <common>
 varying vec3 vWP;
 varying vec2 vUrb;
 varying float vVeg;
-${CARPET_GLSL}`;
+${CARPET_GLSL}
+// Suelo de la ciudad entre los edificios (los edificios se dibujan aparte, sobre la red vial): pavimento y
+// andenes grises, algún parque; de lejos, el color medio del tejido. base = verde; ub = color del tejido.
+vec3 urbanGround(vec2 p, float fw, vec3 base, vec3 ub, float fab, float k) {
+  float edge = smoothstep(0.0, 0.6, k + 0.35 * (vn(p * 0.08) - 0.5));
+  float n = vn(p * 0.35);
+  vec3 pav = vec3(0.4, 0.39, 0.38) * (0.9 + 0.2 * n);
+  // jardines y antejardines entre los edificios: mucho en El Poblado, algo en lo plano, poco en el centro;
+  // en las laderas, tierra y concreto
+  float gw = fab > 3.5 && fab < 4.5 ? 0.62 : fab > 1.5 && fab < 2.5 ? 0.38 : fab > 5.5 ? 0.3 : fab < 1.5 ? 0.12 : 0.1;
+  vec3 garden = base * (0.78 + 0.2 * vn(p * 0.9));
+  vec3 g = mix(pav, garden, gw * smoothstep(0.25, 0.75, vn(p * 0.22 + 3.0)) * 1.4);
+  if (fab < 1.5) g = mix(g, vec3(0.45, 0.37, 0.3), 0.35 * vn(p * 0.5 + 11.0));
+  g = mix(g, ub, smoothstep(1.5, 6.0, fw) * 0.55);
+  return mix(base, g, edge);
+}`;
 
 const TERRAIN_FS_COLOR = `#include <color_fragment>
 {
@@ -81,24 +97,99 @@ const TERRAIN_FS_COLOR = `#include <color_fragment>
   vec3 green = diffuseColor.rgb * (0.86 + 0.28 * n);
   green = mix(green, vec3(0.17, 0.32, 0.15), smoothstep(0.35, 0.75, vVeg + 0.3 * (n - 0.5)) * 0.9);
   diffuseColor.rgb = green;
-  if (vUrb.y > 0.01) diffuseColor.rgb = carpet(p, fw, green, vUrbBase, floor(vUrb.x + 0.5), vUrb.y);
+  if (vUrb.y > 0.01) diffuseColor.rgb = urbanGround(p, fw, green, vUrbBase, floor(vUrb.x + 0.5), vUrb.y);
 }`;
 
+// Fachadas y techos de los edificios del valle (todo con ruido por lote, sin texturas). aB = (tipo + 4 × techo,
+// semilla, lotes, pisos); tipo 0 casas en hilera · 1 apartamentos y torres · 2 bodegas · 3 casas rurales;
+// techo 0 losa de concreto · 1 teja de barro · 2 zinc o fibrocemento · 3 claro. Los detalles (ventanas,
+// medianeras, tanques de agua) aparecen solo cuando un piso mide varios píxeles: de lejos, su color medio.
 const BUILDING_FS = `#include <color_fragment>
 {
-  // fachadas de torres: franjas de pisos que se desvanecen con la distancia; techos según el tipo
-  float kind = vBKind.x;
+  float kp = vB.x;
+  float roofT = floor(kp / 4.0 + 0.01);
+  float kind = kp - 4.0 * roofT;
+  float seed = vB.y, lots = max(1.0, vB.z), floors = max(1.0, vB.w);
+  float W = vBS.x, H = vBS.y, Dp = vBS.z;
+  float lotIdx = floor(clamp(vBL.x + 0.5, 0.0, 0.9999) * lots);
+  float lr = bh(vec2(seed * 97.0 + lotIdx, seed * 13.0 + 3.0));
   if (vBN.y > 0.5) {
-    float r = vBKind.y;
-    vec3 roof = kind > 0.5 ? diffuseColor.rgb * 0.82 : r < 0.6 ? vec3(0.55, 0.54, 0.51) : r < 0.82 ? vec3(0.62, 0.33, 0.22) : vec3(0.62, 0.65, 0.68);
+    float rt = roofT;
+    if (kind < 0.5 && lr < 0.22) rt = mod(rt + 1.0 + floor(lr * 9.0), 4.0); // lotes vecinos con otro techo
+    vec3 roof = rt < 0.5 ? vec3(0.56, 0.55, 0.53) : rt < 1.5 ? vec3(0.63, 0.31, 0.2) : rt < 2.5 ? vec3(0.57, 0.61, 0.64) : vec3(0.8, 0.79, 0.76);
+    roof *= 0.84 + 0.28 * lr;
+    vec2 rp = vec2((vBL.x + 0.5) * W, (vBL.z + 0.5) * Dp);
+    float pr = fwidth(rp.x);
+    float detR = 1.0 - smoothstep(0.012, 0.04, pr);
+    // pretil más claro en el borde de cada lote
+    float lw = W / lots;
+    float lx = mod(rp.x, lw);
+    float e = min(min(lx, lw - lx), min(rp.y, Dp - rp.y));
+    roof = mix(roof, roof * 1.2, (1.0 - smoothstep(0.0, 0.07, e)) * detR);
+    // tanque de agua negro en algunas terrazas (casas y apartamentos)
+    if (kind < 1.5 && rt < 0.5) {
+      vec2 tc = vec2(lotIdx * lw + lw * (0.3 + 0.4 * bh(vec2(lr, 5.0))), Dp * (0.25 + 0.5 * bh(vec2(lr, 9.0))));
+      float tk = 1.0 - smoothstep(0.06, 0.09, length(rp - tc));
+      roof = mix(roof, vec3(0.09, 0.1, 0.11), tk * detR * step(0.45, bh(vec2(lr, 2.0))));
+    }
+    // bodegas: cubierta acanalada
+    if (kind > 1.5 && kind < 2.5) roof *= 0.94 + 0.06 * step(0.5, fract(rp.y * 2.5)) * detR;
     diffuseColor.rgb = roof;
-  } else if (kind > 0.5) {
-    float yy = vBL.y * vBS.y;
-    float fw = fwidth(yy);
-    float band = smoothstep(0.62, 0.7, fract(yy / 0.45)) * (1.0 - smoothstep(0.08, 0.25, fw));
-    diffuseColor.rgb *= 1.0 - 0.28 * band;
+  } else {
+    bool side = abs(vBN.x) > 0.5;
+    float along = side ? (vBL.z + 0.5) * Dp : (vBL.x + 0.5) * W;
+    float yy = vBL.y * H;
+    float fh = H / floors;
+    float pxs = max(fwidth(along), fwidth(yy));
+    // dos niveles de detalle: franjas de ventanas por piso (si un piso mide ≥ 4 px) y ventanas sueltas (≥ 12 px)
+    float detB = 1.0 - smoothstep(0.12, 0.3, pxs / fh);
+    float det = 1.0 - smoothstep(0.05, 0.1, pxs / fh);
+    vec3 col = diffuseColor.rgb;
+    if (kind < 0.5 && !side) {
+      col *= 0.8 + 0.4 * lr; // cada casa de la hilera con su tono
+      if (lr > 0.86) col = mix(col, vec3(0.86, 0.84, 0.78), 0.7); // alguna pintada de claro
+    }
+    float cw = kind > 0.5 && kind < 1.5 ? 0.31 : 0.4; // módulo de ventana [10 m]
+    vec2 cell = vec2(along / cw, yy / fh);
+    vec2 f = fract(cell);
+    float band = step(0.34, f.y) * step(f.y, 0.78);
+    float win = band * step(0.22, f.x) * step(f.x, 0.78);
+    if (kind > 1.5 && kind < 2.5) { band = step(0.78, yy / H) * step(yy / H, 0.92); win = band * step(0.1, f.x) * step(f.x, 0.9); }
+    if (yy < fh * 0.3 || yy > H - fh * 0.15) { band = 0.0; win = 0.0; }
+    float wr = bh(floor(cell) + vec2(seed * 7.0, lotIdx));
+    vec3 glass = mix(vec3(0.17, 0.21, 0.26), vec3(0.56, 0.65, 0.74), step(0.7, wr) * 0.8);
+    float cover = kind > 0.5 && kind < 1.5 ? 0.42 : kind > 1.5 && kind < 2.5 ? 0.1 : 0.26;
+    vec3 far = mix(col, glass, cover * 0.5);
+    vec3 mid = mix(col, mix(col, glass, 0.62), band);
+    vec3 near = mix(col, glass, win * 0.92);
+    col = mix(mix(far, mid, detB), near, det);
+    // medianeras entre las casas de una hilera
+    if (kind < 0.5 && lots > 1.0 && !side) {
+      float lf = fract((vBL.x + 0.5) * lots);
+      col *= 1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.035, min(lf, 1.0 - lf))) * det;
+    }
+    // sombra al pie (oclusión) y cornisa clara arriba
+    col *= 0.68 + 0.32 * smoothstep(0.0, 0.45, yy);
+    col *= 1.0 + 0.14 * (1.0 - smoothstep(0.0, 0.07, H - yy));
+    diffuseColor.rgb = col;
   }
 }`;
+
+/** Probabilidad de un árbol cada 11–17 m de andén según el tejido. */
+function row0Trees(f: Fabric): number {
+  return f === Fabric.Poblado ? 0.75 : f === Fabric.Plano ? 0.55 : f === Fabric.Municipio ? 0.35 : f === Fabric.Centro ? 0.25 : f === Fabric.Ladera ? 0.08 : 0;
+}
+
+/** Ruido de valor suave en [0, 1] (para agrupar torres y parques). */
+function vnoise2(x: number, y: number): number {
+  const h = (i: number, j: number) => {
+    const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const i = Math.floor(x), j = Math.floor(y), u = x - i, v = y - j;
+  const su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
+  return (h(i, j) * (1 - su) + h(i + 1, j) * su) * (1 - sv) + (h(i, j + 1) * (1 - su) + h(i + 1, j + 1) * su) * sv;
+}
 
 /** Disco blanco con aro de color (marca de estación, de tamaño fijo en pantalla). */
 function stationTexture(color: string): THREE.CanvasTexture | null {
@@ -139,6 +230,8 @@ export class ValleyScene {
   private tween: { from: [THREE.Vector3, THREE.Vector3]; to: [THREE.Vector3, THREE.Vector3]; start: number; dur: number; done?: () => void } | null = null;
   private disposed = false;
   private time = 0;
+  /** Cuántos edificios se dibujaron (para la verificación y el rendimiento). */
+  cityStats: { edificios: number; torres: number; lotesPorEdificio: number; franjas: number; cupo: number; generados: number; arbolesAnden: number } | null = null;
   private movers: { mesh: THREE.Object3D; path: THREE.Vector3[]; len: number[]; total: number; phase: number; speed: number; loop: boolean }[] = [];
   private textures: THREE.Texture[] = [];
   private clouds: THREE.Sprite[] = [];
@@ -213,8 +306,8 @@ export class ValleyScene {
     this.buildCreeks();
     this.buildBoundaries();
     const keepOut = this.buildLandmarks();
-    this.buildCity(alta, rnd, keepOut);
-    this.buildTrees(alta, rnd);
+    const streetTrees = this.buildCity(alta, keepOut);
+    this.buildTrees(alta, rnd, streetTrees);
     this.buildTransit();
     this.buildClouds(rnd);
     this.buildPins();
@@ -554,113 +647,228 @@ export class ValleyScene {
   }
 
   // ------------------------------------------------------------ edificios
-  private buildCity(alta: boolean, rnd: () => number, keepOut: { x: number; y: number; r: number }[]): void {
-    const N = alta ? 46000 : 15000;
-    const step = alta ? 0.047 : 0.075; // separación de la rejilla de muestreo [km]
-    const DENS = [0, 0.9, 0.55, 0.9, 0.55, 0.45, 0.72];
-    const { x0, x1, y0, y1 } = EXTENT;
-    // primera pasada: cuántos edificios saldrían; si pasan del máximo, se ralea por igual en todo el valle
-    // (antes se cortaba al llegar al máximo y el norte quedaba sin ciudad)
-    let expected = 0;
-    for (let y = y0 + 0.4; y < y1 - 0.3; y += step) for (let x = x0 + 0.4; x < x1 - 0.4; x += step) {
-      const fab = fabricAt(x, y);
-      if (fab.f !== Fabric.None) expected += DENS[fab.f] * Math.min(1, fab.k * 1.15);
+  /**
+   * Edificios a lo largo de las franjas edificables de la red vial oficial (edificios.ts). En cada franja, con un
+   * azar fijo, se alternan lotes: casas en hilera, apartamentos y torres según la distribución de pisos de su
+   * barrio (catastro de Medellín) o de su municipio (ilustrativa), bodegas en el tejido industrial y casas
+   * sueltas en lo rural. Se devuelven los puntos de los árboles de las calles (en los andenes).
+   */
+  private buildCity(alta: boolean, keepOut: { x: number; y: number; r: number }[]): THREE.Vector3[] {
+    const runs = franjas();
+    const budget = alta ? 115000 : 60000;
+    const lotRange = (f: Fabric): [number, number] => (f === Fabric.Ladera ? [6, 9] : f === Fabric.Centro ? [10, 16] : f === Fabric.Industria ? [12, 18] : [8, 12]);
+    const fabs = new Uint8Array(runs.length), ks = new Float32Array(runs.length);
+    runs.forEach((r, i) => {
+      const fb = fabricAt(r.x + ((Math.cos(r.a) * r.L) / 2 - (Math.sin(r.a) * r.d) / 2) / 1000, r.y + ((Math.sin(r.a) * r.L) / 2 + (Math.cos(r.a) * r.d) / 2) / 1000);
+      fabs[i] = fb.f;
+      ks[i] = fb.k;
+    });
+    const brick = [0xa85a3c, 0xb4643f, 0x9c4f33, 0xb86a45, 0xa35c40, 0xad6a4a];
+    const painted = [0xe2b64e, 0x4fa3a1, 0xd77f72, 0x7fb069, 0xd8a0b5, 0x6f9fd8, 0xe58e4f];
+    const light = [0xe6e1d6, 0xd8d2c6, 0xcfd5da, 0xece7dc, 0xc9c2b6, 0xe3dccb];
+    const gray = [0xa7a6a1, 0x9a9893, 0xb3b1aa];
+    const glassy = [0x8fa3b3, 0x7d93a6, 0xa9b8c2];
+    const pick = (a: number[], r: number) => a[Math.min(a.length - 1, Math.floor(r * a.length))];
+    const FIELDS = 11; // cx, cy, a, w, d, pisos, tipo, techo, lotes, color, semilla
+
+    /** Reparte los edificios de todas las franjas con `merge` lotes por casa en hilera. */
+    const generate = (merge: number) => {
+      const B: number[] = [];
+      let rows = 0; // edificios en hilera (los que se agrupan)
+      const trees: [number, number][] = [];
+      const put = (rnd: () => number, cx: number, cy: number, a: number, w: number, d: number, floors: number, kind: number, roof: number, lots: number, color: number) => {
+        if (keepOut.some((k) => Math.hypot(cx - k.x, cy - k.y) < k.r)) return;
+        B.push(cx, cy, a, w, d, floors, kind, roof, lots, color, Math.floor(rnd() * 997));
+      };
+      for (let i = 0; i < runs.length; i++) {
+        const r = runs[i];
+        const rnd = prng(1000003 + i * 7919);
+        const f = fabs[i] as Fabric, k = ks[i];
+        const z = zona(r.z);
+        const ca = Math.cos(r.a), sa = Math.sin(r.a);
+        const nx = -sa, ny = ca; // los edificios quedan a la izquierda del sentido de la franja
+        const at = (s: number, off: number): [number, number] => [r.x + (ca * s + nx * off) / 1000, r.y + (sa * s + ny * off) / 1000];
+        // las torres se agrupan: un ruido espacial de ≈ 400 m sube o baja su probabilidad (en promedio el barrio se conserva)
+        const tn = 0.25 + 1.5 * vnoise2(r.x * 2.5, r.y * 2.5);
+        const hist = z.h.map((v, b) => (GRUPOS_PISOS[b][0] >= 6 ? v * tn : v));
+        // la tabla es de huella: un grupo de edificios más anchos sale menos veces por lote para la misma huella
+        const widthOf = (b: number) => (GRUPOS_PISOS[b][0] >= 9 ? 22 : GRUPOS_PISOS[b][0] >= 6 ? 16 : 10 * merge);
+        const wts = hist.map((v, b) => v / widthOf(b));
+        const tot = wts.reduce((a, b) => a + b, 0) || 1;
+        const sampleFloors = (): number => {
+          let u = rnd() * tot, b = 0;
+          while (b < wts.length - 1 && u > wts[b]) u -= wts[b++];
+          const [lo, hi] = GRUPOS_PISOS[b];
+          return lo + Math.floor(rnd() * (hi - lo + 1));
+        };
+        const [l0, l1] = lotRange(f);
+        if (f === Fabric.None) {
+          // rural: casas sueltas de uno o dos pisos, casi todas con teja de barro
+          let s = 4 + rnd() * 25;
+          while (s < r.L - 8) {
+            if (rnd() < 0.35) {
+              const w = 7 + rnd() * 5, d = Math.min(r.d, 6 + rnd() * 4);
+              const [cx, cy] = at(s + w / 2, 1.5 + d / 2);
+              put(rnd, cx, cy, r.a, w, d, rnd() < 0.75 ? 1 : 2, 3, rnd() < 0.7 ? 1 : 2, 1, rnd() < 0.6 ? pick(light, rnd()) : pick(painted, rnd()));
+            }
+            s += 18 + rnd() * 30;
+          }
+          continue;
+        }
+        const rowDepth = f === Fabric.Ladera ? 9 + rnd() * 3 : 11 + rnd() * 5;
+        const twoRows = r.d >= rowDepth * 2 + 2 && f !== Fabric.Industria;
+        for (const row of twoRows ? [0, 1] : [0]) {
+          let s = row === 0 ? 0 : (l0 / 2) * rnd();
+          const off0 = row === 0 ? 0 : rowDepth + 1.5;
+          const dAvail = row === 0 ? (twoRows ? rowDepth : r.d) : r.d - rowDepth - 1.5;
+          while (s < r.L - 3) {
+            let floors = sampleFloors();
+            if (f === Fabric.Industria && floors <= 3 && rnd() < 0.8) {
+              // bodega: todo el fondo de la franja
+              const w = Math.min(r.L - s, 22 + rnd() * 38);
+              if (w < 8) break;
+              if (rnd() < z.fill) {
+                const [cx, cy] = at(s + w / 2, off0 + dAvail / 2);
+                put(rnd, cx, cy, r.a, w, dAvail * (0.85 + 0.15 * rnd()), floors, 2, rnd() < 0.7 ? 3 : 2, 1, rnd() < 0.7 ? pick(light, rnd()) : pick(gray, rnd()));
+              }
+              s += w + 2 + rnd() * 6;
+              continue;
+            }
+            if (floors >= 6 && (dAvail < 12 || row === 1)) floors = 3 + Math.floor(rnd() * 3);
+            if (floors >= 6) {
+              // apartamentos y torres: volumen suelto, retirado del andén, con aire entre uno y otro
+              const big = floors >= 9;
+              const w = Math.min(r.L - s, (big ? (f === Fabric.Poblado ? 18 : 16) : 13) + rnd() * (big ? 10 : 8));
+              if (w >= 10) {
+                const d = Math.max(10, Math.min(dAvail - 1, w * (0.75 + 0.5 * rnd())));
+                const setback = Math.min(dAvail - d, 1 + rnd() * 5);
+                if (rnd() < z.fill) {
+                  const [cx, cy] = at(s + w / 2, off0 + setback + d / 2);
+                  const c = f === Fabric.Poblado ? (rnd() < 0.55 ? pick(brick, rnd()) : rnd() < 0.7 ? pick(light, rnd()) : pick(glassy, rnd())) : rnd() < 0.4 ? pick(brick, rnd()) : rnd() < 0.85 ? pick(light, rnd()) : pick(glassy, rnd());
+                  put(rnd, cx, cy, r.a, w, d, floors, 1, rnd() < 0.8 ? 3 : 0, 1, c);
+                }
+                s += w + (big ? 5 + rnd() * 9 : 2 + rnd() * 5);
+                continue;
+              }
+              floors = 3 + Math.floor(rnd() * 2);
+            }
+            // casas en hilera: `merge` lotes por edificio, fachada continua sobre el andén
+            let w = 0;
+            for (let l = 0; l < merge; l++) w += l0 + rnd() * (l1 - l0);
+            w = Math.min(w, r.L - s);
+            if (w < 4) break;
+            if (rnd() < z.fill) {
+              const d = dAvail * (f === Fabric.Ladera ? 0.8 + 0.2 * rnd() : 0.85 + 0.15 * rnd());
+              const [cx, cy] = at(s + w / 2, off0 + d / 2);
+              let c: number, roof: number;
+              if (f === Fabric.Ladera) {
+                const u = rnd();
+                c = u < 0.62 ? pick(brick, rnd()) : u < 0.86 ? pick(painted, rnd()) : u < 0.94 ? pick(gray, rnd()) : pick(light, rnd());
+                roof = rnd() < 0.62 ? 0 : rnd() < 0.7 ? 2 : 1;
+              } else if (f === Fabric.Centro) {
+                c = rnd() < 0.5 ? pick(light, rnd()) : rnd() < 0.6 ? pick(gray, rnd()) : pick(brick, rnd());
+                roof = rnd() < 0.8 ? 0 : 3;
+              } else {
+                const u = rnd();
+                c = u < 0.52 ? pick(brick, rnd()) : u < 0.88 ? pick(light, rnd()) : pick(painted, rnd());
+                roof = rnd() < 0.6 ? 0 : rnd() < 0.75 ? 1 : 2;
+              }
+              put(rnd, cx, cy, r.a, w, d, Math.max(1, floors), 0, roof, Math.max(1, Math.round(w / ((l0 + l1) / 2))), c);
+              rows++;
+            }
+            s += w + (f === Fabric.Ladera && rnd() < 0.25 ? 1 + rnd() * 2 : 0);
+          }
+        }
+        // árboles en el andén (más en las zonas planas y en El Poblado)
+        if (row0Trees(f) > 0 && i % (alta ? 1 : 3) === 0) {
+          const pr = row0Trees(f) * Math.min(1, k * 1.3);
+          for (let s = 6; s < r.L - 4; s += 11 + rnd() * 6) if (rnd() < pr) trees.push(at(s, -1.2));
+        }
+      }
+      return { B, trees, rows };
+    };
+    // primero lote por lote; si pasa del cupo, cada casa en hilera agrupa más lotes (los edificios altos no se
+    // agrupan): se estima cuántos lotes por edificio hacen falta y se ajusta una o dos veces
+    let merge = 1, gen = generate(merge);
+    while (gen.B.length / FIELDS > budget && merge < 8) {
+      const other = gen.B.length / FIELDS - gen.rows;
+      const need = gen.rows * merge / Math.max(1, budget - other);
+      merge = Math.min(8, Math.max(merge + 1, Math.ceil(need)));
+      gen = generate(merge);
     }
-    const thin = Math.min(1, (N * 0.97) / Math.max(1, expected));
-    const box = new THREE.BoxGeometry(1, 1, 1);
-    box.translate(0, 0.5, 0);
-    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88 });
+    // si aún sobran (calidad ligera), se ralea por igual en todo el valle: nunca se corta una zona entera
+    let B = gen.B;
+    const total = B.length / FIELDS;
+    if (total > budget) {
+      const keep = budget / total, kept: number[] = [];
+      for (let o = 0; o < B.length; o += FIELDS) if (((B[o + 10] * 0.7548776662 + o * 0.5698402909) % 1) < keep) for (let f = 0; f < FIELDS; f++) kept.push(B[o + f]);
+      B = kept;
+    }
+    const N = Math.min(budget + 2000, B.length / FIELDS);
+
+    // caja sin cara de abajo (no se ve nunca): 10 triángulos por edificio
+    const full = new THREE.BoxGeometry(1, 1, 1);
+    full.translate(0, 0.5, 0);
+    const bottom = full.groups[3];
+    const idx = Array.from(full.index!.array);
+    idx.splice(bottom.start, bottom.count);
+    const box = full;
+    box.setIndex(idx);
+    box.clearGroups();
+    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.86 });
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec2 aBKind;\nvarying vec2 vBKind;\nvarying vec3 vBL;\nvarying vec3 vBS;\nvarying vec3 vBN;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBKind = aBKind; vBL = position; vBN = normal;\nvBS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));');
+        .replace('#include <common>', '#include <common>\nattribute vec4 aB;\nvarying vec4 vB;\nvarying vec3 vBL;\nvarying vec3 vBS;\nvarying vec3 vBN;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = aB; vBL = position; vBN = normal;\nvBS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));');
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vBKind;\nvarying vec3 vBL;\nvarying vec3 vBS;\nvarying vec3 vBN;')
+        .replace(
+          '#include <common>',
+          '#include <common>\nvarying vec4 vB;\nvarying vec3 vBL;\nvarying vec3 vBS;\nvarying vec3 vBN;\nfloat bh(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }',
+        )
         .replace('#include <color_fragment>', BUILDING_FS);
     };
     const city = new THREE.InstancedMesh(box, mat, N);
-    const kind = new Float32Array(N * 2);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-    const brick = ['#a85a3c', '#b4643f', '#9c4f33', '#b86a45', '#a35c40'];
-    const painted = ['#e2b64e', '#4fa3a1', '#d77f72', '#e9e4d6', '#7fb069', '#d8a0b5'];
-    const light = ['#e6e1d6', '#d8d2c6', '#cfd5da', '#ece7dc', '#c9c2b6'];
-    const tower = ['#a85f40', '#b86f4c', '#9e5638', '#e1ddd5', '#c7ced4', '#b0623f'];
-    let n = 0;
-    for (let y = y0 + 0.4; y < y1 - 0.3 && n < N; y += step) {
-      for (let x = x0 + 0.4; x < x1 - 0.4 && n < N; x += step) {
-        const px = x + (rnd() - 0.5) * step * 0.9, py = y + (rnd() - 0.5) * step * 0.9;
-        const z = this.groundZ(px, py);
-        const fab = fabricAt(px, py, z);
-        if (fab.f === Fabric.None) continue;
-        if (keepOut.some((k) => Math.hypot(px - k.x, py - k.y) < k.r)) continue;
-        const dens = DENS[fab.f] * Math.min(1, fab.k * 1.15) * thin;
-        if (rnd() > dens) continue;
-        let hgt: number, fw: number, fd: number, color: string, isTower = false;
-        const r = rnd();
-        switch (fab.f) {
-          case Fabric.Ladera:
-            hgt = 6 + rnd() * 8;
-            fw = 16 + rnd() * 12;
-            fd = 14 + rnd() * 12;
-            color = r < 0.74 ? brick[Math.floor(rnd() * brick.length)] : painted[Math.floor(rnd() * painted.length)];
-            break;
-          case Fabric.Plano:
-            isTower = r < 0.1;
-            hgt = isTower ? 20 + rnd() * 25 : 6 + rnd() * 7;
-            fw = 18 + rnd() * 12;
-            fd = 18 + rnd() * 10;
-            color = rnd() < 0.4 ? brick[Math.floor(rnd() * brick.length)] : light[Math.floor(rnd() * light.length)];
-            break;
-          case Fabric.Centro:
-            isTower = r < 0.45;
-            hgt = isTower ? 22 + Math.pow(rnd(), 1.8) * 75 : 9 + rnd() * 12;
-            fw = 22 + rnd() * 18;
-            fd = 20 + rnd() * 18;
-            color = rnd() < 0.25 ? brick[Math.floor(rnd() * brick.length)] : light[Math.floor(rnd() * light.length)];
-            break;
-          case Fabric.Poblado:
-            isTower = r < 0.42;
-            hgt = isTower ? 30 + Math.pow(rnd(), 1.5) * 60 : 7 + rnd() * 6;
-            fw = isTower ? 22 + rnd() * 12 : 20 + rnd() * 10;
-            fd = isTower ? 20 + rnd() * 12 : 20 + rnd() * 10;
-            color = isTower ? tower[Math.floor(rnd() * tower.length)] : rnd() < 0.5 ? brick[Math.floor(rnd() * brick.length)] : light[Math.floor(rnd() * light.length)];
-            break;
-          case Fabric.Industria:
-            hgt = 8 + rnd() * 7;
-            fw = 40 + rnd() * 35;
-            fd = 30 + rnd() * 30;
-            color = rnd() < 0.3 ? brick[Math.floor(rnd() * brick.length)] : rnd() < 0.6 ? light[Math.floor(rnd() * light.length)] : '#b9bec2';
-            break;
-          default:
-            isTower = r < 0.08;
-            hgt = isTower ? 28 + rnd() * 35 : 7 + rnd() * 9;
-            fw = 18 + rnd() * 12;
-            fd = 16 + rnd() * 12;
-            color = rnd() < 0.55 ? brick[Math.floor(rnd() * brick.length)] : light[Math.floor(rnd() * light.length)];
-        }
-        // en pendiente, la base baja hasta la esquina más baja (no queda flotando)
-        const hx = fw / 2000, hy = fd / 2000;
-        let low = z;
-        for (const [ax, ay] of [[hx, hy], [-hx, hy], [hx, -hy], [-hx, -hy]]) low = Math.min(low, this.groundZ(px + ax, py + ay));
-        const sink = z - low + 2;
-        p.copy(this.w(px, py, z - sink));
-        const rot = fab.f === Fabric.Ladera ? (rnd() - 0.5) * 1.4 : (rnd() - 0.5) * 0.12;
-        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
-        s.set(fw / 10, mz(hgt + sink), fd / 10);
-        city.setMatrixAt(n, m4.compose(p, q, s));
-        city.setColorAt(n, new THREE.Color(color).multiplyScalar(0.86 + rnd() * 0.22));
-        kind[n * 2] = isTower ? 1 : 0;
-        kind[n * 2 + 1] = rnd();
-        n++;
-      }
+    const attr = new Float32Array(N * 4);
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), yAxis = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+    const towers: { p: THREE.Vector3; a: number; w: number; d: number }[] = [];
+    for (let n = 0; n < N; n++) {
+      const o = n * FIELDS;
+      const cx = B[o], cy = B[o + 1], a = B[o + 2], w = B[o + 3], d = B[o + 4], floors = B[o + 5], kind = B[o + 6], seed = B[o + 10];
+      // en pendiente, la base baja hasta la esquina más baja del lote (no queda flotando)
+      const z = this.groundZ(cx, cy);
+      const ca = Math.cos(a), sa = Math.sin(a), hw = w / 2000, hd = d / 2000;
+      let low = z;
+      for (const [u, v] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) low = Math.min(low, this.groundZ(cx + u * ca - v * sa, cy + u * sa + v * ca));
+      const sink = z - low + 1.5;
+      const hm = kind === 2 ? 7 + floors * 2 : floors * 2.9 + (floors >= 6 ? 1.5 : 0.6);
+      p.copy(this.w(cx, cy, z - sink));
+      q.setFromAxisAngle(yAxis, a);
+      sc.set(w / 10, mz(hm + sink), d / 10);
+      city.setMatrixAt(n, m4.compose(p, q, sc));
+      city.setColorAt(n, col.setHex(B[o + 9]).multiplyScalar(0.9 + ((seed * 0.6180339) % 1) * 0.18));
+      attr[n * 4] = kind + 4 * B[o + 7];
+      attr[n * 4 + 1] = seed;
+      attr[n * 4 + 2] = B[o + 8];
+      attr[n * 4 + 3] = kind === 2 ? 1 : floors;
+      if (floors >= 9 && kind === 1) towers.push({ p: p.clone().add(new THREE.Vector3(0, mz(hm + sink), 0)), a, w, d });
     }
-    city.count = n;
-    box.setAttribute('aBKind', new THREE.InstancedBufferAttribute(kind, 2));
+    box.setAttribute('aB', new THREE.InstancedBufferAttribute(attr, 4));
     this.scene.add(city);
+    // cuartos de máquinas sobre las torres
+    if (towers.length) {
+      const top = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: '#cfccc5', roughness: 0.9 }), towers.length);
+      towers.forEach((t, i) => {
+        q.setFromAxisAngle(yAxis, t.a);
+        top.setMatrixAt(i, m4.compose(t.p, q, sc.set((t.w * 0.32) / 10, mz(3.2), (t.d * 0.3) / 10)));
+      });
+      this.scene.add(top);
+    }
+    this.cityStats = { edificios: N, torres: towers.length, lotesPorEdificio: merge, franjas: runs.length, cupo: budget, generados: total, arbolesAnden: gen.trees.length };
+    return gen.trees.map(([x, y]) => this.w(x, y));
   }
 
   // ------------------------------------------------------------ árboles
-  private buildTrees(alta: boolean, rnd: () => number): void {
+  private buildTrees(alta: boolean, rnd: () => number, streetTrees: THREE.Vector3[]): void {
     const N = alta ? 16000 : 5000;
     const pts: { p: THREE.Vector3; r: number; c: string }[] = [];
     const greens = ['#3f7a34', '#4c8a3c', '#467f38', '#5a9443', '#3a6f31'];
@@ -674,10 +882,10 @@ export class ValleyScene {
       const cr = cross(x, y);
       let pr = 0;
       const hill = tut.some((h) => Math.hypot(x - h.x, y - h.y) < h.r * 0.6);
+      // en la ciudad los árboles van en los andenes (buildCity): aquí solo cerros, bosques y potreros
       if (hill) pr = 0.95;
-      else if (fab.f === Fabric.Plano || fab.f === Fabric.Poblado) pr = 0.45 * fab.k;
       else if (fab.f === Fabric.None && cr.d > 0.12) pr = 0.75 * forestAt(x, y);
-      else pr = 0.03;
+      else pr = fab.f === Fabric.None ? 0.03 : 0;
       if (rnd() > pr) continue;
       const guayacan = (fab.f === Fabric.Plano || fab.f === Fabric.Poblado) && rnd() < 0.12;
       const r = fab.f === Fabric.None && !hill ? 1.3 + rnd() * 1.1 : 0.7 + rnd() * 0.5;
@@ -697,9 +905,14 @@ export class ValleyScene {
       if (c.order < 2) continue;
       for (const [x, y] of this.resample(c.pts, alta ? 0.06 : 0.1)) {
         if (fabricAt(x, y).f === Fabric.None) continue;
-        const tx = x + (rnd() - 0.5) * 0.08, ty = y + (rnd() - 0.5) * 0.08;
+        const tx = x + (rnd() - 0.5) * 0.024, ty = y + (rnd() - 0.5) * 0.024;
         pts.push({ p: this.w(tx, ty), r: 0.7 + rnd() * 0.6, c: greens[Math.floor(rnd() * greens.length)] });
       }
+    }
+    // árboles de los andenes: copas medianas; algunos guayacanes amarillos o rosados
+    for (const t of streetTrees) {
+      const u = rnd();
+      pts.push({ p: t, r: 0.55 + rnd() * 0.35, c: u < 0.08 ? '#e8b923' : u < 0.13 ? '#e48aae' : greens[Math.floor(rnd() * greens.length)] });
     }
     // en calidad ligera, copas de 8 caras en lugar de 20
     const crown = alta ? new THREE.IcosahedronGeometry(1, 0) : new THREE.OctahedronGeometry(1.15, 0);

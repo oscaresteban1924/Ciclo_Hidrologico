@@ -15,6 +15,7 @@ import { TracerSet } from '../../src/city/sim/tracers';
 import { FIELD_CHANNELS, outletFlows, packField, spoutFlows, tankFx } from '../../src/city/render/fxData';
 import { EXTENT as ABURRA_EXTENT, HILLS, LINES, METRO_A, METRO_B, RIVER, SECTOR_SPOTS, STATIONS, VALLE_INFORME, creeks, cross as abCross, fabricAt, outerZ, riverAt, valleyZ } from '../../src/city/render/aburra';
 import { buildBackdrop } from '../../src/city/render/backdrop';
+import { EDIFICIOS_INFORME, N_ZONAS, franjas, zona } from '../../src/city/render/edificios';
 import { DEPTH_STOPS, NATURAL_STOPS, depthColor } from '../../src/city/render/palette';
 import { depthRampTexture } from '../../src/city/render/stormFx';
 import { SewerModel, buildNodeTable, circ, fullFlow, inletCapture, normalDepth, windowK, type CompiledSewer, type SNode, type SPipe } from '../../src/city/sim/sewer';
@@ -629,6 +630,38 @@ const sens: { dx: number; P: number; B: number; D: number; I: number; esq: numbe
     tolerance: 'unión con el borde del sector < 1 mm; relieve dibujado frente al de referencia: diferencia media < 2 m entre 0,3 y 2 km y < 15 m entre 2 y 8 km (la malla se abre con la distancia); ningún objeto del entorno dentro del sector; río en su posición (< 1 m)',
     measured: `borde: ${fmt(edgeErr * 1000, 2)} mm; relieve 0,3–2 km: media ${fmt(mean.near, 1)} m (máx. local ${fmt(max.near, 0)} m); 2–8 km: media ${fmt(mean.far, 1)} m (máx. local ${fmt(max.far, 0)} m, en cañones de quebradas); objetos dentro del sector: ${inside} de ${objects}; río: ${fmt(rioErr, 2)} m`,
     pass: edgeErr < 1e-3 && mean.near < 2 && mean.far < 15 && inside === 0 && objects > 1000 && rioErr < 1,
+  });
+}
+
+// ---------------------------------------------------------------- V10) Edificios del valle sobre la red vial
+{
+  const runs = franjas();
+  let bad = 0, nearRiver = 0, minRiver = Infinity;
+  for (const r of runs) {
+    if (![r.x, r.y, r.a, r.L, r.d].every(Number.isFinite) || r.L < 4 || r.d < 4 || r.x < ABURRA_EXTENT.x0 - 0.1 || r.x > ABURRA_EXTENT.x1 + 0.1 || r.y < ABURRA_EXTENT.y0 - 0.1 || r.y > ABURRA_EXTENT.y1 + 0.1) bad++;
+    const ca = Math.cos(r.a), sa = Math.sin(r.a);
+    for (const [s, o] of [[0, 0], [r.L, 0], [0, r.d], [r.L, r.d], [r.L / 2, r.d / 2]]) {
+      const x = r.x + (ca * s - sa * o) / 1000, y = r.y + (sa * s + ca * o) / 1000;
+      const d = abCross(x, y).d;
+      minRiver = Math.min(minRiver, d);
+      if (d < 0.035) nearRiver++;
+    }
+  }
+  let sums = 0, fills = 0, reales = 0;
+  for (let i = 0; i < N_ZONAS; i++) {
+    const z = zona(i);
+    if (Math.abs(z.h.reduce((a, b) => a + b, 0) - 1) > 1e-9) sums++;
+    if (!(z.fill >= 0.12 && z.fill <= 1)) fills++;
+    if (z.real) reales++;
+  }
+  const inf = EDIFICIOS_INFORME as { franjasConZona: number; medellin: { barriosYVeredas: number }; verificacionDecodificacion: { errorMaximoUnidades: number } };
+  record({
+    id: 'V10',
+    kind: 'verificacion',
+    name: 'Edificios del valle: franjas a lo largo de la red vial, fuera del cauce del río, con alturas del catastro en Medellín',
+    tolerance: 'todas las franjas se decodifican con números finitos, dentro del valle, con frente y fondo de al menos 4 m; ninguna esquina a menos de 35 m del eje del río; tantas franjas como el informe del generador y error de decodificación 0; cada zona con su distribución de pisos que suma 1 y su fracción construida entre 0,12 y 1; 292 zonas de Medellín con datos del catastro',
+    measured: `${runs.length} franjas (informe ${inf.franjasConZona}); inválidas ${bad}; esquinas a menos de 35 m del río ${nearRiver} (mínimo ${fmt(minRiver * 1000, 0)} m); error de decodificación ${inf.verificacionDecodificacion.errorMaximoUnidades}; zonas ${N_ZONAS}, del catastro ${reales}; sumas fuera de 1: ${sums}; fracciones fuera de rango: ${fills}`,
+    pass: runs.length === inf.franjasConZona && bad === 0 && nearRiver === 0 && inf.verificacionDecodificacion.errorMaximoUnidades === 0 && sums === 0 && fills === 0 && reales === inf.medellin.barriosYVeredas && reales === 292,
   });
 }
 

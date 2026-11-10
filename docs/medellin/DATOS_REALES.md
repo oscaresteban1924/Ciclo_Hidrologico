@@ -153,6 +153,23 @@ Primero se descargó el relieve de 25 m en el recuadro del esquema anterior (x d
 
 No es un levantamiento ni un mapa oficial: es una vista para orientarse. El relieve a 100 m suaviza los cañones estrechos (en Caldas el cauce dibujado queda hasta 30 m por encima del fondo real) y está exagerado ×1,5. Las quebradas son las que el D8 encuentra con 0,8 km² de cuenca: las más pequeñas no aparecen y las que corren por fuera de Medellín no tienen nombre. Los edificios y el tipo de tejido son ilustrativos. Fuera del área del AMVA el relieve es inventado y se marca como tal.
 
+### 7.5 Edificios (`tools/geo/edificios_valle.py`)
+
+Los edificios de la vista del valle se ubican a lo largo de las calles reales y, en Medellín, tienen las alturas que registra el catastro en cada barrio o vereda.
+
+**Insumos.** La red vial metropolitana de 7.1 (35 468 tramos con jerarquía) y, del catastro de Medellín, la capa de construcciones (`ServiciosCiudad/CartografiaBase/MapServer/15`, 1 097 775 registros) consultada **solo como estadísticas**: huella construida (suma del área de los polígonos) y número de construcciones por barrio o vereda (los cuatro primeros dígitos de `cobama`) y por número de pisos, en 21 consultas (una por comuna o corregimiento, porque el servicio no pagina las estadísticas). No se descargaron geometrías de edificios. Archivos: `construcciones-medellin/*.json`, con URL y sha256 en el manifiesto (paquete `medellin-construcciones-estadisticas.json`); la suma de cada consulta coincide con el conteo por comuna.
+
+**Procesamiento.**
+1. Corredores en un ráster de 2,5 m: cada tramo con el ancho de su jerarquía (de 9 m en una calle local a 30 m en una autopista), el polígono del río con 20 m de retiro, el eje del río con 45 m, las quebradas con 6 a 18 m según su orden, los cerros tutelares, la pista del aeropuerto, el estadio y dos referentes.
+2. Franjas edificables a cada lado de cada tramo, a 2 m del borde del corredor (andén). La profundidad es la mitad del espacio libre hasta el corredor de atrás (dos frentes comparten la manzana), con un máximo por tejido (14 a 50 m). Las vías principales se procesan primero; cada franja aceptada ocupa el ráster, así que ninguna se monta sobre otra ni sobre una vía. Resultado: 81116 franjas, 2098.8 km de frente.
+3. Zonas: cada franja toma el barrio o vereda de Medellín donde cae su centro (292 con datos del catastro) o su municipio. En Medellín la distribución de pisos es la de la huella construida del barrio; fuera de Medellín es **ilustrativa** (tabla en el generador, por municipio).
+4. Codificación en seis flujos (posición desde el final de la franja anterior, cambio de ángulo, largo, fondo y zona), con enteros para que el navegador llegue exactamente al mismo punto (error de decodificación 0, comprobado en el generador y en V9): 280 kB con zlib.
+5. En el navegador, cada franja se llena con un azar fijo: casas en hilera (con medianeras y tonos por lote), apartamentos y torres retirados del andén, bodegas en el tejido industrial y casas sueltas en lo rural. Un grupo de pisos sale con probabilidad proporcional a su huella dividida por el ancho típico de sus edificios (así la huella por pisos se conserva); las torres se agrupan con un ruido de unos 400 m sin cambiar el total del barrio en promedio. Con calidad alta se dibujan unos 110 000 edificios; con calidad ligera, 60 000 (los lotes se agrupan y, si hace falta, se ralea por igual en todo el valle).
+
+**Lo que dicen los datos.** En Medellín, 3469 ha de huella construida: 35.91 % en un piso, 30.2 % en dos, 19.44 % en tres y 3.2 % en edificios de 9 pisos o más (El Poblado concentra las torres).
+
+**Límites.** La posición de cada edificio dentro de su franja es ilustrativa; la red vial no tiene todas las escaleras y senderos de las laderas, así que allí la ciudad dibujada es menos densa que la real; en 264 de los 292 barrios y veredas la huella real es mayor que el área de los frentes (los frentes se llenan del todo). Los parques y colegios dentro de las manzanas no se distinguen.
+
 ## 8. Servicios oficiales de la Alcaldía de Medellín: lo que se revisó y lo que falta
 
 Se pidió usar diez servicios del servidor de mapas de la Alcaldía para hacer más robusta la modelación. Sus **metadatos** se leyeron el 9 de noviembre de 2026 con el lector web. Los **datos** no se pudieron descargar: el proxy del entorno de trabajo rechaza `www.medellin.gov.co` (403, comprobado dos veces). Nada de lo que hoy dibuja o calcula la aplicación sale de estos servicios.

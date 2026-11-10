@@ -118,7 +118,7 @@ También se usan *sumidero*, *lámina de agua*, *balance de agua*, *pavimento pe
 
 ### La vista del valle
 
-- Se construye con **datos oficiales** de la Alcaldía de Medellín y del Área Metropolitana: el modelo de elevación del AMVA, la red hídrica, la red vial, el sistema de transporte masivo y los límites de municipios y comunas. El relieve y los edificios están exagerados ×1,5; los edificios son ilustrativos (se reparten donde los datos dicen que hay ciudad).
+- Se construye con **datos oficiales** de la Alcaldía de Medellín y del Área Metropolitana: el modelo de elevación del AMVA, la red hídrica, la red vial, el sistema de transporte masivo y los límites de municipios y comunas. El relieve y los edificios están exagerados ×1,5. Los edificios se ubican a lo largo de las calles reales (red vial metropolitana) y, en Medellín, sus alturas siguen lo que registra el catastro en cada barrio: por eso las torres aparecen en El Poblado y en las laderas predominan casas de uno a tres pisos. Cada edificio, su posición exacta y su color son ilustrativos; fuera de Medellín las alturas también.
 - La **leyenda** de la escena explica cada trazo: metro (negro, con sus estaciones), tranvía, metrocables, Metroplús, río, quebradas y límites entre municipios. Fuera del área metropolitana el relieve es un relleno suave, más pálido y sin ciudad.
 - Qué se puede reconocer:
   - el río Medellín, que corre de Caldas a Copacabana por el fondo del valle, con su parque lineal y las autopistas;
