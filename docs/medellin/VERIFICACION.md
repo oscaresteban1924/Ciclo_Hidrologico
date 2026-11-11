@@ -606,6 +606,20 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Pruebas: 29 de 29 de «Hidráulica de canales» (H15 con veinticuatro herramientas y 9 600 llamadas; H23 con 1 440 memorias, 849 planos y 593 gráficas) y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 40 de 40 estados sin choques ni cortes en las cuatro pantallas, con las siete partes y la presa rota. Archivo único: 4 484 kB (1 778 kB comprimido con gzip).
 
+## 4 sexvicies. «Hidráulica de canales»: segundo orden, curva en lazo, Muskingum-Cunge y agua más viva (ejecutada)
+
+**Pedido.** El mismo de la ronda anterior, por tercera vez: «llévalo a otro nivel… mucho más superior».
+
+**Cálculo.** El modelo de Saint-Venant pasó a segundo orden (reconstrucción minmod de la profundidad, la velocidad y la cota del agua, reconstrucción hidrostática de Audusse con el término del fondo en la celda, e integración de Heun). Con las mismas celdas, el error frente a Ritter y Stoker baja a la tercera parte (0,13 % y 0,12 % con 800 celdas, frente a 0,46 % y 0,39 %), y baja como 1/N al refinar (H30); un lago con una isla queda quieto. El caudal de entrada ahora se impone en la interfaz: entra exactamente Q (antes, 0,4 % menos en H26). La escena y el arranque del resalto usan el segundo orden; con él, el pozo del resalto queda a menos de 2 % del cálculo permanente (H29). Nuevos: la curva de gasto permanente en la estación A (perfiles M2, H2 o S2 por Runge-Kutta, a menos de 0,1 % del modelo en doce casos) y la curva en lazo de la creciente (H31); y el tránsito de crecientes por Muskingum-Cunge de parámetros variables, con el criterio de aplicabilidad de Ponce, que coincide con Saint-Venant a 5 y 10 km (pico a menos de 0,13 %, retraso a menos de 4 %; H32).
+
+**Instrumentos y diseño.** En «Ondas y crecientes»: huella del nivel máximo en el perfil, curva de gasto en lazo (subida, bajada y permanente) con su lectura en Experimentos, leyendas en las gráficas, y el pico en B solo se informa cuando ya pasó (antes salía un retraso negativo mientras la creciente iba en camino). Pestaña Diseño: «Tránsito de una creciente (Muskingum-Cunge)» con la gráfica de los hidrogramas de entrada y salida, el paso a paso, las verificaciones (onda difusiva y volumen) y la memoria.
+
+**Imagen.** Cáusticas en el fondo de las siete escenas (red de luz que avanza con la velocidad del agua y se apaga con la profundidad), agua poco profunda un poco transparente, salpicaduras con movimiento balístico en el frente de la onda y en la caída al tanque, huella ocre del nivel máximo en el vidrio y en la pared, y «Cámara con el frente».
+
+**Lo que se descartó.** Se probó la fórmula de Jones para la curva en lazo: con las crecientes de la escena (pico en 10 a 120 s) da errores mayores que la curva permanente, porque son ondas dinámicas; no se incluyó. Una transparencia fuerte del agua dejaba ver el fondo en sombra como manchas oscuras: se dejó moderada.
+
+**Resultado.** Pruebas: 32 de 32 de «Hidráulica de canales» (H15 con veinticinco herramientas y 10 000 llamadas) y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 44 de 44 estados sin choques ni cortes en las cuatro pantallas, con la presa rota y la creciente. Se revisaron en capturas de escritorio y teléfono las cáusticas de cerca y de lejos (de lejos se apagan para no granular), la huella, las salpicaduras, la curva en lazo y la herramienta de tránsito. Archivo único: 4 504 kB (1 786 kB comprimido con gzip).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

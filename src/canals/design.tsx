@@ -21,7 +21,7 @@ import {
   type Result,
   type Vals,
 } from './designCalc';
-import { MOLINETE_EJEMPLO, calcCeleridad, calcRotura, preMuroCompuerta, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
+import { MOLINETE_EJEMPLO, calcCeleridad, calcRotura, calcTransito, preMuroCompuerta, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
 import { PARSHALL, PIERS, type ParshallSize, type PierShape } from './advanced';
 import { planFor } from './designPlans';
 import { chartSVG, planSVG } from './plan';
@@ -374,6 +374,22 @@ const EXTRA: Record<DesignPart, (Tool & { kind: 'calc' | 'pre' })[]> = {
         { id: 'L', label: 'Largo del tramo', unit: 'm', def: 5000 },
       ],
       run: calcCeleridad,
+    },
+    {
+      kind: 'calc',
+      title: 'Tránsito de una creciente (Muskingum-Cunge)',
+      intro: 'Cómo llega una creciente al final de un tramo largo: cuánto baja el pico y cuánto se retrasa, con el método de Muskingum-Cunge de parámetros variables, y si la onda es difusiva (criterio de Ponce).',
+      kidIntro: 'Cuando la creciente baja por el río, ¿llega igual de grande al pueblo?',
+      fields: [
+        { id: 'L', label: 'Largo del tramo', unit: 'km', def: 10 },
+        { id: 'b', label: 'Ancho del cauce', unit: 'm', def: 10 },
+        { id: 'n', label: 'n de Manning', def: 0.035 },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.1 },
+        { id: 'Qb', label: 'Caudal de base', unit: 'm³/s', def: 5 },
+        { id: 'Qp', label: 'Pico de la creciente', unit: 'm³/s', def: 60 },
+        { id: 'tp', label: 'Tiempo al pico', unit: 'h', def: 6 },
+      ],
+      run: calcTransito,
     },
   ],
   sedimentos: [

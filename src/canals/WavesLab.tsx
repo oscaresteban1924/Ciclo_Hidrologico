@@ -8,7 +8,7 @@ import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene
 import { FlatStage, Row, SlopeRange, es } from './common';
 import { DesignTab } from './design';
 import { ritter, stokerProfile } from './unsteady';
-import { DEFAULT_WAVE, WAVE, WaveSim, type WaveInput, type WaveSample, type WaveScenario } from './waves';
+import { DEFAULT_WAVE, WAVE, WaveSim, ratingAt, type RatingPoint, type WaveInput, type WaveSample, type WaveScenario } from './waves';
 import { WavesWorld } from './three/wavesWorld';
 
 interface Snap {
@@ -30,6 +30,12 @@ interface Snap {
   before: { hA: number; VA: number };
   peaks: ReturnType<WaveSim['peaks']>;
   pts: { x: number; zb: number; z: number; E: number }[];
+  /** Huella del nivel máximo desde el último evento (cota, cada 2 celdas). */
+  env: number[];
+  /** Curva de gasto permanente en A (solo en la creciente). */
+  rating: RatingPoint[] | null;
+  /** Profundidad y caudal en A desde que empezó la creciente. */
+  loop: { h: number; Q: number }[];
   hist: WaveSample[];
   vol: number;
   vIn: number;
@@ -63,6 +69,9 @@ function snapOf(sim: WaveSim, vol0: number): Snap {
     before: sim.before,
     peaks: sim.peaks(),
     pts,
+    env: Array.from(sim.zmax).filter((_, i) => i % 2 === 0),
+    rating: sim.inp.scenario === 'creciente' ? sim.rating() : null,
+    loop: sim.floodOn && sim.t0 !== null ? sim.history.filter((p) => p.t >= (sim.t0 ?? 0)).map((p) => ({ h: p.hA, Q: p.QA })) : [],
     hist: sim.history.slice(-300),
     vol: sv.volume(),
     vIn: sv.vIn,
@@ -121,6 +130,9 @@ function ProfileChart({ s, W = 560, H = 150, exact }: { s: Snap; W?: number; H?:
     .join(' ')}`;
   const bed = pts.map((p) => `${X(p.x).toFixed(1)},${Y(p.zb).toFixed(1)}`).join(' ');
   const egl = pts.map((p) => `${X(p.x).toFixed(1)},${Y(Math.min(p.E, zmax)).toFixed(1)}`).join(' ');
+  // huella: solo donde quedó por encima del agua de ahora (si no, se confunde con la superficie)
+  const showEnv = s.env.some((z, i) => pts[i] && z > pts[i].z + 0.02);
+  const env = showEnv ? s.env.map((z, i) => (pts[i] ? `${X(pts[i].x).toFixed(1)},${Y(Math.min(z, zmax)).toFixed(1)}` : '')).filter(Boolean).join(' ') : '';
   let ex = '';
   if (exact && s.inp.scenario === 'presa' && s.broken && s.te !== null && s.inp.S <= 0.0005) {
     ex = pts.map((p) => `${X(p.x).toFixed(1)},${Y(p.zb + (s.inp.h1 > 0 ? stokerProfile(p.x, s.te!, WAVE.xDam, s.inp.h0, s.inp.h1) : ritter(p.x, s.te!, WAVE.xDam, s.inp.h0))).toFixed(1)}`).join(' ');
@@ -132,6 +144,7 @@ function ProfileChart({ s, W = 560, H = 150, exact }: { s: Snap; W?: number; H?:
       <polygon points={water} fill="#9ccbe6" stroke="#1f78b4" strokeWidth="1.2" />
       <polyline points={bed} fill="none" stroke="#6d5a3e" strokeWidth="1.6" />
       <polyline points={egl} fill="none" stroke="#c0392b" strokeWidth="1" strokeDasharray="5 3" />
+      {env && <polyline points={env} fill="none" stroke="#d98a00" strokeWidth="1.4" />}
       {ex && <polyline points={ex} fill="none" stroke="#17324d" strokeWidth="1.2" strokeDasharray="2 2" />}
       {s.inp.scenario === 'presa' && !s.broken && <line x1={X(WAVE.xDam)} x2={X(WAVE.xDam)} y1={Y(pts[0].zb)} y2={Y(s.inp.h0 + 0.4)} stroke="#5b6670" strokeWidth="3" />}
       {s.inp.scenario === 'compuerta' && <line x1={X(WAVE.xGate)} x2={X(WAVE.xGate)} y1={Y(-s.inp.S * WAVE.xGate + (s.closed ? 0 : s.inp.gate))} y2={T} stroke="#5b6670" strokeWidth="3" />}
@@ -146,6 +159,95 @@ function ProfileChart({ s, W = 560, H = 150, exact }: { s: Snap; W?: number; H?:
         <text key={t} x={X(t)} y={H - 7} className="hc-hud-t" textAnchor={t === 300 ? 'end' : 'middle'} fill="#5b6b78">{t === 300 ? '300 m' : t}</text>
       ))}
       <text x={4} y={T + 8} className="hc-hud-t" fill="#5b6b78">cota (m)</text>
+      <g transform={`translate(${W - R - (env ? 168 : 84)} 8)`}>
+        <line x1={0} x2={12} y1={0} y2={0} stroke="#c0392b" strokeDasharray="5 3" />
+        <text x={15} y={3} className="hc-hud-t" fill="#3c4b57">energía</text>
+        {env && (
+          <>
+            <line x1={66} x2={78} y1={0} y2={0} stroke="#d98a00" strokeWidth="1.4" />
+            <text x={81} y={3} className="hc-hud-t" fill="#3c4b57">nivel máximo</text>
+          </>
+        )}
+      </g>
+    </svg>
+  );
+}
+
+/** El pico ya pasó por la estación: fue hace más de 2 s y el caudal ya bajó al menos 3 % de él. */
+function passed(s: Snap, k: 'A' | 'B'): boolean {
+  if (!s.peaks) return false;
+  const [tp, qp] = s.peaks[k];
+  const now = k === 'A' ? s.QA : s.QB;
+  return s.t > tp + 2 && now < qp - 0.03 * Math.max(1, qp - s.inp.Q);
+}
+
+/** Ancho del lazo: caudal a la misma profundidad (80 % de la subida) al subir y al bajar, cuando ya bajó. */
+function loopGap(lp: { h: number; Q: number }[]): { h: number; up: number; down: number } | null {
+  if (lp.length < 10) return null;
+  const pk = lp.reduce((a, p, i) => (p.h > lp[a].h ? i : a), 0);
+  if (pk < 3 || pk > lp.length - 4) return null;
+  const href = lp[0].h + 0.8 * (lp[pk].h - lp[0].h);
+  const up = lp.slice(0, pk + 1).find((p) => p.h >= href);
+  const down = lp.slice(pk).find((p) => p.h <= href);
+  return up && down ? { h: href, up: up.Q, down: down.Q } : null;
+}
+
+/**
+ * Curva de gasto en A: la permanente (cada profundidad con un solo caudal) y la medida durante la creciente, que hace
+ * un lazo: con la misma profundidad pasa más agua cuando el nivel sube que cuando baja.
+ */
+function LoopChart({ s, W = 360, H = 170 }: { s: Snap; W?: number; H?: number }) {
+  const r = s.rating;
+  if (!r) return null;
+  const L = 40, R = 10, T = 22, B = 24;
+  const lp = s.loop;
+  const qTop = Math.max(s.inp.peak * 1.1, ...lp.map((p) => p.Q * 1.05));
+  // desde la mitad del caudal de base: lo de más abajo no aporta y aplasta el lazo
+  const qLo = Math.max(0.2, 0.5 * Math.min(s.inp.Q, ...lp.map((p) => p.Q)));
+  const rr = r.filter((p) => p.Q >= qLo && p.Q <= qTop);
+  const hTop = Math.max(...rr.map((p) => p.h), ...lp.map((p) => p.h)) * 1.06;
+  const hBot = Math.min(...rr.map((p) => p.h), ...lp.map((p) => p.h)) * 0.94;
+  const X = (q: number) => L + (Math.max(0, q) / qTop) * (W - L - R);
+  const Y = (h: number) => H - B - ((h - hBot) / (hTop - hBot)) * (H - T - B);
+  const steady = rr.map((p) => `${X(p.Q).toFixed(1)},${Y(p.h).toFixed(1)}`).join(' ');
+  // subida (hasta el pico de profundidad) y bajada, en dos tramos
+  const pk = lp.reduce((a, p, i) => (p.h > lp[a].h ? i : a), 0);
+  const seg = (a: typeof lp) => a.map((p) => `${X(p.Q).toFixed(1)},${Y(p.h).toFixed(1)}`).join(' ');
+  const gap = loopGap(lp);
+  const hs = ratingAt(r, gap?.h ?? -1);
+  const ticksQ = [0, 0.5, 1].map((f) => Math.round((qTop * f) / 5) * 5);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="hc-hud-svg" role="img" aria-label="Curva de gasto en la estación A: permanente y en lazo durante la creciente">
+      <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="#f7fafc" />
+      <polyline points={steady} fill="none" stroke="#8a96a0" strokeWidth="1.3" strokeDasharray="5 3" />
+      {pk > 0 && <polyline points={seg(lp.slice(0, pk + 1))} fill="none" stroke="#2f7fb0" strokeWidth="1.9" />}
+      {pk < lp.length - 1 && <polyline points={seg(lp.slice(pk))} fill="none" stroke="#c0632b" strokeWidth="1.9" />}
+      {gap && (
+        <g>
+          <line x1={X(gap.down)} x2={X(gap.up)} y1={Y(gap.h)} y2={Y(gap.h)} stroke="#17324d" strokeWidth="1" />
+          <circle cx={X(gap.up)} cy={Y(gap.h)} r="2.6" fill="#2f7fb0" />
+          <circle cx={X(gap.down)} cy={Y(gap.h)} r="2.6" fill="#c0632b" />
+          {hs && <circle cx={X(hs.Q)} cy={Y(gap.h)} r="2.6" fill="#fff" stroke="#8a96a0" />}
+        </g>
+      )}
+      {ticksQ.map((q) => (
+        <text key={q} x={X(q)} y={H - 9} className="hc-hud-t" textAnchor={q === ticksQ[2] ? 'end' : 'middle'} fill="#5b6b78">{q === ticksQ[2] ? `${q} m³/s` : q}</text>
+      ))}
+      {[hBot, (hBot + hTop) / 2, hTop].map((h, k) => (
+        <text key={k} x={L - 4} y={Y(h) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(h, 2)}</text>
+      ))}
+      <text x={4} y={13} className="hc-hud-t" fill="#5b6b78">h en A (m)</text>
+      {lp.length < 2 && (
+        <text x={(L + W - R) / 2} y={(T + H - B) / 2} className="hc-hud-t" textAnchor="middle" fill="#3c4b57">Lanza la creciente: aquí se dibuja el lazo</text>
+      )}
+      <g transform={`translate(${L + 80} 10)`}>
+        <line x1={0} x2={12} y1={0} y2={0} stroke="#8a96a0" strokeDasharray="5 3" />
+        <text x={15} y={3} className="hc-hud-t" fill="#3c4b57">permanente</text>
+        <line x1={78} x2={90} y1={0} y2={0} stroke="#2f7fb0" strokeWidth="2" />
+        <text x={93} y={3} className="hc-hud-t" fill="#3c4b57">sube</text>
+        <line x1={124} x2={136} y1={0} y2={0} stroke="#c0632b" strokeWidth="2" />
+        <text x={139} y={3} className="hc-hud-t" fill="#3c4b57">baja</text>
+      </g>
     </svg>
   );
 }
@@ -189,6 +291,7 @@ export function WavesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [speed, setSpeed] = useState(1);
   const [paused, setPaused] = useState(false);
+  const [follow, setFollow] = useState(false);
   const simRef = useRef<WaveSim | null>(null);
   if (!simRef.current) simRef.current = new WaveSim(DEFAULT_WAVE);
   const sim = simRef.current;
@@ -204,8 +307,9 @@ export function WavesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     if (world.current) {
       world.current.speed = speed;
       world.current.paused = paused;
+      world.current.follow = follow;
     }
-  }, [speed, paused]);
+  }, [speed, paused, follow]);
   // sin WebGL, el modelo avanza aquí; con WebGL lo avanza la escena en cada cuadro
   useEffect(() => {
     let last = performance.now();
@@ -261,6 +365,7 @@ export function WavesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
             world.current = w;
             w.speed = speed;
             w.paused = paused;
+            w.follow = follow;
             w.set(sim);
           }}
         />
@@ -303,6 +408,7 @@ export function WavesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         <div className="hc-hud-row">
           <ProfileChart s={s} />
           <HydroChart s={s} />
+          {inp.scenario === 'creciente' && <LoopChart s={s} />}
         </div>
       </div>
       <DockChoice<WaveScenario>
@@ -319,6 +425,11 @@ export function WavesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         {action}
         <button type="button" className="hc-act" onClick={restart}>Reiniciar</button>
         <button type="button" className="hc-act" onClick={() => setPaused((p) => !p)}>{paused ? 'Seguir' : 'Pausa'}</button>
+        {inp.scenario !== 'creciente' && gl && (
+          <button type="button" className={`hc-act${follow ? ' is-on' : ''}`} aria-pressed={follow} onClick={() => setFollow((f) => !f)}>
+            Cámara con el frente
+          </button>
+        )}
       </div>
       {inp.scenario === 'presa' && (
         <>
@@ -391,11 +502,26 @@ export function WavesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           <table className="q3-table">
             <tbody>
               <tr><th scope="row">Pico a la entrada</th><td>{s.peaks ? `${es(s.peaks.inn[1], 1)} m³/s` : '—'}</td></tr>
-              <tr><th scope="row">Pico en A (60 m)</th><td>{s.peaks ? `${es(s.peaks.A[1], 1)} m³/s` : '—'}</td></tr>
-              <tr><th scope="row">Pico en B (240 m)</th><td>{s.peaks ? `${es(s.peaks.B[1], 1)} m³/s, ${es(s.peaks.B[0] - s.peaks.A[0], 1)} s después de A` : '—'}</td></tr>
-              <tr><th scope="row">Celeridad medida entre A y B</th><td>{s.peaks && s.peaks.B[0] > s.peaks.A[0] ? `${es(180 / (s.peaks.B[0] - s.peaks.A[0]), 2)} m/s` : '—'}</td></tr>
+              <tr><th scope="row">Pico en A (60 m)</th><td>{s.peaks ? (passed(s, 'A') ? `${es(s.peaks.A[1], 1)} m³/s` : 'todavía sube') : '—'}</td></tr>
+              <tr><th scope="row">Pico en B (240 m)</th><td>{s.peaks ? (passed(s, 'B') && s.peaks.B[0] > s.peaks.A[0] ? `${es(s.peaks.B[1], 1)} m³/s, ${es(s.peaks.B[0] - s.peaks.A[0], 1)} s después de A` : 'todavía no pasa') : '—'}</td></tr>
+              <tr><th scope="row">Celeridad medida entre A y B</th><td>{s.peaks && passed(s, 'B') && s.peaks.B[0] > s.peaks.A[0] ? `${es(180 / (s.peaks.B[0] - s.peaks.A[0]), 2)} m/s` : '—'}</td></tr>
+              {(() => {
+                const g = loopGap(s.loop);
+                const st = g && s.rating ? ratingAt(s.rating, g.h) : null;
+                return (
+                  <tr>
+                    <th scope="row">Lazo en A: caudal con la misma profundidad</th>
+                    <td>{g ? `h = ${es(g.h, 2)} m: ${es(g.up, 1)} m³/s al subir y ${es(g.down, 1)} m³/s al bajar${st ? `; permanente ${es(st.Q, 1)} m³/s` : ''}` : 'cuando la creciente haya pasado'}</td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
+        )}
+        {inp.scenario === 'creciente' && (
+          <p className="q3-small">
+            En flujo permanente, cada profundidad tiene un solo caudal (la curva de gasto, calculada aquí con el perfil del canal hasta la caída). En la creciente, la superficie se inclina más al frente de la onda: con la misma profundidad pasa más agua al subir que al bajar, y la curva hace un lazo. Por eso un aforo hecho solo con la profundidad se equivoca en una creciente rápida.
+          </p>
         )}
       </div>
     ),

@@ -441,6 +441,11 @@
   background: #fbeeec;
   color: #9b2c22;
 }
+.hc-act.is-on {
+  border-color: #17324d;
+  background: #17324d;
+  color: #ffffff;
+}
 .hc-act:hover {
   filter: brightness(0.97);
 }

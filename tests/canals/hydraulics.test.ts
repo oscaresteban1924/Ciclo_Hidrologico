@@ -40,7 +40,9 @@ import { SaintVenant, favreSurge, ritter, stoker, stokerProfile } from '../../sr
 import { planFor } from '../../src/canals/designPlans';
 import { chartSVG, planSVG } from '../../src/canals/plan';
 import { memoriaHTML } from '../../src/canals/memoria';
-import { calcCeleridad, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRotura, calcRugosidad, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from '../../src/canals/designAdvanced';
+import { calcCeleridad, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRotura, calcRugosidad, calcTransito, muskingumCunge, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from '../../src/canals/designAdvanced';
+import { WaveSim, steadyDepth } from '../../src/canals/waves';
+import { gammaHydrograph } from '../../src/canals/common';
 import { calcAforo, calcAlcantarilla, calcCanal, calcPuente, calcResalto, calcSedimento, preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente } from '../../src/canals/designCalc';
 import { CR_ROAD, INLETS, ROAD_LEN, culvertModel, inletHW, outletHW, type Inlet } from '../../src/canals/culvert';
 import { BEDFORM_NAME, contractionScour, hortonN, laneK, midSection, parshallH, parshallQ, pierScour, transport, usbrBasin, yarnell, type Bedform } from '../../src/canals/advanced';
@@ -470,7 +472,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     let x = 7;
     return () => ((x = (x * 16807) % 2147483647) / 2147483647);
   })();
-  const fns = { calcCanal, preCanal, calcResalto, prePozo, calcPuente, prePuente, calcAlcantarilla, preAlcantarilla, calcSedimento, preEnrocado, calcAforo, preAforador, calcRugosidad, preCanalTierra, prePozoUSBR, calcPilas, calcContraccion, calcFormulas, calcParshall, preParshall, calcMolinete, calcRotura, preMuroCompuerta, calcCeleridad };
+  const fns = { calcCanal, preCanal, calcResalto, prePozo, calcPuente, prePuente, calcAlcantarilla, preAlcantarilla, calcSedimento, preEnrocado, calcAforo, preAforador, calcRugosidad, preCanalTierra, prePozoUSBR, calcPilas, calcContraccion, calcFormulas, calcParshall, preParshall, calcMolinete, calcRotura, preMuroCompuerta, calcCeleridad, calcTransito };
   let n = 0, bad = 0, thrown = 0;
   const pick = <T,>(a: T[]) => a[Math.floor(R() * a.length)];
   for (let k = 0; k < 400; k++) {
@@ -481,6 +483,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
       d: 0.05 + R() * 300, h: 0.2 + R() * 4, tipo: pick(['rect', 'tri', 'gate']), ang: pick([60, 90]), a: 2 + R() * 8, qmin: 0.5 + R() * 3, qmax: 5 + R() * 40, P: 10 + R() * 10, fb: 10 + R() * 20,
       forma2: pick(['circ', 'cajon']), entradaC: pick(['aletas3075', 'aletas90', 'aletas0', 'muro']), y: 0.1 + R() * 3, nb: 0.012 + R() * 0.05, nw: 0.011 + R() * 0.03, d75: 1 + R() * 120, phi: 25 + R() * 15, tw2: R() * 4, np: Math.floor(R() * 5), Lp: 1 + R() * 10, pila: pick(['semicircular', 'cuadrada', 'triangular', 'otra']), skew: R() * 30, K3: pick([1.1, 1.2, 1.3]), W1: 5 + R() * 60, W2: 3 + R() * 60, y0: 0.3 + R() * 4, d50: 0.1 + R() * 100, size: pick(['1in', '3in', '6in', '9in', '1ft', '3ft', 'x']), Ha: R() * 80, Hb: R() * 60, tabla: pick(['0 0 0\n1 0,5 0,4\n2 0 0', '0 0 0\n2 1 1\n4 1,5 1,2\n6 0 0', 'a b c', '0 0 0']),
       h0: 0.1 + R() * 20, h1: pick([0, R() * 3, R() * 25]), x: 1 + R() * 5000, keep: pick([0, R() * 100, 100]),
+      Qb: 0.5 + R() * 20, Qp: 1 + R() * 300, tp: 0.2 + R() * 30,
     };
     for (const [name, fn] of Object.entries(fns)) {
       n++;
@@ -506,7 +509,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
   record({
     id: 'H15',
     name: 'Calculadoras y prediseñadores de las siete partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios',
-    tolerance: '400 juegos de datos al azar en las veinticuatro herramientas (9 600 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase, el aforador tiene una estructura válida y los muros junto a la compuerta contienen la onda con su borde libre',
+    tolerance: '400 juegos de datos al azar en las veinticinco herramientas (10 000 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase, el aforador tiene una estructura válida y los muros junto a la compuerta contienen la onda con su borde libre',
     measured: `${n} llamadas; excepciones ${thrown}; con valores inválidos ${bad}; propuestas de ejemplo ${okProps ? 'cumplen' : 'NO cumplen'} (alcantarilla: ${pa.outs[0]?.value ?? pa.error})`,
     pass: thrown === 0 && bad === 0 && okProps,
   });
@@ -657,13 +660,13 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     let x = 11;
     return () => ((x = (x * 16807) % 2147483647) / 2147483647);
   })();
-  const tools = { preCanal, preCanalTierra, prePozo, prePozoUSBR, prePuente, preAlcantarilla, preEnrocado, preAforador, preParshall, calcFormulas, calcRotura, preMuroCompuerta };
+  const tools = { preCanal, preCanalTierra, prePozo, prePozoUSBR, prePuente, preAlcantarilla, preEnrocado, preAforador, preParshall, calcFormulas, calcRotura, preMuroCompuerta, calcTransito };
   let made = 0, plans = 0, charts = 0, bad = 0, thrown = 0;
   for (let k = 0; k < 120; k++) {
     const v: Record<string, number | string> =
       k === 0
         ? {}
-        : { Q: 0.5 + R2() * 60, S: 0.05 + R2() * 2, b: 1 + R2() * 12, z: R2() * 2.5, forma: R2() < 0.5 ? 'trap' : 'rect', material: 'concreto', fb: 20, H: 2 + R2() * 8, loss: 10, tw: R2() * 4, fs: 1.1, B: 4 + R2() * 10, Hc: 3, n: 0.03, blk: R2() * 40, gal: 0.5, L: 30, road: 3 + R2() * 4, entrada: 'muro', hwd: 1.5, free: 0.5, vmax: 4.5, d75: 10 + R2() * 80, phi: 33, d: 0.3 + R2() * 30, qmin: 1 + R2() * 4, qmax: 8 + R2() * 100, P: 15, h0: 0.5 + R2() * 10, h1: R2() < 0.4 ? 0 : R2() * 0.5, x: 50 + R2() * 2000, keep: R2() * 60 };
+        : { Q: 0.5 + R2() * 60, S: 0.05 + R2() * 2, b: 1 + R2() * 12, z: R2() * 2.5, forma: R2() < 0.5 ? 'trap' : 'rect', material: 'concreto', fb: 20, H: 2 + R2() * 8, loss: 10, tw: R2() * 4, fs: 1.1, B: 4 + R2() * 10, Hc: 3, n: 0.03, blk: R2() * 40, gal: 0.5, L: 30, road: 3 + R2() * 4, entrada: 'muro', hwd: 1.5, free: 0.5, vmax: 4.5, d75: 10 + R2() * 80, phi: 33, d: 0.3 + R2() * 30, qmin: 1 + R2() * 4, qmax: 8 + R2() * 100, P: 15, h0: 0.5 + R2() * 10, h1: R2() < 0.4 ? 0 : R2() * 0.5, x: 50 + R2() * 2000, keep: R2() * 60, L: 30, Qb: 1 + R2() * 10, Qp: 20 + R2() * 200, tp: 1 + R2() * 12 };
     for (const [name, fn] of Object.entries(tools)) {
       try {
         const res = fn(v);
@@ -682,7 +685,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
   record({
     id: 'H23',
     name: 'Planos acotados, gráficas y memoria de cálculo imprimible de los prediseños',
-    tolerance: '120 juegos de datos (el primero, los de ejemplo) en las doce herramientas con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»',
+    tolerance: '120 juegos de datos (el primero, los de ejemplo) en las trece herramientas con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»',
     measured: `${made} memorias; ${plans} planos y ${charts} gráficas; excepciones ${thrown}; con valores inválidos ${bad}`,
     pass: thrown === 0 && bad === 0 && plans > 0 && charts > 0,
   });
@@ -812,6 +815,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     const r = jumpModel(inp);
     const x1 = inp.basin + 31;
     const sv = new SaintVenant({ L: x1, N: Math.round(x1 / 0.1), b: 4, n: 0.014, zb: (x) => (x < inp.basin ? 0 : inp.weir), up: { kind: 'jet', h: r.y1, Q: () => inp.Q }, down: { kind: 'fall' } });
+    sv.order = 2;
     sv.init((x) => ({ h: x < inp.basin ? inp.weir : 0, q: 0 }));
     sv.advance(200, 4e6);
     const pool = sv.depthAt(inp.basin - 0.5);
@@ -830,8 +834,131 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
   record({
     id: 'H29',
     name: 'El resalto calculado en el tiempo llega al estado del cálculo permanente',
-    tolerance: 'cuatro pozos: con el chorro del pie de la rápida entrando al pozo lleno hasta la cresta, a los 200 s el modelo de Saint-Venant (celdas de 10 cm) da el mismo resultado que el cálculo permanente (resalto atrapado o barrido); si queda atrapado, la profundidad del pozo a menos de 4 % y el resalto dentro del pozo. La posición del resalto se informa pero no se exige: es muy sensible a la profundidad del pozo',
+    tolerance: 'cuatro pozos: con el chorro del pie de la rápida entrando al pozo lleno hasta la cresta, a los 200 s el modelo de Saint-Venant de segundo orden (celdas de 10 cm, como en la escena) da el mismo resultado que el cálculo permanente (resalto atrapado o barrido); si queda atrapado, la profundidad del pozo a menos de 4 % y el resalto dentro del pozo. La posición del resalto se informa pero no se exige: es muy sensible a la profundidad del pozo',
     measured: rows.join('; '),
+    pass: ok,
+  });
+}
+
+// H30) Saint-Venant de segundo orden: menos error con las mismas celdas, convergencia y propiedades conservadas
+{
+  const ritErr = (N: number, o: 1 | 2) => {
+    const sv = new SaintVenant({ L: 100, N, b: 1, n: 0, zb: () => 0, up: { kind: 'wall' }, down: { kind: 'free' } });
+    sv.order = o;
+    sv.init((x) => ({ h: x < 50 ? 1 : 0 }));
+    sv.advance(4, 1e6);
+    let e = 0, sum = 0;
+    for (let i = 0; i < N; i++) {
+      const a = ritter(sv.x[i], sv.t, 50, 1);
+      e += Math.abs(sv.h[i] - a);
+      sum += a;
+    }
+    return e / sum;
+  };
+  const stoErr = (N: number, o: 1 | 2) => {
+    const sv = new SaintVenant({ L: 100, N, b: 1, n: 0, zb: () => 0, up: { kind: 'wall' }, down: { kind: 'free' } });
+    sv.order = o;
+    sv.init((x) => ({ h: x < 50 ? 1 : 0.1 }));
+    sv.advance(5, 1e6);
+    let e = 0, sum = 0;
+    for (let i = 0; i < N; i++) {
+      const a = stokerProfile(sv.x[i], sv.t, 50, 1, 0.1);
+      e += Math.abs(sv.h[i] - a);
+      sum += a;
+    }
+    return e / sum;
+  };
+  const Ns = [100, 200, 400, 800];
+  const r1 = Ns.map((N) => ritErr(N, 1)), r2 = Ns.map((N) => ritErr(N, 2)), s1 = Ns.map((N) => stoErr(N, 1)), s2 = Ns.map((N) => stoErr(N, 2));
+  const rate = (e: number[]) => Math.log(e[0] / e[e.length - 1]) / Math.log(Ns[Ns.length - 1] / Ns[0]);
+  // lago con una isla (orilla seca) y flujo uniforme con el volumen
+  const lake = new SaintVenant({ L: 100, N: 200, b: 2, n: 0.02, zb: (x) => 1.4 * Math.exp(-((x - 50) ** 2) / 50), up: { kind: 'wall' }, down: { kind: 'wall' } });
+  lake.order = 2;
+  lake.init((_, z) => ({ h: Math.max(0, 1 - z) }));
+  lake.advance(100, 1e5);
+  let um = 0;
+  for (let i = 0; i < 200; i++) um = Math.max(um, Math.abs(lake.q[i]));
+  const Q = 10, b = 5, n = 0.02, S = 0.002;
+  const un = new SaintVenant({ L: 2000, N: 200, b, n, zb: (x) => -S * x, up: { kind: 'Q', Q: () => Q }, down: { kind: 'fall' } });
+  un.order = 2;
+  un.init(() => ({ h: 0.5, q: 0 }));
+  const v0 = un.volume();
+  un.advance(6000, 400000);
+  const yn = normalDepth({ shape: 'rect', b, z: 0, D: 0, H: 99 }, n, S, Q);
+  const verr = (un.volume() - v0 - (un.vIn - un.vOut)) / un.volume();
+  const better = r2.every((e, k) => e < r1[k] * 0.75) && s2.every((e, k) => e < s1[k] * 0.75);
+  record({
+    id: 'H30',
+    name: 'Saint-Venant de segundo orden (minmod y Heun): menos error con las mismas celdas y las mismas propiedades',
+    tolerance: 'Ritter y Stoker con 100, 200, 400 y 800 celdas: en cada malla el error de segundo orden es menor que 75 % del de primer orden; con 800 celdas < 0,3 %; el error baja al menos como 1/N (orden ≥ 0,9). Un lago con una isla (orilla seca) queda quieto (< 1e-9 m²/s); flujo uniforme a menos de 0,1 % de Manning y error de volumen < 1e-9',
+    measured: `Ritter: ${r1.map((e) => (100 * e).toFixed(2)).join(' / ')} % (1.er orden) y ${r2.map((e) => (100 * e).toFixed(2)).join(' / ')} % (2.º), orden ${rate(r1).toFixed(2)} y ${rate(r2).toFixed(2)}; Stoker: ${s1.map((e) => (100 * e).toFixed(2)).join(' / ')} % y ${s2.map((e) => (100 * e).toFixed(2)).join(' / ')} %, orden ${rate(s1).toFixed(2)} y ${rate(s2).toFixed(2)}; lago con isla ${um.toExponential(1)} m²/s; uniforme ${un.depthAt(1000).toFixed(4)} m (Manning ${yn.toFixed(4)} m); volumen ${verr.toExponential(1)}`,
+    pass: better && r2[3] < 0.003 && s2[3] < 0.003 && rate(r2) >= 0.9 && rate(s2) >= 0.9 && um < 1e-9 && rel(un.depthAt(1000), yn) < 0.001 && Math.abs(verr) < 1e-9,
+  });
+}
+
+// H31) Curva de gasto en la estación A: la permanente coincide con el modelo y la creciente hace un lazo
+{
+  let worst = 0;
+  const cases: string[] = [];
+  for (const S of [0, 0.001, 0.005, 0.01])
+    for (const Q of [2, 8, 15]) {
+      const sim = new WaveSim({ scenario: 'creciente', Q, S });
+      const e = rel(sim.sv.depthAt(60), steadyDepth(Q, S, 60));
+      worst = Math.max(worst, e);
+    }
+  let loopOk = true;
+  for (const S of [0.001, 0.005]) {
+    const sim = new WaveSim({ scenario: 'creciente', Q: 4, peak: 24, tp: 30, S });
+    sim.startFlood();
+    for (let k = 0; k < 1500; k++) sim.tick(0.1);
+    const H = sim.history;
+    const pk = H.reduce((a, p, i) => (p.hA > H[a].hA ? i : a), 0);
+    const href = H[0].hA + 0.8 * (H[pk].hA - H[0].hA);
+    const up = H.slice(0, pk + 1).find((p) => p.hA >= href)!, down = H.slice(pk).find((p) => p.hA <= href)!;
+    if (!(up && down && up.QA > down.QA * 1.05)) loopOk = false;
+    cases.push(`S = ${(S * 100).toFixed(1)} %: con h = ${href.toFixed(3)} m pasan ${up?.QA.toFixed(2)} m³/s al subir y ${down?.QA.toFixed(2)} m³/s al bajar`);
+  }
+  record({
+    id: 'H31',
+    name: 'Curva de gasto en la estación A: permanente igual al modelo, y en lazo durante la creciente',
+    tolerance: 'doce casos (pendiente 0 a 1 %, 2 a 15 m³/s, suave y fuerte): la profundidad de la curva permanente (perfil M2, H2 o S2 por Runge-Kutta desde la crítica) a menos de 0,5 % de la del modelo de Saint-Venant ya estable; en una creciente de 4 a 24 m³/s, con la misma profundidad pasa al menos 5 % más caudal al subir que al bajar',
+    measured: `peor diferencia ${(100 * worst).toFixed(2)} %; ${cases.join('; ')}`,
+    pass: worst < 0.005 && loopOk,
+  });
+}
+
+// H32) Tránsito de crecientes: Muskingum-Cunge de parámetros variables frente a Saint-Venant
+{
+  const b = 10, n = 0.035, S = 0.001, Qb = 5, Qp = 60, tp = 6 * 3600;
+  const qin = (t: number) => Qb + (Qp - Qb) * gammaHydrograph(t, tp);
+  const y0 = normalDepth({ shape: 'rect', b, z: 0, D: 0, H: 99 }, n, S, Qb);
+  const sv = new SaintVenant({ L: 20000, N: 400, b, n, zb: (x) => -S * x, up: { kind: 'Q', Q: qin }, down: { kind: 'free' } });
+  sv.order = 2;
+  sv.init(() => ({ h: y0, q: Qb / b }));
+  const xs = [5000, 10000];
+  const best = xs.map(() => [0, 0]);
+  while (sv.t < 12 * 3600) {
+    sv.step();
+    xs.forEach((x, k) => {
+      const q = sv.flowAt(x);
+      if (q > best[k][1]) best[k] = [sv.t, q];
+    });
+  }
+  const rows: string[] = [];
+  let ok = true;
+  xs.forEach((x, k) => {
+    const m = muskingumCunge({ L: x, b, n, S, Qb, Qp, tp });
+    const ePk = rel(m.peakOut, best[k][1]);
+    const lagSV = best[k][0] - tp, lagMC = m.tPeakOut - tp;
+    const eLag = Math.abs(lagMC - lagSV) / lagSV;
+    if (!(ePk < 0.01 && eLag < 0.1 && Math.abs(m.volErr) < 0.01 && m.M > 15)) ok = false;
+    rows.push(`${x / 1000} km: pico ${m.peakOut.toFixed(2)} / ${best[k][1].toFixed(2)} m³/s, retraso ${(lagMC / 3600).toFixed(3)} / ${(lagSV / 3600).toFixed(3)} h, volumen ${(100 * m.volErr).toFixed(2)} %, M = ${m.M.toFixed(0)}`);
+  });
+  record({
+    id: 'H32',
+    name: 'Tránsito de una creciente: Muskingum-Cunge de parámetros variables igual al modelo completo de Saint-Venant',
+    tolerance: 'cauce de 10 m, n = 0,035, S0 = 0,1 %, creciente de 5 a 60 m³/s con pico a las 6 h (onda difusiva, M > 15): a 5 y 10 km, el pico de Muskingum-Cunge a menos de 1 % del de Saint-Venant (segundo orden, celdas de 50 m) y el retraso del pico a menos de 10 %; el volumen de la creciente se conserva (< 1 %)',
+    measured: `Muskingum-Cunge / Saint-Venant: ${rows.join('; ')}`,
     pass: ok,
   });
 }

@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**29 de 29 cumplen.**
+**32 de 32 cumplen.**
 
 ## H1. Geometría: área, perímetro, ancho de superficie y momento estático de las tres secciones — cumple
 
@@ -76,8 +76,8 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 ## H15. Calculadoras y prediseñadores de las siete partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios — cumple
 
-- Tolerancia: 400 juegos de datos al azar en las veinticuatro herramientas (9 600 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase, el aforador tiene una estructura válida y los muros junto a la compuerta contienen la onda con su borde libre
-- Medido: 9600 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
+- Tolerancia: 400 juegos de datos al azar en las veinticinco herramientas (10 000 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase, el aforador tiene una estructura válida y los muros junto a la compuerta contienen la onda con su borde libre
+- Medido: 10000 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
 
 ## H16. Fuerza tractiva de Lane y rugosidad compuesta de Horton y Einstein — cumple
 
@@ -116,8 +116,8 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 ## H23. Planos acotados, gráficas y memoria de cálculo imprimible de los prediseños — cumple
 
-- Tolerancia: 120 juegos de datos (el primero, los de ejemplo) en las doce herramientas con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»
-- Medido: 1440 memorias; 849 planos y 593 gráficas; excepciones 0; con valores inválidos 0
+- Tolerancia: 120 juegos de datos (el primero, los de ejemplo) en las trece herramientas con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»
+- Medido: 1560 memorias; 842 planos y 708 gráficas; excepciones 0; con valores inválidos 0
 
 ## H24. Saint-Venant: rotura de presa sobre fondo seco igual a la solución de Ritter — cumple
 
@@ -132,12 +132,12 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 ## H26. Saint-Venant: flujo uniforme, conservación del volumen y lago en reposo sobre un fondo irregular — cumple
 
 - Tolerancia: canal de 2 km (S = 0,2 %, n = 0,02, 5 m, 10 m³/s): a mitad del canal, profundidad normal de Manning (error < 1 %) y caudal 10 m³/s (error < 0,5 %); volumen final = inicial + entrado − salido (error relativo < 1e-9); un lago sobre una loma queda quieto (caudal por metro < 1e-9 m²/s a los 100 s)
-- Medido: y = 1.0779 m (Manning 1.0797 m); Q = 9.9555 m³/s; error de volumen 3.9e-15; lago: 2.0e-15 m²/s
+- Medido: y = 1.0811 m (Manning 1.0797 m); Q = 10.0000 m³/s; error de volumen -4.2e-15; lago: 2.4e-15 m²/s
 
 ## H27. Compuerta en el canal: el agua sube hasta la carga del orificio y sale por la vena contraída — cumple
 
 - Tolerancia: compuerta de 0,3 m con 1 m²/s: aguas arriba, la profundidad de la ecuación del orificio q = Cc·a·√(2g·(h1 − Cc·a)) (error < 1 %); aguas abajo, Cc·a = 0,183 m (error < 2 %); caudal que pasa igual al que entra (error < 0,5 %)
-- Medido: arriba 1.7002 m (ecuación 1.7049 m); abajo 0.1830 m; Q 1.9970 m³/s
+- Medido: arriba 1.7002 m (ecuación 1.7049 m); abajo 0.1830 m; Q 1.9969 m³/s
 
 ## H28. Onda positiva por el cierre brusco de una compuerta (Favre) — cumple
 
@@ -146,5 +146,20 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 ## H29. El resalto calculado en el tiempo llega al estado del cálculo permanente — cumple
 
-- Tolerancia: cuatro pozos: con el chorro del pie de la rápida entrando al pozo lleno hasta la cresta, a los 200 s el modelo de Saint-Venant (celdas de 10 cm) da el mismo resultado que el cálculo permanente (resalto atrapado o barrido); si queda atrapado, la profundidad del pozo a menos de 4 % y el resalto dentro del pozo. La posición del resalto se informa pero no se exige: es muy sensible a la profundidad del pozo
-- Medido: 12 m³/s, vertedero 0.8 m: atrapado / atrapado, pozo 2.32 m (permanente 2.26), resalto a 3.8 m (permanente 7.6); 12 m³/s, vertedero 0.6 m: barrido / barrido; 20 m³/s, vertedero 1.2 m: atrapado / atrapado, pozo 3.32 m (permanente 3.25), resalto a 0.1 m (permanente 4.9); 8 m³/s, vertedero 0.5 m: atrapado / atrapado, pozo 1.64 m (permanente 1.61), resalto a 8.3 m (permanente 10.6)
+- Tolerancia: cuatro pozos: con el chorro del pie de la rápida entrando al pozo lleno hasta la cresta, a los 200 s el modelo de Saint-Venant de segundo orden (celdas de 10 cm, como en la escena) da el mismo resultado que el cálculo permanente (resalto atrapado o barrido); si queda atrapado, la profundidad del pozo a menos de 4 % y el resalto dentro del pozo. La posición del resalto se informa pero no se exige: es muy sensible a la profundidad del pozo
+- Medido: 12 m³/s, vertedero 0.8 m: atrapado / atrapado, pozo 2.30 m (permanente 2.26), resalto a 5.0 m (permanente 7.6); 12 m³/s, vertedero 0.6 m: barrido / barrido; 20 m³/s, vertedero 1.2 m: atrapado / atrapado, pozo 3.30 m (permanente 3.25), resalto a 1.9 m (permanente 4.9); 8 m³/s, vertedero 0.5 m: atrapado / atrapado, pozo 1.63 m (permanente 1.61), resalto a 9.1 m (permanente 10.6)
+
+## H30. Saint-Venant de segundo orden (minmod y Heun): menos error con las mismas celdas y las mismas propiedades — cumple
+
+- Tolerancia: Ritter y Stoker con 100, 200, 400 y 800 celdas: en cada malla el error de segundo orden es menor que 75 % del de primer orden; con 800 celdas < 0,3 %; el error baja al menos como 1/N (orden ≥ 0,9). Un lago con una isla (orilla seca) queda quieto (< 1e-9 m²/s); flujo uniforme a menos de 0,1 % de Manning y error de volumen < 1e-9
+- Medido: Ritter: 1.83 / 1.19 / 0.75 / 0.46 % (1.er orden) y 1.01 / 0.51 / 0.25 / 0.13 % (2.º), orden 0.66 y 1.00; Stoker: 2.11 / 1.20 / 0.69 / 0.39 % y 0.99 / 0.48 / 0.24 / 0.12 %, orden 0.81 y 1.01; lago con isla 4.3e-15 m²/s; uniforme 1.0796 m (Manning 1.0797 m); volumen 3.0e-14
+
+## H31. Curva de gasto en la estación A: permanente igual al modelo, y en lazo durante la creciente — cumple
+
+- Tolerancia: doce casos (pendiente 0 a 1 %, 2 a 15 m³/s, suave y fuerte): la profundidad de la curva permanente (perfil M2, H2 o S2 por Runge-Kutta desde la crítica) a menos de 0,5 % de la del modelo de Saint-Venant ya estable; en una creciente de 4 a 24 m³/s, con la misma profundidad pasa al menos 5 % más caudal al subir que al bajar
+- Medido: peor diferencia 0.09 %; S = 0.1 %: con h = 1.388 m pasan 19.35 m³/s al subir y 15.97 m³/s al bajar; S = 0.5 %: con h = 1.056 m pasan 19.01 m³/s al subir y 16.25 m³/s al bajar
+
+## H32. Tránsito de una creciente: Muskingum-Cunge de parámetros variables igual al modelo completo de Saint-Venant — cumple
+
+- Tolerancia: cauce de 10 m, n = 0,035, S0 = 0,1 %, creciente de 5 a 60 m³/s con pico a las 6 h (onda difusiva, M > 15): a 5 y 10 km, el pico de Muskingum-Cunge a menos de 1 % del de Saint-Venant (segundo orden, celdas de 50 m) y el retraso del pico a menos de 10 %; el volumen de la creciente se conserva (< 1 %)
+- Medido: Muskingum-Cunge / Saint-Venant: 5 km: pico 59.26 / 59.30 m³/s, retraso 0.702 / 0.680 h, volumen -0.36 %, M = 34; 10 km: pico 58.55 / 58.62 m³/s, retraso 1.409 / 1.363 h, volumen -0.74 %, M = 34

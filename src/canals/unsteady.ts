@@ -3,10 +3,11 @@
 //   ∂h/∂t + ∂q/∂x = 0
 //   ∂q/∂t + ∂(q²/h + g·h²/2)/∂x = −g·h·∂zb/∂x − g·h·Sf,   Sf = n²·u·|u| / R^(4/3)
 //
-// con h la profundidad y q = h·u el caudal por metro de ancho. Volúmenes finitos de primer orden con flujo HLL y
+// con h la profundidad y q = h·u el caudal por metro de ancho. Volúmenes finitos con flujo HLL y
 // reconstrucción hidrostática (Audusse et al., 2004): conserva el volumen, deja quieto un lago sobre un fondo
-// irregular («bien balanceado») y no da profundidades negativas cuando el agua avanza sobre fondo seco. La
-// fricción es semi-implícita. Paso de tiempo por la condición CFL (Courant 0,45).
+// irregular («bien balanceado») y no da profundidades negativas cuando el agua avanza sobre fondo seco. Primer
+// orden (Euler) o segundo orden (reconstrucción lineal con el limitador minmod y Heun, que afila los frentes). La
+// fricción es semi-implícita. Paso de tiempo por la condición CFL (Courant 0,45, o 0,4 en segundo orden).
 //
 // Contornos: caudal de entrada Q(t), pared, salida libre, salida en caída (profundidad crítica) o nivel fijo. Una
 // compuerta interna entre dos celdas: si su abertura queda bajo el agua, el caudal es el de un orificio
@@ -60,9 +61,13 @@ export class SaintVenant {
   /** Volumen que entró y salió por los contornos (m³), para revisar la conservación. */
   vIn = 0;
   vOut = 0;
+  /** Orden del esquema: 1 (Euler y valores de celda) o 2 (reconstrucción minmod y Heun). */
+  order: 1 | 2 = 1;
   private fh: Float64Array;
   private fqL: Float64Array;
   private fqR: Float64Array;
+  private fc: { hl: Float64Array; hr: Float64Array; ul: Float64Array; ur: Float64Array; zl: Float64Array; zr: Float64Array };
+  private stage: { h0: Float64Array; q0: Float64Array; h1: Float64Array; q1: Float64Array; fh0: Float64Array };
 
   constructor(cfg: SVConfig) {
     this.cfg = cfg;
@@ -79,6 +84,9 @@ export class SaintVenant {
     this.fh = new Float64Array(N + 1);
     this.fqL = new Float64Array(N + 1);
     this.fqR = new Float64Array(N + 1);
+    const A = () => new Float64Array(N);
+    this.fc = { hl: A(), hr: A(), ul: A(), ur: A(), zl: A(), zr: A() };
+    this.stage = { h0: A(), q0: A(), h1: A(), q1: A(), fh0: new Float64Array(N + 1) };
   }
 
   /** Pone el agua: cota de la superficie o profundidad en cada x, y caudal por metro. */
@@ -99,7 +107,7 @@ export class SaintVenant {
     return v * this.dx * this.cfg.b;
   }
 
-  /** Paso de tiempo estable (CFL 0,45). */
+  /** Paso de tiempo estable (Courant 0,45 en primer orden y 0,4 en segundo). */
   dtStable(): number {
     let s = 1e-9;
     if (this.cfg.up.kind === 'jet') {
@@ -115,44 +123,87 @@ export class SaintVenant {
       if (h <= HDRY) continue;
       s = Math.max(s, Math.abs(this.q[i] / h) + Math.sqrt(G * h));
     }
-    return Math.min(1, (0.45 * this.dx) / s);
+    return Math.min(1, ((this.order === 2 ? 0.4 : 0.45) * this.dx) / s);
   }
 
-  /** Avanza un paso (no más de `dtMax`); devuelve el paso usado. */
-  step(dtMax = Infinity): number {
-    const N = this.cfg.N, dx = this.dx, b = this.cfg.b;
-    const dt = Math.min(dtMax, this.dtStable());
-    const h = this.h, q = this.q, zb = this.zb;
-    // celdas fantasma de los contornos
-    const ghost = (side: 'up' | 'down'): [number, number, number] => {
-      const i = side === 'up' ? 0 : N - 1;
-      const hi = h[i], qi = q[i], z = zb[i];
-      if (side === 'up') {
-        const c = this.cfg.up;
-        if (c.kind === 'wall') return [hi, -qi, z];
-        // chorro rápido (supercrítico) que entra con profundidad y caudal dados
-        if (c.kind === 'jet') return [c.h, c.Q(this.t) / b, z];
-        if (c.kind === 'Q') {
-          // entra con al menos la profundidad crítica de su caudal (sirve también con el canal seco)
-          const qg = c.Q(this.t) / b;
-          return [Math.max(hi, Math.cbrt((qg * qg) / G), HDRY * 10), qg, z];
-        }
-        return [hi, qi, z];
-      }
-      const c = this.cfg.down;
+  /** Celda fantasma de un contorno (profundidad, caudal por metro y fondo), con el estado `h`, `q` al tiempo `t`. */
+  private ghost(side: 'up' | 'down', h: Float64Array, q: Float64Array, t: number): [number, number, number] {
+    const N = this.cfg.N, b = this.cfg.b;
+    const i = side === 'up' ? 0 : N - 1;
+    const hi = h[i], qi = q[i], z = this.zb[i];
+    if (side === 'up') {
+      const c = this.cfg.up;
       if (c.kind === 'wall') return [hi, -qi, z];
-      if (c.kind === 'level') return [Math.max(0, c.z - z), qi, z];
-      if (c.kind === 'fall') {
-        const qo = Math.max(0, qi);
-        const hc = Math.cbrt((qo * qo) / G);
-        return [Math.min(hi, Math.max(hc, HDRY)), qo, z];
+      // chorro rápido (supercrítico) que entra con profundidad y caudal dados
+      if (c.kind === 'jet') return [c.h, c.Q(t) / b, z];
+      if (c.kind === 'Q') {
+        // entra con al menos la profundidad crítica de su caudal (sirve también con el canal seco)
+        const qg = c.Q(t) / b;
+        return [Math.max(hi, Math.cbrt((qg * qg) / G), HDRY * 10), qg, z];
       }
       return [hi, qi, z];
-    };
-    const g0 = ghost('up'), g1 = ghost('down');
+    }
+    const c = this.cfg.down;
+    if (c.kind === 'wall') return [hi, -qi, z];
+    if (c.kind === 'level') return [Math.max(0, c.z - z), qi, z];
+    if (c.kind === 'fall') {
+      const qo = Math.max(0, qi);
+      const hc = Math.cbrt((qo * qo) / G);
+      return [Math.min(hi, Math.max(hc, HDRY)), qo, z];
+    }
+    return [hi, qi, z];
+  }
+
+  /**
+   * Valores en las caras de cada celda. En primer orden, los del centro. En segundo orden, reconstrucción lineal de la
+   * profundidad, la velocidad y la cota del agua con el limitador minmod (no crea máximos ni mínimos nuevos y no da
+   * profundidades negativas); el fondo de cada cara sale de la cota del agua menos la profundidad, como en Audusse et
+   * al. (2004), para que un lago quieto siga quieto. Las celdas de los contornos y las vecinas de la compuerta quedan
+   * en primer orden.
+   */
+  private faces(h: Float64Array, q: Float64Array): void {
+    const N = this.cfg.N, zb = this.zb, F = this.fc;
+    const gk = this.gate ? this.gate.k : -9;
+    for (let i = 0; i < N; i++) {
+      const hi = h[i], ui = hi > HDRY ? q[i] / hi : 0;
+      let sh = 0, su = 0, se = 0;
+      if (this.order === 2 && i > 0 && i < N - 1 && i !== gk - 1 && i !== gk) {
+        const hm = h[i - 1], hp = h[i + 1];
+        const um = hm > HDRY ? q[i - 1] / hm : 0, up = hp > HDRY ? q[i + 1] / hp : 0;
+        sh = minmod(hi - hm, hp - hi);
+        su = minmod(ui - um, up - ui);
+        se = minmod(hi + zb[i] - hm - zb[i - 1], hp + zb[i + 1] - hi - zb[i]);
+      }
+      F.hl[i] = hi - 0.5 * sh;
+      F.hr[i] = hi + 0.5 * sh;
+      F.ul[i] = ui - 0.5 * su;
+      F.ur[i] = ui + 0.5 * su;
+      const e = hi + zb[i];
+      F.zl[i] = e - 0.5 * se - F.hl[i];
+      F.zr[i] = e + 0.5 * se - F.hr[i];
+    }
+  }
+
+  /**
+   * Un paso de Euler desde el estado (hs, qs) al tiempo t, escrito en (ho, qo) (puede ser el mismo arreglo). Deja los
+   * flujos de masa en `fh`. Sin fricción: la fricción se aplica al final del paso completo.
+   */
+  private euler(hs: Float64Array, qs: Float64Array, ho: Float64Array, qo: Float64Array, t: number, dt: number): void {
+    const N = this.cfg.N, dx = this.dx, F = this.fc;
+    this.faces(hs, qs);
+    const g0 = this.ghost('up', hs, qs, t), g1 = this.ghost('down', hs, qs, t);
     for (let k = 0; k <= N; k++) {
-      const hL = k === 0 ? g0[0] : h[k - 1], qL = k === 0 ? g0[1] : q[k - 1], zL = k === 0 ? g0[2] : zb[k - 1];
-      const hR = k === N ? g1[0] : h[k], qR = k === N ? g1[1] : q[k], zR = k === N ? g1[2] : zb[k];
+      const hL = k === 0 ? g0[0] : F.hr[k - 1], uL = k === 0 ? (g0[0] > HDRY ? g0[1] / g0[0] : 0) : F.ur[k - 1], zL = k === 0 ? g0[2] : F.zr[k - 1];
+      const hR = k === N ? g1[0] : F.hl[k], uR = k === N ? (g1[0] > HDRY ? g1[1] / g1[0] : 0) : F.ul[k], zR = k === N ? g1[2] : F.zl[k];
+      if (k === 0 && this.cfg.up.kind === 'Q') {
+        // caudal de entrada impuesto en la interfaz: entra exactamente Q(t). La cantidad de movimiento usa la
+        // profundidad de la primera celda, o la crítica si el canal está seco o el agua es más baja que ella
+        const qg = this.cfg.up.Q(t) / this.cfg.b;
+        const hb = Math.max(hR, Math.cbrt((qg * qg) / G), HDRY * 10);
+        this.fh[0] = qg;
+        this.fqL[0] = this.fqR[0] = (qg * qg) / hb + 0.5 * G * hb * hb;
+        continue;
+      }
       const gate = this.gate;
       if (gate && gate.k === k && k > 0 && k < N && gate.a < Math.max(hL, hR) - 1e-6) {
         // compuerta: pared con un orificio abajo
@@ -170,34 +221,67 @@ export class SaintVenant {
         }
         const uJet = a > 0 ? qg / (0.61 * a) : 0;
         this.fh[k] = qg;
-        this.fqL[k] = 0.5 * G * hL * hL + (qg > 0 ? (qg * qL) / Math.max(hL, HDRY) : qg * uJet);
-        this.fqR[k] = 0.5 * G * hR * hR + (qg > 0 ? qg * uJet : (qg * qR) / Math.max(hR, HDRY));
+        this.fqL[k] = 0.5 * G * hL * hL + (qg > 0 ? qg * uL : qg * uJet);
+        this.fqR[k] = 0.5 * G * hR * hR + (qg > 0 ? qg * uJet : qg * uR);
         continue;
       }
-      // reconstrucción hidrostática
+      // reconstrucción hidrostática en la interfaz
       const zM = Math.max(zL, zR);
       const hl = Math.max(0, hL + zL - zM), hr = Math.max(0, hR + zR - zM);
-      const ul = hL > HDRY ? qL / hL : 0, ur = hR > HDRY ? qR / hR : 0;
-      const [Fh, Fq] = hll(hl, hl * ul, hr, hr * ur);
+      const [Fh, Fq] = hll(hl, hl * uL, hr, hr * uR);
       this.fh[k] = Fh;
       this.fqL[k] = Fq + 0.5 * G * (hL * hL - hl * hl);
       this.fqR[k] = Fq + 0.5 * G * (hR * hR - hr * hr);
     }
     const r = dt / dx;
-    const n2 = this.cfg.n * this.cfg.n;
     for (let i = 0; i < N; i++) {
-      let hn = h[i] - r * (this.fh[i + 1] - this.fh[i]);
-      let qn = q[i] - r * (this.fqL[i + 1] - this.fqR[i]);
+      // término del fondo dentro de la celda (cero en primer orden)
+      const sc = 0.5 * G * (F.hl[i] + F.hr[i]) * (F.zl[i] - F.zr[i]);
+      let hn = hs[i] - r * (this.fh[i + 1] - this.fh[i]);
+      let qn = qs[i] - r * (this.fqL[i + 1] - this.fqR[i]) + r * sc;
       if (hn <= HDRY) {
         hn = Math.max(0, hn);
         qn = 0;
-      } else if (n2 > 0) {
-        const u = qn / hn;
-        const R = (b * hn) / (b + 2 * hn);
-        qn = qn / (1 + (dt * G * n2 * Math.abs(u)) / Math.pow(R, 4 / 3));
       }
-      h[i] = hn;
-      q[i] = qn;
+      ho[i] = hn;
+      qo[i] = qn;
+    }
+  }
+
+  /**
+   * Avanza un paso (no más de `dtMax`); devuelve el paso usado. Primer orden: Euler. Segundo orden: Heun (Runge-Kutta
+   * de dos etapas que conserva la positividad), con el promedio de los flujos de las dos etapas para el balance.
+   */
+  step(dtMax = Infinity): number {
+    const N = this.cfg.N, b = this.cfg.b;
+    const dt = Math.min(dtMax, this.dtStable());
+    const h = this.h, q = this.q;
+    if (this.order === 1) {
+      this.euler(h, q, h, q, this.t, dt);
+    } else {
+      const S = this.stage;
+      S.h0.set(h);
+      S.q0.set(q);
+      this.euler(h, q, S.h1, S.q1, this.t, dt);
+      S.fh0.set(this.fh);
+      this.euler(S.h1, S.q1, S.h1, S.q1, this.t + dt, dt);
+      for (let i = 0; i < N; i++) {
+        const hn = 0.5 * (S.h0[i] + S.h1[i]);
+        h[i] = hn;
+        q[i] = hn > HDRY ? 0.5 * (S.q0[i] + S.q1[i]) : 0;
+      }
+      for (let k = 0; k <= N; k++) this.fh[k] = 0.5 * (S.fh0[k] + this.fh[k]);
+    }
+    // fricción de Manning, semi-implícita (estable con poca agua)
+    const n2 = this.cfg.n * this.cfg.n;
+    if (n2 > 0) {
+      for (let i = 0; i < N; i++) {
+        const hn = h[i];
+        if (hn <= HDRY) continue;
+        const u = q[i] / hn;
+        const R = (b * hn) / (b + 2 * hn);
+        q[i] = q[i] / (1 + (dt * G * n2 * Math.abs(u)) / Math.pow(R, 4 / 3));
+      }
     }
     this.vIn += this.fh[0] * dt * b;
     this.vOut += this.fh[N] * dt * b;
@@ -242,6 +326,12 @@ export class SaintVenant {
     for (let i = 0; i < this.cfg.N; i++) if (this.h[i] > threshold) xf = this.x[i] + this.dx / 2;
     return xf;
   }
+}
+
+/** Limitador minmod: la pendiente más pequeña si las dos tienen el mismo signo; cero en un extremo. */
+function minmod(a: number, b: number): number {
+  if (a * b <= 0) return 0;
+  return Math.abs(a) < Math.abs(b) ? a : b;
 }
 
 /** Flujo HLL de las ecuaciones de aguas someras (por metro de ancho), con fondo seco a uno o ambos lados. */

@@ -67,7 +67,10 @@ export class WaveSim {
   /** Nivel antes del cierre en la estación A, para medir la onda. */
   before = { hA: 0, VA: 0 };
   version = 0;
+  /** Huella: cota máxima del agua en cada celda desde el último evento (m). */
+  zmax: Float64Array = new Float64Array(WAVE.N);
   private lastRec = -1;
+  private ratingCache: { S: number; pts: RatingPoint[] } | null = null;
 
   constructor(inp: Partial<WaveInput> = {}) {
     this.inp = sanitizeWave(inp);
@@ -78,7 +81,7 @@ export class WaveSim {
   private build(): SaintVenant {
     const { scenario, S } = this.inp;
     const inflow = scenario !== 'presa';
-    return new SaintVenant({
+    const sv = new SaintVenant({
       L: WAVE.L,
       N: WAVE.N,
       b: WAVE.b,
@@ -87,6 +90,15 @@ export class WaveSim {
       up: inflow ? { kind: 'Q', Q: (t) => this.qIn(t) } : { kind: 'wall' },
       down: { kind: 'fall' },
     });
+    // segundo orden: frentes más nítidos con las mismas celdas (prueba H30)
+    sv.order = 2;
+    return sv;
+  }
+
+  /** Vuelve a empezar la huella del nivel máximo con el agua de ahora. */
+  private resetEnvelope(): void {
+    const sv = this.sv;
+    for (let i = 0; i < sv.cfg.N; i++) this.zmax[i] = sv.zb[i] + sv.h[i];
   }
 
   /** Caudal que entra al canal (m³/s). */
@@ -129,6 +141,7 @@ export class WaveSim {
       sv.t = 0;
       sv.vIn = sv.vOut = 0;
     }
+    this.resetEnvelope();
     this.version++;
   }
 
@@ -139,6 +152,7 @@ export class WaveSim {
     this.sv.gate = null;
     this.broken = true;
     this.t0 = this.sv.t;
+    this.resetEnvelope();
     this.version++;
   }
 
@@ -152,6 +166,7 @@ export class WaveSim {
       this.t0 = this.sv.t;
       this.fronts = [];
     }
+    this.resetEnvelope();
     this.sv.gate.a = close ? 0 : this.inp.gate;
     this.version++;
   }
@@ -162,6 +177,7 @@ export class WaveSim {
     this.t0 = this.sv.t;
     this.history = [];
     this.lastRec = -1;
+    this.resetEnvelope();
     this.version++;
   }
 
@@ -169,6 +185,11 @@ export class WaveSim {
   tick(dt: number): void {
     if (dt <= 0) return;
     this.sv.advance(Math.min(dt, 0.5), 400);
+    const sv = this.sv;
+    for (let i = 0; i < sv.cfg.N; i++) {
+      const z = sv.zb[i] + sv.h[i];
+      if (z > this.zmax[i]) this.zmax[i] = z;
+    }
     const t = this.sv.t;
     if (t - this.lastRec >= 0.2) {
       this.lastRec = t;
@@ -239,10 +260,90 @@ export class WaveSim {
     return { front: null, h2: null, label: 'Onda de creciente: celeridad cinemática ≈ 5/3·V' };
   }
 
+  /** Curva de gasto permanente en A para la pendiente de ahora (se calcula una vez por pendiente). */
+  rating(): RatingPoint[] {
+    const S = this.inp.S;
+    if (!this.ratingCache || this.ratingCache.S !== S) this.ratingCache = { S, pts: ratingA(S, 44) };
+    return this.ratingCache.pts;
+  }
+
   /** Pico del caudal en cada estación y en la entrada desde que empezó la creciente: (t, Q). */
   peaks(): { inn: [number, number]; A: [number, number]; B: [number, number] } | null {
     if (!this.floodOn || !this.history.length) return null;
     const best = (k: 'Qin' | 'QA' | 'QB'): [number, number] => this.history.reduce<[number, number]>((m, s) => (s[k] > m[1] ? [s.t, s[k]] : m), [0, -Infinity]);
     return { inn: best('Qin'), A: best('QA'), B: best('QB') };
   }
+}
+
+// ------------------------------------------------------------------ curva de gasto en A: permanente y en lazo
+//
+// En flujo permanente, cada profundidad en A corresponde a un solo caudal (la curva de gasto). En una creciente no:
+// con la misma profundidad pasa más agua mientras el nivel sube que cuando baja, porque la pendiente de la
+// superficie es mayor al frente de la onda (Henderson, 1966, cap. 9). La curva medida hace un lazo. La fórmula de
+// Jones corrige ese efecto en crecientes lentas; las de la escena son tan rápidas que no se aplica, y no se usa.
+
+export interface RatingPoint {
+  Q: number;
+  /** Profundidad en la estación A con ese caudal en flujo permanente (m). */
+  h: number;
+  /** Pendiente de fricción allí (m/m). */
+  Sf: number;
+}
+
+const RB = WAVE.b, RN = WAVE.n;
+const sfOf = (Q: number, h: number) => {
+  const A = RB * h, R = A / (RB + 2 * h), V = Q / A;
+  return (RN * RN * V * V) / Math.pow(R, 4 / 3);
+};
+
+/**
+ * Profundidad permanente en x con caudal Q en el canal de la escena (rectangular, n = 0,015, pendiente S, caída al
+ * final). Pendiente suave u horizontal: curva M2 (o H2) que se integra aguas arriba desde la profundidad crítica de la
+ * caída. Pendiente fuerte: curva S2 que se integra aguas abajo desde la crítica a la entrada. Runge-Kutta de cuarto
+ * orden con pasos de 0,5 m sobre dy/dx = (S0 − Sf)/(1 − Fr²).
+ */
+export function steadyDepth(Q: number, S: number, x: number): number {
+  const q = Q / RB, yc = Math.cbrt((q * q) / G);
+  const mild = S <= 0 || sfOf(Q, yc) > S; // la normal queda por encima de la crítica
+  // la curva no cruza la crítica (allí dy/dx es infinita): cada evaluación se queda en su rama
+  const cl = (y: number) => (mild ? Math.max(y, yc * 1.001) : Math.min(Math.max(y, 1e-4), yc * 0.999));
+  const dydx = (y0: number) => {
+    const y = cl(y0);
+    return (S - sfOf(Q, y)) / (1 - (q * q) / (G * y * y * y));
+  };
+  let y = cl(mild ? yc * 1.01 : yc * 0.99);
+  const span = mild ? WAVE.L - x : x;
+  // pasos cortos junto a la crítica, donde la curva cambia rápido
+  const marks = [0, 0.02, 0.1, 0.5, 2].filter((m) => m < span).concat(span);
+  for (let j = 1; j < marks.length; j++) {
+    const len = marks[j] - marks[j - 1], ds = j < 4 ? len / 20 : 0.5;
+    const n = Math.max(1, Math.round(len / ds)), h = (mild ? -len : len) / n;
+    for (let k = 0; k < n; k++) {
+      const k1 = dydx(y), k2 = dydx(y + 0.5 * h * k1), k3 = dydx(y + 0.5 * h * k2), k4 = dydx(y + h * k3);
+      y = cl(y + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4));
+    }
+  }
+  return y;
+}
+
+/** Curva de gasto permanente en la estación A, de 0,2 m³/s a `Qtop` (35 puntos). */
+export function ratingA(S: number, Qtop: number): RatingPoint[] {
+  const out: RatingPoint[] = [];
+  const x = WAVE.gauges[0];
+  for (let k = 0; k <= 34; k++) {
+    const Q = 0.2 * Math.pow(Qtop / 0.2, k / 34);
+    const h = steadyDepth(Q, S, x);
+    out.push({ Q, h, Sf: sfOf(Q, h) });
+  }
+  return out;
+}
+
+/** Interpola la curva de gasto: caudal permanente con la profundidad h, su pendiente de fricción y dQ/dh. */
+export function ratingAt(pts: RatingPoint[], h: number): { Q: number; Sf: number; dQdh: number } | null {
+  if (pts.length < 2 || h <= pts[0].h || h >= pts[pts.length - 1].h) return null;
+  let k = 1;
+  while (k < pts.length - 1 && pts[k].h < h) k++;
+  const a = pts[k - 1], b = pts[k];
+  const w = (h - a.h) / (b.h - a.h);
+  return { Q: a.Q + w * (b.Q - a.Q), Sf: a.Sf + w * (b.Sf - a.Sf), dQdh: (b.Q - a.Q) / (b.h - a.h) };
 }

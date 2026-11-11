@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { WAVE, type WaveSim } from '../waves';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { Tracers, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station } from './canalKit';
+import { Splash, Tracers, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station } from './canalKit';
 
 const HB = WAVE.b / 2;
 
@@ -27,6 +27,11 @@ export class WavesWorld {
   private builtS = NaN;
   private version = -1;
   private labelT = 0;
+  private splash = new Splash(360, 0.05);
+  /** Huella del nivel máximo en el vidrio y en la pared del fondo: una franja ocre donde el agua llegó y ya bajó. */
+  private mark: THREE.Mesh;
+  /** La cámara acompaña el frente de la onda. */
+  follow = false;
   /** Segundos de simulación por segundo de reloj. */
   speed = 1;
   paused = false;
@@ -70,6 +75,23 @@ export class WavesWorld {
     this.gate.add(wheel);
     sc.add(this.gate);
     for (const w of [this.water, this.fall, this.pit]) w.setEnvironment(stage.scene.environment);
+    sc.add(this.splash.mesh);
+    // dos franjas (vidrio y pared del fondo) con WAVE.N columnas; el color lleva la transparencia de cada punto
+    const nv = WAVE.N * 2 * 2;
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(nv * 3), 3));
+    mg.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(nv * 4), 4));
+    const mi: number[] = [];
+    for (let w = 0; w < 2; w++)
+      for (let k = 0; k < WAVE.N - 1; k++) {
+        const a = (w * WAVE.N + k) * 2;
+        mi.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    mg.setIndex(mi);
+    this.mark = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    this.mark.frustumCulled = false;
+    this.mark.renderOrder = 4;
+    sc.add(this.mark);
     stage.view(this.views.general, false);
   }
 
@@ -177,6 +199,8 @@ export class WavesWorld {
     this.fall.group.visible = fallSt.length >= 2;
     if (fallSt.length >= 2) this.fall.updateFast(fallSt);
     const pitD = Math.min(2.2, 0.3 + sim.sv.vOut / 900);
+    this.drawMark(pts);
+    this.emitSplash(dt, pts, last, qEnd, yE);
     this.pit.updateFast([
       { x: WAVE.L + 0.2, bed: yE - 3.2, depth: pitD, halfW: HB + 1.95, foam: qEnd > 0.05 ? 0.5 : 0.05, vel: 0.3 },
       { x: WAVE.L + 13.8, bed: yE - 3.2, depth: pitD, halfW: HB + 1.95, foam: 0.05, vel: 0.3 },
@@ -202,6 +226,49 @@ export class WavesWorld {
       this.gatePlate.position.set(0, a + hp / 2, 0);
       this.gate.position.set(WAVE.xGate, yb, 0);
     }
+  }
+
+  /** Franja ocre de 4 cm en la cota máxima que alcanzó el agua, visible donde el agua ya bajó. */
+  private drawMark(pts: { z: number }[]): void {
+    const sim = this.sim!;
+    const g = this.mark.geometry;
+    const P = (g.getAttribute('position') as THREE.BufferAttribute).array as Float32Array;
+    const Cc = (g.getAttribute('color') as THREE.BufferAttribute).array as Float32Array;
+    const dx = sim.sv.dx;
+    for (let w = 0; w < 2; w++) {
+      const z = w ? -HB + 0.03 : HB - 0.03;
+      for (let k = 0; k < WAVE.N; k++) {
+        const zm = sim.zmax[k], over = zm - pts[k].z;
+        const a = smooth(0.03, 0.12, over) * 0.9;
+        const x = (k + 0.5) * dx;
+        const i = (w * WAVE.N + k) * 2;
+        P.set([x, zm - 0.03, z, x, zm + 0.01, z], 3 * i);
+        Cc.set([0.82, 0.55, 0.12, a, 0.82, 0.55, 0.12, a], 4 * i);
+      }
+    }
+    g.getAttribute('position').needsUpdate = true;
+    g.getAttribute('color').needsUpdate = true;
+  }
+
+  /** Salpicaduras en el frente de la onda y donde la lámina de la caída golpea el tanque. */
+  private emitSplash(dt: number, pts: { x: number; h: number; u: number; zb: number }[], last: { h: number; u: number }, qEnd: number, yE: number): void {
+    const sim = this.sim!;
+    if (dt > 0 && !this.paused) {
+      const xf = sim.frontX();
+      const v = sim.frontSpeed();
+      if (xf !== null && v !== null && Math.abs(v) > 0.3) {
+        const i = Math.max(0, Math.min(pts.length - 1, Math.floor(xf / sim.sv.dx)));
+        const p = pts[i];
+        // en el frente sobre canal seco la lengua es delgada: salpica poco; en el resalto que avanza, más
+        const hJump = sim.inp.scenario === 'compuerta' ? Math.max(0, (sim.theory().h2 ?? 0) - sim.before.hA) : p.h;
+        this.splash.emit(dt * this.speed, Math.min(220, 40 * Math.abs(v) * Math.min(1, hJump + 0.15)), xf, p.zb + p.h + 0.05, 0, 0.4, HB - 0.2, v * 0.6, 1.2 + 1.5 * Math.min(1, hJump), 0.5);
+      }
+      if (qEnd > 0.05 && last.h > 0.01) {
+        const v0 = Math.max(0.3, last.u), tFall = Math.sqrt((2 * 3.2) / 9.81) * 0.85;
+        this.splash.emit(dt * this.speed, Math.min(200, 30 * qEnd), WAVE.L + v0 * tFall, yE - 3.2 + Math.min(2.2, 0.3 + sim.sv.vOut / 900), 0, 0.5, HB - 0.3, 0.3, 2.2, 0.9);
+      }
+    }
+    this.splash.update(dt * (this.paused ? 0 : 1), this.stage.reducedMotion);
   }
 
   private labels(): StageLabel[] {
@@ -234,6 +301,15 @@ export class WavesWorld {
     if (!this.paused) sim.tick(h * this.speed);
     this.draw(h);
     this.tracers.update(h * this.speed, this.stage.reducedMotion);
+    if (this.follow) {
+      const xf = sim.frontX();
+      if (xf !== null) {
+        // la cámara se corre con el frente sin cambiar el ángulo que dejó quien mira
+        const c = this.stage.controls, d = (xf - c.target.x) * Math.min(1, h * 2.5);
+        c.target.x += d;
+        this.stage.camera.position.x += d;
+      }
+    }
     this.labelT += dt;
     if (this.labelT > 0.25 || sim.version !== this.version) {
       this.labelT = 0;
@@ -242,3 +318,8 @@ export class WavesWorld {
     }
   }
 }
+
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};

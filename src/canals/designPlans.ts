@@ -2,7 +2,7 @@
 
 import { PARSHALL, parshallH, transport, type ParshallSize } from './advanced';
 import { ratingCurve, type Inlet } from './culvert';
-import { calcFormulas, calcRotura, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from './designAdvanced';
+import { calcFormulas, calcRotura, calcTransito, muskingumCunge, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from './designAdvanced';
 import { ritter, stokerProfile } from './unsteady';
 import { preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente, type Result, type Vals } from './designCalc';
 import { CREEK, manningQ, normalDepth, rectWeirQ, triWeirQ, type Section } from './hydraulics';
@@ -36,6 +36,28 @@ const PLANS = new Map<Run, (d: Record<string, number | string>) => { plan?: Plan
       const c = d.kind === 'ritter' ? 2 * Math.sqrt(9.81 * h0) : 0;
       const tt = d.kind === 'ritter' ? [0.2, 0.5, 1].map((f) => (f * X) / c) : [0.2, 0.5, 1].map((f) => (f * X) / Math.max(1, Math.sqrt(9.81 * h0) * 1.4));
       return { chart: { title: 'Perfil del agua después de la rotura (presa en x = 0)', xLabel: 'distancia desde la presa (m)', yLabel: 'profundidad (m)', series: tt.map((t, k) => ({ name: `a los ${t.toFixed(0)} s`, pts: prof(t), dash: k === 0 })) } };
+    },
+  ],
+  [
+    calcTransito,
+    (d) => {
+      const r = muskingumCunge({ L: N(d.L), b: N(d.b), n: N(d.n), S: N(d.S), Qb: N(d.Qb), Qp: N(d.Qp), tp: N(d.tp) });
+      // hasta que la salida vuelve cerca de la base
+      const end = Math.min(r.t.length - 1, Math.max(...r.qout.map((q, j) => (q > N(d.Qb) + 0.03 * (N(d.Qp) - N(d.Qb)) ? j : 0))) + 8);
+      const idx = Array.from({ length: end + 1 }, (_, j) => j).filter((j) => j % 2 === 0 || j === end);
+      const pick = (a: number[]): XY[] => idx.map((j) => [r.t[j] / 3600, a[j]] as XY);
+      return {
+        chart: {
+          title: `Hidrogramas a la entrada y a ${(N(d.L) / 1000).toLocaleString('es-CO')} km (Muskingum-Cunge)`,
+          xLabel: 'tiempo (h)',
+          yLabel: 'caudal (m³/s)',
+          series: [
+            { name: 'entrada', pts: pick(r.qin), dash: true },
+            { name: 'salida del tramo', pts: pick(r.qout) },
+          ],
+          mark: { at: [r.tPeakOut / 3600, r.peakOut], text: `pico ${r.peakOut.toFixed(1).replace('.', ',')} m³/s` },
+        },
+      };
     },
   ],
   [preCanal, (d) => ({ plan: channelPlan({ title: 'Canal revestido propuesto', b: N(d.b), z: N(d.z), y: N(d.y), H: N(d.H), t: 0.1 }), chart: qyChart(d, 'Curva de descarga del canal propuesto') })],

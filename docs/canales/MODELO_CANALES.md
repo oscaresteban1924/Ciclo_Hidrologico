@@ -6,7 +6,7 @@ Sexto modo de la aplicación (`src/canals/`). Tiene siete partes con la misma di
 
 **Profundidades a escala.** El agua se dibuja con su profundidad calculada, sin exagerarla. Su color cambia con la profundidad (más claro donde hay poca agua) y sus ondas avanzan con la velocidad calculada en cada punto (mapa de flujo en dos fases); en la cara que se ve por el vidrio, las vetas van más rápido arriba que abajo (perfil de potencia 1/7). Los trazadores amarillos junto al vidrio viajan a u = 1,143·V·(z/y)^(1/7). Donde un dibujo plano necesita exagerar la escala vertical (el esquema del puente y el de la alcantarilla), el dibujo lo dice. Los granos de sedimento menores de 8 cm se dibujan de 8 cm, y la escena dice cuántas veces se aumentaron.
 
-**Reflejos.** El agua, el vidrio y el metal reflejan un cielo de degradé prefiltrado que se genera en el navegador (no se descargan texturas); el reflejo crece hacia los bordes con la ley de Fresnel.
+**Reflejos, transparencia y cáusticas.** El agua, el vidrio y el metal reflejan un cielo de degradé prefiltrado que se genera en el navegador (no se descargan texturas); el reflejo crece hacia los bordes con la ley de Fresnel. El agua poco profunda deja ver un poco el fondo, y sobre el fondo se dibuja la red de luz de las cáusticas, que avanza con la velocidad calculada del agua y se apaga con la profundidad. Las cáusticas son un efecto de imagen: no se calcula la refracción real.
 
 ## 1. El canal y su caudal (flujo uniforme)
 
@@ -158,35 +158,42 @@ Un canal de concreto de 300 m, rectangular de 4 m de ancho y n = 0,015, donde el
 - **Compuerta.** Un caudal de 0,5 a 15 m³/s pasa bajo la compuerta de x = 200 m. Al cerrarla de golpe, una onda positiva sube por el canal y aguas abajo el agua se va. Al abrirla, sale otra onda.
 - **Creciente.** El caudal de entrada sube a un pico (2 a 40 m³/s) y vuelve, con el hidrograma gamma de la sección 8 y un tiempo al pico de 10 a 120 s. La onda viaja de A a B y se aplana.
 
-En el panel, los instrumentos muestran en vivo el perfil del agua y la línea de energía a lo largo del canal, y los hidrogramas (profundidad y caudal) en A y B, la velocidad del frente medida y la teórica. Con pendiente casi nula (S ≤ 0,05 %) el perfil de la rotura se dibuja junto a la solución exacta de Ritter o de Stoker. La pestaña Experimentos compara el modelo con la teoría en cada situación y la pestaña Datos lleva el balance de agua (entró, salió, está en el canal).
+En el panel, los instrumentos muestran en vivo el perfil del agua, la línea de energía y la huella del nivel máximo (la cota más alta a la que llegó el agua desde el último evento) a lo largo del canal, los hidrogramas (profundidad y caudal) en A y B, y la velocidad del frente medida y la teórica. En la creciente se agrega la curva de gasto en A (ver abajo). En la escena, la huella del nivel máximo queda marcada en el vidrio y en la pared como una franja ocre, el frente salpica y la cámara puede acompañar el frente («Cámara con el frente»). Con pendiente casi nula (S ≤ 0,05 %) el perfil de la rotura se dibuja junto a la solución exacta de Ritter o de Stoker. La pestaña Experimentos compara el modelo con la teoría en cada situación y la pestaña Datos lleva el balance de agua (entró, salió, está en el canal).
 
 | Pieza | Ecuación o valor | Fuente |
 |---|---|---|
 | Ecuaciones | ∂h/∂t + ∂q/∂x = 0; ∂q/∂t + ∂(q²/h + g·h²/2)/∂x = −g·h·∂zb/∂x − g·h·Sf, con Sf = n²·u·\|u\|/R^(4/3) | Saint-Venant (1871); Chow (1959), cap. 18 |
-| Esquema | volúmenes finitos de primer orden, flujo HLL, paso por la condición CFL (Courant 0,45) | Harten, Lax y van Leer (1983); Toro (2001) |
-| Fondo | reconstrucción hidrostática: conserva el volumen, deja quieto un lago sobre un fondo irregular y no da profundidades negativas al mojar un fondo seco | Audusse et al. (2004) |
+| Esquema | volúmenes finitos con flujo HLL. Primer orden: Euler con los valores de cada celda (Courant 0,45). Segundo orden, el que usan la escena y el arranque del resalto: reconstrucción lineal de la profundidad, la velocidad y la cota del agua con el limitador minmod, e integración de Heun (Runge-Kutta de dos etapas que conserva la positividad), Courant 0,4 | Harten, Lax y van Leer (1983); van Leer (1979); Toro (2001) |
+| Fondo | reconstrucción hidrostática (en segundo orden, con el término del fondo dentro de cada celda): conserva el volumen, deja quieto un lago sobre un fondo irregular, también con orillas secas, y no da profundidades negativas al mojar un fondo seco | Audusse et al. (2004) |
 | Fricción | Manning, semi-implícita (estable con poca agua) | — |
-| Contornos | caudal de entrada Q(t), pared, salida libre, caída con la profundidad crítica, nivel fijo y chorro supercrítico (h y Q dados) | — |
+| Contornos | caudal de entrada Q(t) impuesto en la interfaz (entra exactamente Q), pared, salida libre, caída con la profundidad crítica, nivel fijo y chorro supercrítico (h y Q dados) | — |
 | Compuerta interna | orificio con Cc = 0,61, libre o ahogado; el chorro entra con la velocidad de la vena contraída; cerrada, es una pared | Henderson (1966) |
 | Rotura sobre fondo seco | frente a 2·√(g·h0); en la presa 4/9·h0 y q = (8/27)·√g·h0^1,5 | Ritter (1892) |
 | Rotura sobre fondo mojado | resalto móvil (masa y cantidad de movimiento) unido a la onda de vaciado | Stoker (1957) |
 | Onda por el cierre | Vw = (q1 − q2)/(y2 − y1) y (V1 + Vw)² = g·y2·(y1 + y2)/(2·y1) | Favre (1935); Chow (1959), cap. 18 |
 | Celeridad de la creciente | c = dQ/dA (onda cinemática), 5/3·V en un canal muy ancho con Manning | Lighthill y Whitham (1955) |
+| Curva de gasto permanente en A | perfil M2, H2 (canal suave u horizontal, desde la crítica de la caída hacia arriba) o S2 (canal fuerte, desde la crítica de la entrada hacia abajo), dy/dx = (S0 − Sf)/(1 − Fr²) por Runge-Kutta de cuarto orden | Chow (1959), cap. 9 y 10 |
+| Curva en lazo | en una creciente, con la misma profundidad pasa más caudal al subir que al bajar | Henderson (1966), cap. 9 |
+| Tránsito por Muskingum-Cunge | parámetros variables: c, K = Δx/c y X = ½·(1 − Q/(B·S0·c·Δx)) con el caudal de referencia de tres puntos; Δx ≤ ½·(c·Δt + Q/(B·S0·c)) | Ponce y Yevjevich (1978); Ponce y Chaganti (1994); Ponce y Theurer (1982) |
+| Aplicabilidad | onda difusiva si M = tp·S0·√(g/y0) > 15; onda cinemática sin atenuación si τ = T·S0·u0/y0 ≥ 171, con T = 2·tp | Ponce (1989); Ponce, Li y Simons (1978) |
 
-**Validación (pruebas H24 a H29).**
+**Validación (pruebas H24 a H32).**
 
 | Prueba | Caso | Resultado |
 |---|---|---|
 | H24 | presa de 1 m sobre fondo seco, 800 celdas, 4 s | error medio de la profundidad 0,46 % frente a Ritter |
 | H25 | presa de 1 m sobre 0,1 m de agua, 5 s | error medio 0,39 %; meseta 0,3960 m (Stoker 0,3962 m); frente a 0,1 m del exacto |
-| H26 | canal de 2 km con 10 m³/s; volumen; lago sobre una loma | profundidad normal a 0,2 % de Manning; error de volumen 4·10⁻¹⁵; lago quieto (2·10⁻¹⁵ m²/s) |
+| H26 | canal de 2 km con 10 m³/s; volumen; lago sobre una loma | caudal exacto y profundidad normal a 0,13 % de Manning; error de volumen 4·10⁻¹⁵; lago quieto (2·10⁻¹⁵ m²/s) |
 | H27 | compuerta de 0,3 m con 1 m²/s | profundidad aguas arriba a 0,3 % de la ecuación del orificio; aguas abajo Cc·a = 0,183 m |
 | H28 | cierre brusco con 1 m de agua a 1 m/s | altura 1,3418 m (Favre 1,3418 m); frente a 0,03 m de la posición teórica a los 30 s |
-| H29 | el resalto en el tiempo (sección 2) | mismo resultado que el cálculo permanente en cuatro pozos |
+| H29 | el resalto en el tiempo (sección 2), en segundo orden | mismo resultado que el cálculo permanente en cuatro pozos; pozo a menos de 2 % |
+| H30 | segundo orden frente a primero, con 100 a 800 celdas | Ritter: 1,01 / 0,51 / 0,25 / 0,13 % frente a 1,83 / 1,19 / 0,75 / 0,46 %; Stoker: 0,99 / 0,48 / 0,24 / 0,12 % frente a 2,11 / 1,20 / 0,69 / 0,39 %; el error baja como 1/N (orden 1,0 frente a 0,66 y 0,81). Lago con una isla quieto; flujo uniforme a 0,01 % de Manning |
+| H31 | curva de gasto en A | la permanente a menos de 0,1 % del modelo en doce casos; en una creciente de 4 a 24 m³/s, 19,4 m³/s al subir y 16,0 m³/s al bajar con la misma profundidad |
+| H32 | Muskingum-Cunge frente a Saint-Venant en un cauce de 10 m, creciente de 5 a 60 m³/s con pico a las 6 h | a 5 y 10 km, pico a menos de 0,13 % y retraso a menos de 4 %; el método pierde 0,4 a 0,7 % del volumen de la creciente (conocido en Muskingum-Cunge de parámetros variables) |
 
 Las cifras se reproducen con `npm run test:canals`; el informe completo queda en `PRUEBAS_CANALES.md`.
 
-**Qué no es.** Las situaciones son de un canal de laboratorio ilustrativo: no representan un embalse, una presa ni un río de Medellín, no son un pronóstico de inundación y las alturas de muros que propone la pestaña Diseño son prediseños académicos. El modelo es unidimensional (no ve el agua que se sale del canal ni las ondas de lado a lado) y de primer orden: el frente se suaviza en unas pocas celdas.
+**Qué no es.** Las situaciones son de un canal de laboratorio ilustrativo: no representan un embalse, una presa ni un río de Medellín, no son un pronóstico de inundación y las alturas de muros que propone la pestaña Diseño son prediseños académicos. El modelo es unidimensional (no ve el agua que se sale del canal ni las ondas de lado a lado); aun en segundo orden, un frente se reparte en dos o tres celdas. Muskingum-Cunge es una onda difusiva: en una creciente muy rápida (M < 15) la inercia importa y el método pierde precisión; la herramienta lo avisa.
 
 ## 8. La pestaña Diseño: calculadoras, prediseñadores, planos y memoria
 
@@ -200,7 +207,7 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 | Las alcantarillas | calculadora HDS-5 de tubo o cajón; prediseño que prueba doce tubos (0,6 a 3,0 m) o treinta y cinco cajones (1,0 a 4,0 m de ancho por 1,0 a 3,0 m de alto) con 1 a 3 conductos y escoge el de menor área que cumple |
 | Los sedimentos | Shields, umbral, Rouse y arrastre; cuatro fórmulas de transporte y formas del lecho; prediseño de enrocado |
 | Medir el caudal | vertederos y compuerta; escoger vertedero; canaleta Parshall; escoger canaleta Parshall; aforo con molinete por sección media |
-| Ondas y crecientes | rotura de presa (Ritter sobre fondo seco y Stoker sobre fondo mojado: velocidad del frente, tiempo de llegada, alturas); prediseño de los muros junto a una compuerta para la onda de Favre (y2 + borde libre, redondeado a 5 cm); celeridad de una creciente (onda cinemática) y su tiempo de viaje |
+| Ondas y crecientes | rotura de presa (Ritter sobre fondo seco y Stoker sobre fondo mojado: velocidad del frente, tiempo de llegada, alturas); prediseño de los muros junto a una compuerta para la onda de Favre (y2 + borde libre, redondeado a 5 cm); celeridad de una creciente (onda cinemática) y su tiempo de viaje; tránsito de una creciente por un tramo largo (Muskingum-Cunge de parámetros variables: pico, atenuación, retraso, criterio de Ponce y conservación del volumen, con los hidrogramas de entrada y salida) |
 
 **Planos y gráficas.** Los prediseños dibujan su plano acotado (corte del canal con revestimiento y borde libre, perfil del pozo con dados, bloques y umbral, abertura del puente con su gálibo, corte de la alcantarilla por la entrada con la vía y el nivel del agua, enrocado con su capa, alzado del vertedero) a escala, en metros, y una gráfica cuando aplica (perfil del agua a tres tiempos después de una rotura de presa, corte del canal con el agua antes del cierre, la onda y los muros, curva de descarga del canal, nivel a la entrada de la alcantarilla según el caudal con la vía y el HW máximo, transporte según el caudal con las cuatro fórmulas en escala logarítmica, curvas de calibración). El plano se puede bajar en SVG.
 
@@ -208,7 +215,7 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 
 **Simular una creciente.** En el resalto, el puente, la alcantarilla y los sedimentos, el caudal sube a un pico y vuelve con la forma del hidrograma adimensional gamma (Haan, 1970): q/qp = (t/tp·e^(1 − t/tp))^3,7, en tiempo comprimido (unos 30 s); la escena se recalcula en cada paso.
 
-**Entradas siempre válidas.** Las escenas sanean sus entradas (`sanitizeUniform`, `sanitizeJump`, `sanitizeBridge`, `sanitizeGauge`, `sanitizeCulvert`, `sanitizeSediment`): un número que no es finito toma el valor por defecto y uno fuera de rango se lleva al borde. Las herramientas revisan los datos y responden con un aviso cuando no sirven. La prueba H15 llama 9 600 veces las veinticuatro herramientas con datos al azar y exige que no haya excepciones ni valores no numéricos; la H23 hace lo mismo con los planos, las gráficas y la memoria.
+**Entradas siempre válidas.** Las escenas sanean sus entradas (`sanitizeUniform`, `sanitizeJump`, `sanitizeBridge`, `sanitizeGauge`, `sanitizeCulvert`, `sanitizeSediment`, `sanitizeWave`): un número que no es finito toma el valor por defecto y uno fuera de rango se lleva al borde. Las herramientas revisan los datos y responden con un aviso cuando no sirven. La prueba H15 llama 10 000 veces las veinticinco herramientas con datos al azar y exige que no haya excepciones ni valores no numéricos; la H23 hace lo mismo con los planos, las gráficas y la memoria.
 
 ## 9. Límites
 
@@ -244,3 +251,6 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 - Harten, A., Lax, P. D. y van Leer, B. (1983). On upstream differencing and Godunov-type schemes for hyperbolic conservation laws. *SIAM Review*, 25(1); Toro, E. F. (2001). *Shock-Capturing Methods for Free-Surface Shallow Flows*. Wiley.
 - Audusse, E., Bouchut, F., Bristeau, M.-O., Klein, R. y Perthame, B. (2004). A fast and stable well-balanced scheme with hydrostatic reconstruction for shallow water flows. *SIAM J. Scientific Computing*, 25(6).
 - Lighthill, M. J. y Whitham, G. B. (1955). On kinematic waves I. Flood movement in long rivers. *Proc. Royal Society A*, 229.
+- van Leer, B. (1979). Towards the ultimate conservative difference scheme V. A second-order sequel to Godunov's method. *J. Computational Physics*, 32(1).
+- Ponce, V. M., Li, R. M. y Simons, D. B. (1978). Applicability of kinematic and diffusion models. *J. Hydraulics Division*, ASCE, 104(3); Ponce, V. M. (1989). *Engineering Hydrology: Principles and Practices*. Prentice Hall.
+- Ponce, V. M. y Yevjevich, V. (1978). Muskingum-Cunge method with variable parameters. *J. Hydraulics Division*, ASCE, 104(12); Ponce, V. M. y Theurer, F. D. (1982). Accuracy criteria in diffusion routing. *J. Hydraulics Division*, ASCE, 108(6); Ponce, V. M. y Chaganti, P. V. (1994). Variable-parameter Muskingum-Cunge method revisited. *J. Hydrology*, 162.

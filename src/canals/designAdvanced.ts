@@ -447,3 +447,149 @@ export function calcCeleridad(v: Vals): Result {
     data: { Q, b, n, S },
   };
 }
+
+// ------------------------------------------------------------------ ondas: tránsito de crecientes (Muskingum-Cunge)
+
+export interface MCInput {
+  /** Largo del tramo (m), ancho (m), n de Manning, pendiente (m/m). */
+  L: number;
+  b: number;
+  n: number;
+  S: number;
+  /** Caudal de base y pico (m³/s) y tiempo al pico (s) del hidrograma de entrada (forma gamma). */
+  Qb: number;
+  Qp: number;
+  tp: number;
+}
+
+export interface MCResult {
+  dt: number;
+  dx: number;
+  reaches: number;
+  t: number[];
+  qin: number[];
+  qout: number[];
+  peakIn: number;
+  peakOut: number;
+  tPeakOut: number;
+  /** Profundidad normal, velocidad y celeridad cinemática con el pico (m, m/s, m/s). */
+  y0: number;
+  u0: number;
+  c0: number;
+  /** Criterios de Ponce: M = tp·S0·√(g/y0) (onda difusiva si > 15) y τ = 2·tp·S0·u0/y0 (cinemática si ≥ 171). */
+  M: number;
+  tau: number;
+  /** Error de volumen: (salió − entró)/entró en el tiempo simulado. */
+  volErr: number;
+}
+
+/**
+ * Tránsito de una creciente por un canal rectangular con el método de Muskingum-Cunge de parámetros variables
+ * (Ponce y Yevjevich, 1978; promedio de tres puntos de Ponce y Chaganti, 1994). En cada tramo y cada paso, con el
+ * caudal de referencia Qr = (I_j + I_j+1 + O_j)/3: c = dQ/dA (Manning), K = Δx/c y X = ½·(1 − Qr/(B·S0·c·Δx)); luego
+ * O_j+1 = C0·I_j+1 + C1·I_j + C2·O_j. Δt = tp/40 y Δx ≤ ½·(c·Δt + Q/(B·S0·c)) con el pico (Ponce y Theurer, 1982).
+ * Es una onda difusiva: no ve la inercia (crecientes muy rápidas) ni el remanso de aguas abajo.
+ */
+export function muskingumCunge(inp: MCInput): MCResult {
+  const { L, b, n, S, Qb, Qp, tp } = inp;
+  const sec: Section = { shape: 'rect', b, z: 0, D: 0, H: 99 };
+  // celeridad cinemática c(Q), en una tabla logarítmica para no resolver Manning en cada paso
+  const qs: number[] = [], cs: number[] = [];
+  const qLo = Math.max(1e-3, Qb * 0.5), qHi = Qp * 1.5;
+  for (let k = 0; k <= 60; k++) {
+    const Q = qLo * Math.pow(qHi / qLo, k / 60);
+    const y = normalDepth(sec, n, S, Q), dy = y * 1e-4;
+    qs.push(Q);
+    cs.push((manningQ(sec, n, S, y + dy) - manningQ(sec, n, S, y - dy)) / (b * 2 * dy));
+  }
+  const cel = (Q: number) => {
+    if (Q <= qs[0]) return cs[0];
+    if (Q >= qs[60]) return cs[60];
+    const k = Math.min(59, Math.floor((60 * Math.log(Q / qLo)) / Math.log(qHi / qLo)));
+    const w = (Q - qs[k]) / (qs[k + 1] - qs[k]);
+    return cs[k] + w * (cs[k + 1] - cs[k]);
+  };
+  const y0 = normalDepth(sec, n, S, Qp), u0 = Qp / (b * y0), c0 = cel(Qp);
+  const dt = tp / 40;
+  const dxMax = 0.5 * (c0 * dt + Qp / (b * S * c0));
+  const reaches = Math.max(1, Math.ceil(L / dxMax)), dx = L / reaches;
+  const T = 8 * tp + (2 * L) / cel(Qb + 0.5 * (Qp - Qb));
+  const steps = Math.min(20000, Math.ceil(T / dt));
+  const t = Array.from({ length: steps + 1 }, (_, j) => j * dt);
+  const qin = t.map((x) => Qb + (Qp - Qb) * gammaShape(x, tp));
+  let I = qin;
+  for (let r = 0; r < reaches; r++) {
+    const O = [I[0]];
+    for (let j = 0; j < steps; j++) {
+      const Qr = (I[j] + I[j + 1] + O[j]) / 3;
+      const c = cel(Qr), X = 0.5 * (1 - Qr / (b * S * c * dx)), K = dx / c;
+      const D = 2 * K * (1 - X) + dt;
+      O.push(Math.max(0, ((dt - 2 * K * X) * I[j + 1] + (dt + 2 * K * X) * I[j] + (2 * K * (1 - X) - dt) * O[j]) / D));
+    }
+    I = O;
+  }
+  const qout = I;
+  // pico con una parábola por los tres puntos más altos
+  const pk = qout.reduce((a, q, j) => (q > qout[a] ? j : a), 0);
+  let peakOut = qout[pk], tPeakOut = t[pk];
+  if (pk > 0 && pk < steps) {
+    const y1 = qout[pk - 1], y2 = qout[pk], y3 = qout[pk + 1], den = y1 - 2 * y2 + y3;
+    const off = den !== 0 ? (0.5 * (y1 - y3)) / den : 0;
+    peakOut = y2 - 0.25 * (y1 - y3) * off;
+    tPeakOut = (pk + off) * dt;
+  }
+  let vin = 0, vout = 0;
+  for (let j = 0; j <= steps; j++) {
+    vin += qin[j] - Qb;
+    vout += qout[j] - Qb;
+  }
+  return {
+    dt, dx, reaches, t, qin, qout,
+    peakIn: Qp, peakOut, tPeakOut,
+    y0, u0, c0,
+    M: tp * S * Math.sqrt(G / y0),
+    tau: (2 * tp * S * u0) / y0,
+    volErr: vin > 0 ? (vout - vin) / vin : 0,
+  };
+}
+
+/** Hidrograma adimensional gamma (Haan, 1970): q/qp = (t/tp·e^(1 − t/tp))^3,7. */
+function gammaShape(t: number, tp: number): number {
+  if (t <= 0) return 0;
+  const r = t / tp;
+  return Math.pow(r * Math.exp(1 - r), 3.7);
+}
+
+export function calcTransito(v: Vals): Result {
+  const L = num(v.L, 10) * 1000, b = num(v.b, 10), n = num(v.n, 0.035), S = num(v.S, 0.1) / 100;
+  const Qb = num(v.Qb, 5), Qp = num(v.Qp, 60), tph = num(v.tp, 6);
+  if (L <= 0 || b <= 0 || n <= 0 || S <= 0 || Qb <= 0 || tph <= 0) return bad('Revisa los datos.');
+  if (Qp <= Qb) return bad('El pico debe ser mayor que el caudal de base.');
+  if (L > 500000 || tph > 240) return bad('El tramo (hasta 500 km) o el tiempo al pico (hasta 240 h) es muy grande.');
+  const r = muskingumCunge({ L, b, n, S, Qb, Qp, tp: tph * 3600 });
+  const att = 1 - (r.peakOut - Qb) / (Qp - Qb);
+  const lag = r.tPeakOut - tph * 3600;
+  return {
+    outs: [
+      { label: 'Pico a la salida del tramo', value: `${f(r.peakOut, 1)} m³/s (entra ${f(Qp, 1)})`, kid: true },
+      { label: 'El pico baja', value: `${f(att * 100, 1)} %`, kid: true },
+      { label: 'El pico llega', value: `${f(lag / 3600, 2)} h después`, kid: true },
+      { label: 'Celeridad con el pico', value: `${f(r.c0, 2)} m/s (agua a ${f(r.u0, 2)} m/s)` },
+      { label: 'Tramos de cálculo', value: `${r.reaches} de ${r.dx >= 1000 ? `${f(r.dx / 1000, 2)} km` : `${f(r.dx, 0)} m`}, Δt = ${f(r.dt / 60, 1)} min` },
+    ],
+    steps: [
+      `Entrada: hidrograma gamma con base ${f(Qb, 1)} m³/s, pico ${f(Qp, 1)} m³/s a las ${f(tph, 1)} h.`,
+      `Con el pico, flujo uniforme: y0 = ${f(r.y0, 3)} m, u0 = ${f(r.u0, 3)} m/s y celeridad c = dQ/dA = ${f(r.c0, 3)} m/s.`,
+      `Δt = tp/40 = ${f(r.dt, 0)} s; Δx ≤ ½·(c·Δt + Qp/(B·S0·c)) → ${r.reaches} tramos de ${f(r.dx, 1)} m.`,
+      `En cada tramo y paso, con Qr = (I_j + I_j+1 + O_j)/3: K = Δx/c(Qr), X = ½·(1 − Qr/(B·S0·c·Δx)) y O_j+1 = C0·I_j+1 + C1·I_j + C2·O_j, con C0 = (Δt − 2KX)/D, C1 = (Δt + 2KX)/D, C2 = (2K(1 − X) − Δt)/D y D = 2K(1 − X) + Δt.`,
+      `Pico a la salida ${f(r.peakOut, 2)} m³/s a las ${f(r.tPeakOut / 3600, 2)} h: atenuación ${f(att * 100, 1)} % y retraso ${f(lag / 3600, 2)} h.`,
+      `Aplicabilidad (Ponce, 1989): M = tp·S0·√(g/y0) = ${f(r.M, 1)} (onda difusiva si M > 15). Con τ = 2·tp·S0·u0/y0 = ${f(r.tau, 0)}, la onda cinemática sola (sin atenuación) sirve si τ ≥ 171 (Ponce et al., 1978).`,
+    ],
+    checks: [
+      { name: 'Onda difusiva: M > 15 (si no, la inercia importa y hace falta Saint-Venant)', ok: r.M > 15, value: `M = ${f(r.M, 1)}` },
+      { name: 'Conserva el volumen de la creciente', ok: Math.abs(r.volErr) < 0.01, value: `${f(r.volErr * 100, 2)} %` },
+    ],
+    kid: `La creciente llega ${f(lag / 3600, 1)} horas después y un poco más baja: de ${f(Qp, 0)} a ${f(r.peakOut, 0)} m³/s.`,
+    data: { kind: 'transito', L, b, n, S, Qb, Qp, tp: tph * 3600 },
+  };
+}

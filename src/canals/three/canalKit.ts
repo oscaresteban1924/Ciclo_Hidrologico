@@ -123,6 +123,8 @@ function flowWaterMaterial(time: { value: number }, top: boolean, opacity: numbe
           float deep = 1.0 - exp(-vDepth / uDepthRef);
           vec3 shallow = mix(diffuseColor.rgb, vec3(0.72, 0.84, 0.80), 0.5);
           diffuseColor.rgb = mix(shallow, diffuseColor.rgb * 0.88, deep);
+          // el agua poco profunda deja ver el fondo (y sus cáusticas); la profunda casi no
+          diffuseColor.a *= mix(0.78, 1.0, deep);
           diffuseColor.rgb += smoothstep(0.6, 0.86, hcH0) * (0.05 + 0.06 * min(1.0, sp * 0.3));
           float fn = hcF((P - vec2(o0 * 1.15, 0.0)) * vec2(1.3, 2.4) + 5.1) * hcW0 + hcF((P - vec2(o1 * 1.15, 0.0)) * vec2(1.3, 2.4) + 9.4) * hcW1;
           hcFoam = clamp(smoothstep(0.42, 0.72, fn * 0.55 + vFoam * 0.62) * min(1.0, vFoam * 1.9), 0.0, 1.0);
@@ -170,6 +172,136 @@ function flowWaterMaterial(time: { value: number }, top: boolean, opacity: numbe
 }
 
 /**
+ * Cáusticas: la red de luz que dibujan en el fondo las ondulaciones de la superficie. Se suman a la luz del fondo
+ * (mezcla aditiva), avanzan con la velocidad del agua (mapa de flujo en dos fases, como la superficie), son más
+ * nítidas en el agua poco profunda y se apagan con la profundidad y la distancia. Es un efecto de imagen: no se
+ * calcula la refracción real.
+ */
+export function causticMaterial(time: { value: number }, look: { scale: { value: number } }): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: time, uScale: look.scale, uStrength: { value: 0.38 } },
+    vertexShader: `
+      attribute float aDepth;
+      attribute float aVel;
+      varying float vD;
+      varying float vV;
+      varying vec3 vW;
+      void main() {
+        vD = aDepth; vV = aVel;
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uScale;
+      uniform float uStrength;
+      varying float vD;
+      varying float vV;
+      varying vec3 vW;
+      // red de líneas brillantes por interferencia iterada
+      float hcCaus(vec2 p, float t) {
+        vec2 i = p;
+        float c = 1.0;
+        for (int n = 0; n < 4; n++) {
+          float tt = t * (1.0 - 3.5 / float(n + 1));
+          i = p + vec2(cos(tt - i.x) + sin(tt + i.y), sin(tt - i.y) + cos(tt + i.x));
+          c += 1.0 / length(vec2(p.x / (sin(i.x + tt) / 0.006), p.y / (cos(i.y + tt) / 0.006)));
+        }
+        c /= 4.0;
+        c = 1.17 - pow(c, 1.4);
+        return pow(abs(c), 7.0);
+      }
+      void main() {
+        float T = 2.5;
+        float p0 = fract(uTime / T), p1 = fract(uTime / T + 0.5);
+        float w0 = 1.0 - abs(1.0 - 2.0 * p0);
+        float v = min(vV, 6.0);
+        float f = 4.5 / uScale;
+        vec2 a = (vW.xz - vec2(v * p0 * T, 0.0)) * f;
+        vec2 b = (vW.xz - vec2(v * p1 * T, 0.0)) * f + 3.7;
+        float t = uTime * 0.55;
+        float c = hcCaus(a, t) * w0 + hcCaus(b, t + 11.0) * (1.0 - w0);
+        float k = uStrength * smoothstep(0.004, 0.05, vD) * exp(-vD / 1.6) / (1.0 + 0.12 * v);
+        k *= 1.0 - smoothstep(20.0, 70.0, distance(cameraPosition, vW));
+        // cuando el dibujo se vuelve más fino que los píxeles, se apaga (sin parpadeo ni granos)
+        k *= 1.0 - smoothstep(0.3, 1.0, length(fwidth(vW.xz * f)));
+        gl_FragColor = vec4(vec3(1.0, 0.97, 0.86) * clamp(c, 0.0, 1.0) * k, 1.0);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+}
+
+/**
+ * Salpicaduras: gotas con movimiento balístico (gravedad) que nacen donde el agua golpea (el frente de una onda, el pie
+ * de una caída). Es un efecto de imagen; se apaga con movimiento reducido.
+ */
+export class Splash {
+  readonly mesh: THREE.InstancedMesh;
+  private p: Float32Array;
+  private v: Float32Array;
+  private life: Float32Array;
+  private next = 0;
+  private acc = 0;
+  private m4 = new THREE.Matrix4();
+  private sc = new THREE.Vector3();
+  private q = new THREE.Quaternion();
+  private pv = new THREE.Vector3();
+
+  constructor(count = 320, radius = 0.05) {
+    this.mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(radius, 0), new THREE.MeshStandardMaterial({ color: '#f4f9fc', roughness: 0.25, transparent: true, opacity: 0.8, depthWrite: false }), count);
+    this.mesh.frustumCulled = false;
+    this.p = new Float32Array(count * 3);
+    this.v = new Float32Array(count * 3);
+    this.life = new Float32Array(count);
+    for (let k = 0; k < count; k++) this.mesh.setMatrixAt(k, this.m4.makeScale(0, 0, 0));
+  }
+
+  /**
+   * Emite `rate` gotas por segundo durante `dt`: nacen en (x, y, z) con dispersión `sx` a lo largo y `sz` a lo ancho, y
+   * salen con velocidad (vx, vy, 0) más un desorden `jit` (m/s).
+   */
+  emit(dt: number, rate: number, x: number, y: number, z: number, sx: number, sz: number, vx: number, vy: number, jit: number): void {
+    this.acc += rate * dt;
+    const N = this.life.length;
+    while (this.acc >= 1) {
+      this.acc -= 1;
+      const k = this.next;
+      this.next = (this.next + 1) % N;
+      const r = () => Math.random() * 2 - 1;
+      this.p[3 * k] = x + r() * sx;
+      this.p[3 * k + 1] = y;
+      this.p[3 * k + 2] = z + r() * sz;
+      this.v[3 * k] = vx + r() * jit;
+      this.v[3 * k + 1] = vy * (0.6 + 0.6 * Math.random());
+      this.v[3 * k + 2] = r() * jit;
+      this.life[k] = 0.6 + Math.random() * 0.5;
+    }
+  }
+
+  update(dt: number, reduced: boolean): void {
+    this.mesh.visible = !reduced;
+    if (reduced) return;
+    const N = this.life.length;
+    for (let k = 0; k < N; k++) {
+      if (this.life[k] <= 0) continue;
+      this.life[k] -= dt;
+      if (this.life[k] <= 0) {
+        this.mesh.setMatrixAt(k, this.m4.makeScale(0, 0, 0));
+        continue;
+      }
+      this.v[3 * k + 1] -= 9.81 * dt;
+      for (let c = 0; c < 3; c++) this.p[3 * k + c] += this.v[3 * k + c] * dt;
+      const s = Math.min(1, this.life[k] * 2.5);
+      this.mesh.setMatrixAt(k, this.m4.compose(this.pv.set(this.p[3 * k], this.p[3 * k + 1], this.p[3 * k + 2]), this.q, this.sc.set(s, s, s)));
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
+/**
  * Agua de un tramo: superficie (vista de arriba, con `cols` columnas a lo ancho para el oleaje) y cara del lado
  * +z (vista por el vidrio del corte). Se rehace cuando cambia el cálculo.
  */
@@ -177,6 +309,7 @@ export class WaterBody {
   readonly group = new THREE.Group();
   private top: THREE.Mesh;
   private side: THREE.Mesh;
+  private caust: THREE.Mesh;
   private topMat: THREE.MeshStandardMaterial;
   private sideMat: THREE.MeshStandardMaterial;
   private color = new THREE.Color('#2f7fb0');
@@ -185,7 +318,7 @@ export class WaterBody {
   private cols: number;
   private look = { scale: { value: 1 }, depthRef: { value: 1.2 } };
 
-  constructor(time: { value: number }, opts: { side?: boolean; opacity?: number; sideOpacity?: number; cols?: number } & WaterLook = {}) {
+  constructor(time: { value: number }, opts: { side?: boolean; opacity?: number; sideOpacity?: number; cols?: number; caustics?: boolean } & WaterLook = {}) {
     if (opts.scale) this.look.scale.value = opts.scale;
     if (opts.depthRef) this.look.depthRef.value = opts.depthRef;
     this.topMat = flowWaterMaterial(time, true, opts.opacity ?? 0.86, this.look);
@@ -198,7 +331,12 @@ export class WaterBody {
     this.top.frustumCulled = this.side.frustumCulled = false;
     this.hasSide = opts.side !== false;
     this.side.visible = this.hasSide;
-    this.group.add(this.top, this.side);
+    this.caust = new THREE.Mesh(new THREE.BufferGeometry(), causticMaterial(time, this.look));
+    // después de la superficie (que no escribe profundidad): se ve a través del agua, ya atenuada por la profundidad
+    this.caust.renderOrder = 4;
+    this.caust.frustumCulled = false;
+    this.caust.visible = opts.caustics !== false;
+    this.group.add(this.caust, this.top, this.side);
   }
 
   setColor(c: THREE.ColorRepresentation): void {
@@ -253,6 +391,20 @@ export class WaterBody {
     }
     for (const nm of ['position', 'aFoam', 'aVel', 'aDepth', 'aFlow']) tg.getAttribute(nm).needsUpdate = true;
     tg.computeVertexNormals();
+    const cp = this.caust.geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (cp && cp.count === n * (C + 1)) {
+      const CP = cp.array as Float32Array;
+      for (let k = 0; k < n; k++) {
+        const s = st[k], zc = s.z0 ?? 0;
+        for (let j = 0; j <= C; j++) {
+          const i = k * (C + 1) + j, lat = -1 + (2 * j) / C;
+          CP[3 * i] = s.x;
+          CP[3 * i + 1] = s.bed + 0.004;
+          CP[3 * i + 2] = zc + lat * s.halfW;
+        }
+      }
+      cp.needsUpdate = true;
+    }
     if (!this.hasSide) return;
     const SP = (sg.getAttribute('position') as THREE.BufferAttribute).array as Float32Array, SF = (sg.getAttribute('aFoam') as THREE.BufferAttribute).array as Float32Array;
     const SV = (sg.getAttribute('aVel') as THREE.BufferAttribute).array as Float32Array, SD = (sg.getAttribute('aDepth') as THREE.BufferAttribute).array as Float32Array;
@@ -307,6 +459,19 @@ export class WaterBody {
     g.computeVertexNormals();
     this.top.geometry.dispose();
     this.top.geometry = g;
+    // cáusticas: la misma malla puesta sobre el fondo (comparte profundidad, velocidad e índices con la superficie)
+    const bp: number[] = [];
+    for (let k = 0; k < n; k++) {
+      const s = st[k], zc = s.z0 ?? 0;
+      for (let j = 0; j <= C; j++) bp.push(s.x, s.bed + 0.004, zc + (-1 + (2 * j) / C) * s.halfW);
+    }
+    const cg = new THREE.BufferGeometry();
+    cg.setAttribute('position', new THREE.Float32BufferAttribute(bp, 3));
+    cg.setAttribute('aDepth', g.getAttribute('aDepth'));
+    cg.setAttribute('aVel', g.getAttribute('aVel'));
+    cg.setIndex(g.getIndex());
+    this.caust.geometry.dispose();
+    this.caust.geometry = cg;
     if (!this.hasSide) return;
     // cara lateral: del fondo a la superficie, en el borde +z
     const sp: number[] = [], sf: number[] = [], sfo: number[] = [], sv: number[] = [], sd: number[] = [], sr: number[] = [], sc: number[] = [], si: number[] = [];

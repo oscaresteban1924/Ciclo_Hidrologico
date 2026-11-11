@@ -179,6 +179,7 @@ export class JumpWorld {
     const { basin, weir, Q } = r.inp;
     const x1 = basin + 1 + DOWN;
     const sv = new SaintVenant({ L: x1, N: Math.round(x1 / 0.1), b: B, n: CHUTE.n, zb: (x) => (x < basin ? 0 : weir), up: { kind: 'jet', h: r.y1, Q: () => Q }, down: { kind: 'fall' } });
+    sv.order = 2;
     sv.init((x) => ({ h: x < basin ? weir : 0, q: 0 }));
     this.tsv = sv;
     this.stage.view(this.views.resalto);

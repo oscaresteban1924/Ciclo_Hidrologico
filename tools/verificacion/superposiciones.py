@@ -179,6 +179,8 @@ def run(screens, shots):
                 if tag == 'ondas':
                     pg.evaluate(BTN, 'Romper la presa'); pg.wait_for_timeout(4000)
                     top(pg); check(pg, screen, 'canales-ondas-presa', shots, report)
+                    pg.evaluate(BTN, 'Creciente'); pg.wait_for_timeout(3500)
+                    top(pg); check(pg, screen, 'canales-ondas-creciente', shots, report)
                 if tag == 'sedimentos':
                     pg.evaluate(BTN, 'El fondo'); pg.wait_for_timeout(2500)
                     top(pg); check(pg, screen, 'canales-sedimentos-fondo', shots, report)
