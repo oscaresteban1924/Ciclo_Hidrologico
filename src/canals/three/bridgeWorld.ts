@@ -6,7 +6,7 @@
 // Una quebrada y unas casas ilustrativas: no son un lugar de Medellín.
 
 import * as THREE from 'three';
-import { CREEK, DEBRIS, type BridgeResult } from '../hydraulics';
+import { CREEK, DEBRIS, PIER_A, type BridgeResult } from '../hydraulics';
 import { bridgeSurface } from '../profiles';
 import { concreteMaterial, houses, rng, trees, WALLS, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
@@ -110,6 +110,24 @@ export class BridgeWorld {
       for (const sg of [-1, 1]) this.dyn.add(slab(conc, -BRIDGE, BRIDGE, yb - 0.5, yb + deckTop, sg > 0 ? half : -HB - 0.3, sg > 0 ? HB + 0.3 : -half));
     }
     this.dyn.add(slab(conc, -BRIDGE, BRIDGE, yb + r.inp.soffit, yb + deckTop, -HB - 14, HB + 0.4));
+    // pilas de punta y cola semicirculares bajo el tablero (dividen la abertura en partes iguales)
+    const np = r.inp.piers ?? 0;
+    for (let k = 0; k < np; k++) {
+      const zc = -half + ((k + 1) * 2 * half) / (np + 1);
+      const ra = PIER_A / 2, len = 2 * BRIDGE - 0.6;
+      const sh = new THREE.Shape();
+      sh.moveTo(-len / 2 + ra, -ra);
+      sh.lineTo(len / 2 - ra, -ra);
+      sh.absarc(len / 2 - ra, 0, ra, -Math.PI / 2, Math.PI / 2, false);
+      sh.lineTo(-len / 2 + ra, ra);
+      sh.absarc(-len / 2 + ra, 0, ra, Math.PI / 2, (3 * Math.PI) / 2, false);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: r.inp.soffit + 0.5, bevelEnabled: false, curveSegments: 10 });
+      g.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(g, conc);
+      m.position.set(0, yb - 0.5, zc);
+      m.castShadow = m.receiveShadow = true;
+      this.dyn.add(m);
+    }
     this.dyn.add(slab(new THREE.MeshStandardMaterial({ color: '#3d4247', roughness: 0.9 }), -BRIDGE + 0.2, BRIDGE - 0.2, yb + deckTop, yb + deckTop + 0.05, -HB - 14, HB + 0.4));
     for (const xs of [-BRIDGE + 0.15, BRIDGE - 0.15]) this.dyn.add(slab(new THREE.MeshStandardMaterial({ color: '#6f777e', metalness: 0.5, roughness: 0.4 }), xs - 0.06, xs + 0.06, yb + deckTop, yb + deckTop + 1, -HB - 14, HB + 0.4));
     // la vía sube a la orilla si el tablero está más alto que la pared
@@ -141,7 +159,7 @@ export class BridgeWorld {
 
   set(r: BridgeResult): void {
     this.r = r;
-    const key = `${r.inp.S}-${r.inp.span}-${r.inp.soffit}-${r.inp.debris}-${Math.round(Math.min(r.yU, r.inp.soffit) * 10)}`;
+    const key = `${r.inp.S}-${r.inp.span}-${r.inp.soffit}-${r.inp.debris}-${r.inp.piers ?? 0}-${Math.round(Math.min(r.yU, r.inp.soffit) * 10)}`;
     if (key !== this.built) {
       this.build(r);
       this.built = key;

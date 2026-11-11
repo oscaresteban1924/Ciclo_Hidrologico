@@ -535,6 +535,8 @@ export interface BridgeInput {
   /** Altura del bajo del puente sobre el fondo, m. */
   soffit: number;
   debris: Debris;
+  /** Pilas en la abertura (0, 1 o 2), de punta y cola semicirculares y 0,6 m de ancho. */
+  piers?: number;
 }
 
 /** La quebrada canalizada: rectangular de concreto lanzado, paredes de 3 m. */
@@ -544,7 +546,10 @@ export const CD_PRESSURE = 0.5;
 /** Coeficiente de vertedero del agua que pasa por encima del tablero (vía, FHWA: del orden de 1,5 en SI). */
 export const CW_DECK = 1.5;
 
-export const DEFAULT_BRIDGE: BridgeInput = { Q: 30, S: 0.003, span: 6, soffit: 2.2, debris: 'limpio' };
+export const DEFAULT_BRIDGE: BridgeInput = { Q: 30, S: 0.003, span: 6, soffit: 2.2, debris: 'limpio', piers: 0 };
+/** Ancho de cada pila (m) y su coeficiente de forma de Yarnell (punta y cola semicirculares). */
+export const PIER_A = 0.6;
+export const PIER_K = 0.9;
 
 export function sanitizeBridge(p: Partial<BridgeInput>): BridgeInput {
   const d = DEFAULT_BRIDGE;
@@ -555,6 +560,7 @@ export function sanitizeBridge(p: Partial<BridgeInput>): BridgeInput {
     span: num(p.span, 3, CREEK.b, d.span),
     soffit: num(p.soffit, 1.2, 4, d.soffit),
     debris: p.debris && p.debris in DEBRIS ? p.debris : d.debris,
+    piers: Math.round(num(p.piers, 0, 2, 0)),
   };
 }
 
@@ -604,7 +610,8 @@ export function bridgeModel(inp0: Partial<BridgeInput>): BridgeResult {
   const yc = criticalDepth(sec, inp.Q);
   const Fn = froude(sec, inp.Q, yn);
   const steep = yn < yc;
-  const bEff = inp.span * (1 - DEBRIS[inp.debris].block);
+  const np = inp.piers ?? 0;
+  const bEff = Math.max(0.3, inp.span * (1 - DEBRIS[inp.debris].block) - np * PIER_A);
   const qp = inp.Q / bEff;
   const ycp = Math.cbrt((qp * qp) / G);
   const Ecp = 1.5 * ycp;
@@ -616,6 +623,11 @@ export function bridgeModel(inp0: Partial<BridgeInput>): BridgeResult {
     // no le alcanza la energía para pasar por la abertura: el agua se represa hasta tenerla (Henderson 1966)
     flow = 'estrangulado';
     yU = alternateDepths(sec, inp.Q, Ecp)?.sub ?? yn;
+  } else if (np > 0 && !steep) {
+    // sin estrangular, las pilas suben el agua (Yarnell, clase A): Δy = K·F²·(K + 5F² − 0,6)·(α + 15α⁴)·y
+    const alpha = (np * PIER_A) / inp.span;
+    const F2 = (Fn * Fn);
+    yU = yn + PIER_K * F2 * (PIER_K + 5 * F2 - 0.6) * (alpha + 15 * alpha ** 4) * yn;
   }
   const touches = yU >= inp.soffit || (flow === 'estrangulado' && ycp >= inp.soffit);
   let Qover = 0;

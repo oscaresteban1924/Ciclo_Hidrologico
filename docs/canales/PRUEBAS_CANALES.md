@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**22 de 22 cumplen.**
+**23 de 23 cumplen.**
 
 ## H1. Geometría: área, perímetro, ancho de superficie y momento estático de las tres secciones — cumple
 
@@ -76,8 +76,8 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 ## H15. Calculadoras y prediseñadores de las seis partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios — cumple
 
-- Tolerancia: 400 juegos de datos al azar en las doce herramientas (4 800 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida
-- Medido: 4800 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
+- Tolerancia: 400 juegos de datos al azar en las veintiuna herramientas (8 400 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida
+- Medido: 8400 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
 
 ## H16. Fuerza tractiva de Lane y rugosidad compuesta de Horton y Einstein — cumple
 
@@ -113,3 +113,8 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 - Tolerancia: cajón de 2,0 × 1,5 m con 6 m³/s: HW a la entrada igual al cálculo a mano con Hc = 1,5·dc, K = 0,026 y M = 1 (error < 0,1 %); pérdida a la salida con R = A/P del cajón lleno y ke = 0,4 (error < 1e-9); el cajón (3 m²) deja el agua más baja que un tubo de 1,5 m (1,77 m²); una entrada de tubo pedida para un cajón se cambia por aletas de 30° a 75°
 - Medido: X = 2.957; HW = 1.565 m (a mano 1.565); H = 0.3389 m (a mano 0.3389); cajón 1.57 m frente a tubo 2.50 m; entrada corregida: aletas3075
+
+## H23. Planos acotados, gráficas y memoria de cálculo imprimible de los prediseños — cumple
+
+- Tolerancia: 120 juegos de datos (el primero, los de ejemplo) en los diez prediseños con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»
+- Medido: 1200 memorias; 720 planos y 476 gráficas; excepciones 0; con valores inválidos 0

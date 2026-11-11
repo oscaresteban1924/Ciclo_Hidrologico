@@ -36,6 +36,10 @@ import {
   type Section,
   type Shape,
 } from '../../src/canals/hydraulics';
+import { planFor } from '../../src/canals/designPlans';
+import { chartSVG, planSVG } from '../../src/canals/plan';
+import { memoriaHTML } from '../../src/canals/memoria';
+import { calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from '../../src/canals/designAdvanced';
 import { calcAforo, calcAlcantarilla, calcCanal, calcPuente, calcResalto, calcSedimento, preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente } from '../../src/canals/designCalc';
 import { CR_ROAD, INLETS, ROAD_LEN, culvertModel, inletHW, outletHW, type Inlet } from '../../src/canals/culvert';
 import { BEDFORM_NAME, contractionScour, hortonN, laneK, midSection, parshallH, parshallQ, pierScour, transport, usbrBasin, yarnell, type Bedform } from '../../src/canals/advanced';
@@ -465,15 +469,16 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     let x = 7;
     return () => ((x = (x * 16807) % 2147483647) / 2147483647);
   })();
-  const fns = { calcCanal, preCanal, calcResalto, prePozo, calcPuente, prePuente, calcAlcantarilla, preAlcantarilla, calcSedimento, preEnrocado, calcAforo, preAforador };
+  const fns = { calcCanal, preCanal, calcResalto, prePozo, calcPuente, prePuente, calcAlcantarilla, preAlcantarilla, calcSedimento, preEnrocado, calcAforo, preAforador, calcRugosidad, preCanalTierra, prePozoUSBR, calcPilas, calcContraccion, calcFormulas, calcParshall, preParshall, calcMolinete };
   let n = 0, bad = 0, thrown = 0;
   const pick = <T,>(a: T[]) => a[Math.floor(R() * a.length)];
   for (let k = 0; k < 400; k++) {
     const v: Record<string, number | string> = {
-      forma: pick(['rect', 'trap', 'circ']), material: pick(['concreto', 'tierra', 'pasto', 'cantos', 'piedra', 'otro']), n: 0.012 + R() * 0.04, b: 0.5 + R() * 8, z: R() * 3, D: 0.4 + R() * 2.5,
+      forma: pick(['rect', 'trap', 'circ', 'cajon']), material: pick(['concreto', 'tierra', 'pasto', 'cantos', 'piedra', 'otro']), n: 0.012 + R() * 0.04, b: 0.5 + R() * 8, z: R() * 3, D: 0.4 + R() * 2.5,
       S: 0.02 + R() * 4, Q: 0.2 + R() * 60, y1: 0.05 + R() * 1, H: 1 + R() * 12, loss: R() * 30, fs: 1 + R() * 0.5, B: 3 + R() * 10, bp: 1 + R() * 3, Hc: 2 + R() * 3, blk: R() * 50, gal: R() * 1,
       L: 10 + R() * 60, tw: R() * 2, entrada: pick(['muro', 'campana', 'saliente']), road: 2 + R() * 6, hwd: 1.2 + R() * 0.5, free: 0.3 + R() * 0.5, vmax: 3 + R() * 3,
       d: 0.05 + R() * 300, h: 0.2 + R() * 4, tipo: pick(['rect', 'tri', 'gate']), ang: pick([60, 90]), a: 2 + R() * 8, qmin: 0.5 + R() * 3, qmax: 5 + R() * 40, P: 10 + R() * 10, fb: 10 + R() * 20,
+      forma2: pick(['circ', 'cajon']), entradaC: pick(['aletas3075', 'aletas90', 'aletas0', 'muro']), y: 0.1 + R() * 3, nb: 0.012 + R() * 0.05, nw: 0.011 + R() * 0.03, d75: 1 + R() * 120, phi: 25 + R() * 15, tw2: R() * 4, np: Math.floor(R() * 5), Lp: 1 + R() * 10, pila: pick(['semicircular', 'cuadrada', 'triangular', 'otra']), skew: R() * 30, K3: pick([1.1, 1.2, 1.3]), W1: 5 + R() * 60, W2: 3 + R() * 60, y0: 0.3 + R() * 4, d50: 0.1 + R() * 100, size: pick(['1in', '3in', '6in', '9in', '1ft', '3ft', 'x']), Ha: R() * 80, Hb: R() * 60, tabla: pick(['0 0 0\n1 0,5 0,4\n2 0 0', '0 0 0\n2 1 1\n4 1,5 1,2\n6 0 0', 'a b c', '0 0 0']),
     };
     for (const [name, fn] of Object.entries(fns)) {
       n++;
@@ -498,7 +503,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
   record({
     id: 'H15',
     name: 'Calculadoras y prediseñadores de las seis partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios',
-    tolerance: '400 juegos de datos al azar en las doce herramientas (4 800 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida',
+    tolerance: '400 juegos de datos al azar en las veintiuna herramientas (8 400 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida',
     measured: `${n} llamadas; excepciones ${thrown}; con valores inválidos ${bad}; propuestas de ejemplo ${okProps ? 'cumplen' : 'NO cumplen'} (alcantarilla: ${pa.outs[0]?.value ?? pa.error})`,
     pass: thrown === 0 && bad === 0 && okProps,
   });
@@ -640,6 +645,43 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     tolerance: 'cajón de 2,0 × 1,5 m con 6 m³/s: HW a la entrada igual al cálculo a mano con Hc = 1,5·dc, K = 0,026 y M = 1 (error < 0,1 %); pérdida a la salida con R = A/P del cajón lleno y ke = 0,4 (error < 1e-9); el cajón (3 m²) deja el agua más baja que un tubo de 1,5 m (1,77 m²); una entrada de tubo pedida para un cajón se cambia por aletas de 30° a 75°',
     measured: `X = ${X.toFixed(3)}; HW = ${i.hw.toFixed(3)} m (a mano ${ref.toFixed(3)}); H = ${o.H.toFixed(4)} m (a mano ${Href.toFixed(4)}); cajón ${mBox.hw.toFixed(2)} m frente a tubo ${mPipe.hw.toFixed(2)} m; entrada corregida: ${fixInlet.inp.inlet}`,
     pass: i.regime === 'libre' && rel(i.hw, ref) < 1e-3 && rel(o.H, Href) < 1e-9 && mBox.hw < mPipe.hw && fixInlet.inp.inlet === 'aletas3075',
+  });
+}
+
+// H23) Planos, gráficas y memoria de cálculo: válidos con los datos de ejemplo y con datos al azar
+{
+  const R2 = (() => {
+    let x = 11;
+    return () => ((x = (x * 16807) % 2147483647) / 2147483647);
+  })();
+  const tools = { preCanal, preCanalTierra, prePozo, prePozoUSBR, prePuente, preAlcantarilla, preEnrocado, preAforador, preParshall, calcFormulas };
+  let made = 0, plans = 0, charts = 0, bad = 0, thrown = 0;
+  for (let k = 0; k < 120; k++) {
+    const v: Record<string, number | string> =
+      k === 0
+        ? {}
+        : { Q: 0.5 + R2() * 60, S: 0.05 + R2() * 2, b: 1 + R2() * 12, z: R2() * 2.5, forma: R2() < 0.5 ? 'trap' : 'rect', material: 'concreto', fb: 20, H: 2 + R2() * 8, loss: 10, tw: R2() * 4, fs: 1.1, B: 4 + R2() * 10, Hc: 3, n: 0.03, blk: R2() * 40, gal: 0.5, L: 30, road: 3 + R2() * 4, entrada: 'muro', hwd: 1.5, free: 0.5, vmax: 4.5, d75: 10 + R2() * 80, phi: 33, d: 0.3 + R2() * 30, qmin: 1 + R2() * 4, qmax: 8 + R2() * 100, P: 15 };
+    for (const [name, fn] of Object.entries(tools)) {
+      try {
+        const res = fn(v);
+        const ex = planFor(fn, res);
+        const svg = [ex.plan ? planSVG(ex.plan, 420) : '', ex.chart ? chartSVG(ex.chart, 420, 250) : ''];
+        if (ex.plan) plans++;
+        if (ex.chart) charts++;
+        const html = memoriaHTML({ title: name, intro: '', level: 'Universitarios', data: [], res, planSvg: svg[0] || undefined, chartSvg: svg[1] || undefined });
+        made++;
+        if (svg.some((x) => x && (!x.startsWith('<svg') || /NaN|undefined|Infinity/.test(x))) || /NaN|undefined/.test(html)) bad++;
+      } catch {
+        thrown++;
+      }
+    }
+  }
+  record({
+    id: 'H23',
+    name: 'Planos acotados, gráficas y memoria de cálculo imprimible de los prediseños',
+    tolerance: '120 juegos de datos (el primero, los de ejemplo) en los diez prediseños con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»',
+    measured: `${made} memorias; ${plans} planos y ${charts} gráficas; excepciones ${thrown}; con valores inválidos ${bad}`,
+    pass: thrown === 0 && bad === 0 && plans > 0 && charts > 0,
   });
 }
 

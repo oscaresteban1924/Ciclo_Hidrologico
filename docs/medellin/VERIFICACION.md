@@ -572,6 +572,22 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Superposiciones: 136 de 136 estados sin choques ni cortes en las cuatro pantallas, 36 de ellos de «Hidráulica de canales» (las seis partes, la alcantarilla con el agua sobre la vía, el fondo del cauce de sedimentos y la pestaña Diseño). Archivo único: 4 360 kB (1 736 kB comprimido con gzip).
 
+## 4 quatervicies. «Hidráulica de canales» a otro nivel: animación, cálculos y diseño (ejecutada)
+
+**Pedido.** «Está bien, pero definitivamente lo podemos mejorar muchísimo más, llévalo a otro nivel: mejores animaciones, cálculos mejor elaborados y diseño superior.»
+
+**Animación.** El agua del módulo tiene material propio: color según la profundidad, ondas que avanzan con la velocidad calculada en cada punto (mapa de flujo en dos fases, sin estirarse), reflejo del cielo al mirar de lado y espuma donde hay turbulencia; en la cara vista por el vidrio, las vetas van más rápido arriba que abajo y el agua con aire del resalto se ve blanca. Trazadores amarillos junto al vidrio en el resalto (con el ciclo del remolino), el puente, la alcantarilla y el canal de laboratorio; hojas en la superficie del canal; isotacas en el corte de la sección; pilas en el puente; formas del lecho (rizos, dunas, antidunas) que avanzan en tiempo acelerado; alcantarillas de cajón partidas por el eje; y «Simular una creciente» con un hidrograma gamma en cuatro partes. Las velocidades que pasa cada escena al agua son las calculadas (antes eran factores de dibujo).
+
+**Cálculos.** Nuevos, con fuentes y pruebas con tolerancia: Lane y Horton-Einstein (H16), pozos USBR II, III y IV (H17), Yarnell y socavación local HEC-18 con un ejemplo publicado (H18), socavación por contracción (H19), cuatro fórmulas de transporte con su rango de grano y formas del lecho (H20), Parshall con las tablas del USBR y molinete por sección media (H21), alcantarillas de cajón con un cálculo a mano (H22). Las herramientas de diseño pasaron de doce a veintiuna; H15 las llama 8 400 veces con datos al azar.
+
+**Diseño.** Selector de herramientas en la pestaña Diseño; plano acotado a escala de cada prediseño y gráfica cuando aplica; memoria de cálculo en HTML imprimible (proyecto y autor opcionales, plano, gráfica, paso a paso, resultados y verificaciones), armada en el navegador sin enviar nada; plano en SVG. H23 revisa 1 200 memorias, 720 planos y 476 gráficas sin valores inválidos. Las memorias de los prediseños se descargaron y abrieron en el navegador.
+
+**Lo que se corrigió en el camino.** El cálculo del avance de las antidunas no aplica (pueden subir contra la corriente): se dibujan quietas. Los textos de las cotas y de la leyenda de las gráficas se salían por los lados: más margen lateral y leyenda en varias filas. En el pozo, los rótulos del umbral y del largo se montaban: se reubicaron. Los números del tipo de pozo usaban punto decimal: ahora coma.
+
+**No incluido.** Criterios de normas colombianas (INVÍAS, Resolución 0330 de 2017): no se pudieron verificar contra sus textos oficiales; quedan pendientes hasta tener esos documentos.
+
+**Resultado.** Pruebas: 23 de 23 de «Hidráulica de canales» y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 32 de 32 estados sin choques ni cortes en las cuatro pantallas. Archivo único: 4 436 kB (1 763 kB comprimido con gzip).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

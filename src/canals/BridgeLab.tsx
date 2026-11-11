@@ -8,7 +8,7 @@ import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene
 import { DesignTab } from './design';
 import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
 import { BridgeDiagram } from './diagrams';
-import { CD_PRESSURE, CREEK, CW_DECK, DEBRIS, DEFAULT_BRIDGE, bridgeModel, type BridgeInput, type BridgeResult, type Debris } from './hydraulics';
+import { CD_PRESSURE, CREEK, CW_DECK, DEBRIS, DEFAULT_BRIDGE, PIER_A, PIER_K, bridgeModel, type BridgeInput, type BridgeResult, type Debris } from './hydraulics';
 import { BridgeWorld } from './three/bridgeWorld';
 
 interface Ctx {
@@ -130,6 +130,7 @@ export function BridgeLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       <DockRange label="Luz del puente" value={inp.span} min={3} max={CREEK.b} step={0.5} show={`${es(inp.span, 1)} m`} onChange={(v) => set({ span: v })} />
       <DockRange label="Altura del bajo del puente" value={inp.soffit} min={1.2} max={4} step={0.1} show={`${es(inp.soffit, 1)} m`} onChange={(v) => set({ soffit: Math.round(v * 10) / 10 })} />
       <DockChoice<Debris> label="Palos y basura" value={inp.debris} options={(Object.keys(DEBRIS) as Debris[]).map((d) => ({ value: d, label: DEBRIS[d].name }))} onChange={(v) => set({ debris: v })} />
+      <DockChoice<'0' | '1' | '2'> label="Pilas en el cauce" value={String(inp.piers ?? 0) as '0' | '1' | '2'} options={[{ value: '0', label: 'Ninguna' }, { value: '1', label: 'Una' }, { value: '2', label: 'Dos' }]} onChange={(v) => set({ piers: Number(v) })} />
     </>
   );
 
@@ -162,6 +163,7 @@ export function BridgeLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           <caption>La quebrada y el puente</caption>
           <tbody>
             <Row name="Canal" value={`${es(CREEK.b, 0)} m de ancho, paredes de ${es(CREEK.H, 0)} m`} note={`concreto, n = ${es(CREEK.n, 3)}`} />
+            <Row name="Pilas" value={(inp.piers ?? 0) > 0 ? `${inp.piers} de ${es(PIER_A, 1)} m, punta y cola semicirculares` : 'ninguna'} note={(inp.piers ?? 0) > 0 ? `Yarnell, K = ${PIER_K}; abertura útil ${es(r.bEff, 2)} m` : undefined} />
             <Row name="Capacidad del canal sin puente" value={`${es(r.Qcanal, 1)} m³/s`} note="lleno hasta el borde" />
             <Row name="Profundidad normal" value={`${es(r.yn, 3)} m`} note={`Froude ${es(r.Fn, 2)} (${r.steep ? 'rápido' : 'lento'})`} />
             <Row name="Profundidad crítica" value={`${es(r.yc, 3)} m`} />

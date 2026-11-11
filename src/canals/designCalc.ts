@@ -24,6 +24,8 @@ export interface Result {
   /** Frase para el nivel de niños. */
   kid: string;
   error?: string;
+  /** Medidas para el plano y la gráfica del prediseño (ver designPlans.ts). */
+  data?: Record<string, number | string>;
 }
 
 export const f = (v: number, d = 2) => (Number.isFinite(v) ? v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
@@ -129,6 +131,7 @@ export function preCanal(v: Vals): Result {
       `Paredes: y·(1 + ${f(fb, 2)}) = ${f(y * (1 + fb), 3)} m (al menos y + 0,10), redondeado a ${f(H)} m.`,
     ],
     checks,
+    data: { shape, b, z, y, H, Q, n, S },
     kid: `Un canal de ${f(b, 2)} m de ancho con paredes de ${f(H, 2)} m lleva ${f(Q, 1)} m³/s a ${f(y, 2)} m de profundidad.`,
   };
 }
@@ -196,6 +199,7 @@ export function prePozo(v: Vals): Result {
       `Largo del resalto 6,9·(y2 − y1) = ${f(Lj, 2)} m → pozo de ${f(L, 1)} m; paredes = agua del pozo + borde libre (el mayor entre 0,5 m y 20 %) = ${f(wall, 1)} m.`,
     ],
     checks,
+    data: { drop: H, L, y1, y2, tw: ytw, P },
     kid: `Un pozo de ${f(L, 1)} m de largo con un muro de ${f(P, 2)} m al final atrapa el salto del agua.`,
   };
 }
@@ -268,6 +272,7 @@ export function prePuente(v: Vals): Result {
       `Bajo del puente = agua en el puente (${f(Math.max(yU, yn), 3)} m) + gálibo (${f(gal, 2)} m), redondeado a ${f(soffit, 1)} m.`,
     ],
     checks,
+    data: { B, Hw, span, soffit, yU: Math.max(yU, yn) },
     kid: `Un puente de ${f(span, 1)} m de luz con el bajo a ${f(soffit, 1)} m deja pasar la creciente.`,
   };
 }
@@ -351,6 +356,7 @@ export function preAlcantarilla(v: Vals): Result {
       { name: `Al menos ${f(free, 1)} m bajo la vía`, ok: road - best.hw >= free, value: `${f(road - best.hw)} m` },
       { name: `Salida ≤ ${f(vmax, 1)} m/s`, ok: best.V <= vmax, value: `${f(best.V)} m/s` },
     ],
+    data: { box: box ? 1 : 0, D: best.D, B: best.B, nb: best.nb, road, hw: best.hw, Q, L, S, tw, inlet, hwd },
     kid: `${best.nb === 1 ? (box ? 'Un cajón' : 'Un tubo') : `${best.nb} ${box ? 'cajones' : 'tubos'}`} de ${box ? `${f(best.B, 1)} × ${f(best.D, 1)} m` : `${f(best.D, 1)} m`} deja${best.nb === 1 ? '' : 'n'} pasar la creciente sin que el agua llegue a la vía.`,
   };
 }
@@ -412,6 +418,7 @@ export function preEnrocado(v: Vals): Result {
       `Se escoge la clase comercial siguiente: ${cls ? `${f(cls * 100, 0)} cm` : 'ninguna (más de 1 m)'}; capa de 2·d50 = ${f(2 * D50, 2)} m; piedra media de ${f(W, 0)} kg.`,
     ],
     checks: [{ name: 'Existe una clase de piedra de 1 m o menos', ok: !!cls, value: `${f(d * 100, 1)} cm` }],
+    data: { b, h, d50: D50 },
     kid: `Hacen falta piedras de unos ${f(D50 * 100, 0)} cm (${f(W, 0)} kg cada una) para que el agua no las arrastre.`,
   };
 }
@@ -496,6 +503,7 @@ export function preAforador(v: Vals): Result {
       { name: 'Rectangular sirve en todo el rango', ok: okR, value: okR ? 'sí' : 'no' },
       { name: 'Triangular sirve en todo el rango', ok: okT, value: okT ? 'sí' : 'no' },
     ],
+    data: { b, Hc, P, Pt, r1, r2, t1, t2, pick, qmin, qmax },
     kid: pick === 'ninguno' ? 'Ninguno sirve para todo el rango: divide el rango o cambia el canal.' : `Para medir entre ${f(qmin * 1000, 1)} y ${f(qmax * 1000, 1)} L/s, usa el vertedero ${pick}.`,
   };
 }

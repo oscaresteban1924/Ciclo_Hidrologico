@@ -324,3 +324,53 @@
   color: var(--ink);
   resize: vertical;
 }
+
+/* plano acotado, gráfica y memoria */
+.hc-plan {
+  margin: 10px 0;
+  border: 1px solid #e3eaef;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+}
+.hc-plan svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.hc-memo-box {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #c8d6df;
+}
+.hc-memo-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hc-memo-meta label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.hc-memo-meta input {
+  padding: 6px 8px;
+  border: 1px solid #b8c7d2;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.86rem;
+}
+.hc-memo-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hc-memo.is-light {
+  border-color: #b8c7d2;
+  background: #ffffff;
+  color: var(--ink);
+}

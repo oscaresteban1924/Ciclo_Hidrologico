@@ -16,6 +16,8 @@ import { KAPPA, NU, RHO, RHO_S, SG, dStar, fallVelocity, shieldsCrit } from './s
 
 const GAMMA = RHO * G;
 const deg = (a: number) => (a * Math.PI) / 180;
+/** Número con coma decimal y una cifra. */
+const c1 = (v: number) => v.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 // ------------------------------------------------------------------ canal en tierra (fuerza tractiva)
 
@@ -88,7 +90,7 @@ export function usbrBasin(y1: number, V1: number, F1: number, y2: number, q: num
     const h3 = (y1 * (4 + F1)) / 6;
     return {
       type: 'III',
-      why: `F1 = ${F1.toFixed(1)} > 4,5, V1 = ${V1.toFixed(1)} m/s ≤ 18 m/s y q = ${q.toFixed(1)} m²/s ≤ 18,6 m²/s`,
+      why: `F1 = ${c1(F1)} > 4,5, V1 = ${c1(V1)} m/s ≤ 18 m/s y q = ${c1(q)} m²/s ≤ 18,6 m²/s`,
       L: 2.7 * y2,
       LperY2: 2.7,
       twMin: y2,
@@ -101,7 +103,7 @@ export function usbrBasin(y1: number, V1: number, F1: number, y2: number, q: num
   if (F1 > 4.5) {
     return {
       type: 'II',
-      why: `F1 = ${F1.toFixed(1)} > 4,5, pero V1 = ${V1.toFixed(1)} m/s o q = ${q.toFixed(1)} m²/s exceden los límites del tipo III (los bloques sufrirían cavitación)`,
+      why: `F1 = ${c1(F1)} > 4,5, pero V1 = ${c1(V1)} m/s o q = ${c1(q)} m²/s exceden los límites del tipo III (los bloques sufrirían cavitación)`,
       L: 4.3 * y2,
       LperY2: 4.3,
       twMin: 1.05 * y2,
@@ -114,7 +116,7 @@ export function usbrBasin(y1: number, V1: number, F1: number, y2: number, q: num
   if (F1 > 2.5) {
     return {
       type: 'IV',
-      why: `2,5 < F1 = ${F1.toFixed(1)} < 4,5: resalto oscilante, que manda ondas aguas abajo`,
+      why: `2,5 < F1 = ${c1(F1)} < 4,5: resalto oscilante, que manda ondas aguas abajo`,
       L: 6.0 * y2,
       LperY2: 6.0,
       twMin: 1.1 * y2,
@@ -125,7 +127,7 @@ export function usbrBasin(y1: number, V1: number, F1: number, y2: number, q: num
       Lfree,
     };
   }
-  return { type: 'I', why: `F1 = ${F1.toFixed(1)} ≤ 2,5: resalto débil, basta un pozo liso`, L: Lfree, LperY2: Lfree / y2, twMin: y2, chute: null, baffle: null, sill: { h: 0, dentated: false }, Lfree };
+  return { type: 'I', why: `F1 = ${c1(F1)} ≤ 2,5: resalto débil, basta un pozo liso`, L: Lfree, LperY2: Lfree / y2, twMin: y2, chute: null, baffle: null, sill: { h: 0, dentated: false }, Lfree };
 }
 
 // ------------------------------------------------------------------ pilas de puente
@@ -288,7 +290,8 @@ export function transport(c: TransportCase): TransportResult {
     height = 0.04 * h;
   }
   const qb = mpm;
-  const celerity = height > 0 ? (2 * qb) / (0.6 * height) : 0;
+  // las antidunas pueden quedarse quietas o subir contra la corriente: no se les da avance
+  const celerity = height > 0 && bedform !== 'antidunas' ? (2 * qb) / (0.6 * height) : 0;
   const inR = (r: readonly [number, number]) => d >= r[0] && d <= r[1];
   return {
     theta, thetaCr, Dstar: D, ustar, mpm, einsteinBrown: eb, vanRijn: vr, engelundHansen: ehq, T, bedform,

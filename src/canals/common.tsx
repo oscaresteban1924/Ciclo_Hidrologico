@@ -42,7 +42,7 @@ export function FlatStage({ children }: { children: ReactNode }) {
 }
 
 /**
- * Hidrograma adimensional de forma gamma (Haan, 1970), usado por el Servicio de Conservación de Suelos de EE. UU.:
+ * Hidrograma adimensional de forma gamma (Haan, 1970; NRCS, National Engineering Handbook, parte 630, cap. 16):
  * q/qp = (t/tp · e^(1 − t/tp))^m con m = 3,7. Devuelve la fracción del pico (0 a 1) en el tiempo t.
  */
 export function gammaHydrograph(t: number, tp: number, m = 3.7): number {

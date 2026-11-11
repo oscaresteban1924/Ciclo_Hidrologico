@@ -89,6 +89,7 @@ export function preCanalTierra(v: Vals): Result {
       `Altura del canal con ${f(fb * 100, 0)} % de borde libre (al menos 0,15 m): ${f(H, 2)} m.`,
     ],
     checks,
+    data: { b, z, y: yn, H, Q, n, S },
     kid: `Un canal de tierra con piedras de ${f(d75, 0)} mm aguanta si el fondo mide ${f(b, 1)} m y el agua va a ${f(yn, 2)} m de hondo.`,
   };
 }
@@ -155,6 +156,7 @@ export function prePozoUSBR(v: Vals): Result {
         : `El agua de abajo (${f(tw, 2)} m) alcanza lo que pide el pozo: no hace falta bajar el piso.`,
     ],
     checks,
+    data: { drop: H + floorDrop, L, y1, y2, tw: tw + floorDrop, type: des.type, ch: des.chute?.h ?? 0, cw: des.chute?.w ?? 0, bh: des.baffle?.h ?? 0, bx: des.baffle?.x ?? 0, sill: des.sill.h },
     kid: `Un pozo tipo ${des.type} de ${f(L, 1)} m${des.baffle ? ' con bloques en el piso' : ''} atrapa el resalto${floorDrop > 0 ? `, si bajamos el piso ${f(floorDrop, 2)} m` : ''}.`,
   };
 }
@@ -251,6 +253,7 @@ export function calcFormulas(v: Vals): Result {
       `van Rijn: u*' = √g·V/C' con C' = 18·log10(12R/3d90), d90 ≈ 2·d50 → T = ${f(t.T, 2)}: ${BEDFORM_NAME[t.bedform]}.`,
       'Las fórmulas pueden diferir varias veces entre sí: cada una se calibró con otros ríos y granos. Usa la que corresponde a tu grano y compárala con mediciones.',
     ],
+    data: { Q, b, S, d, n },
     kid: `Con granos de ${f(d * 1000, 1)} mm, el fondo forma ${BEDFORM_NAME[t.bedform]}${t.dune.height > 0 ? ` de unos ${f(t.dune.height * 100, 0)} cm de alto` : ''}.`,
   };
 }
@@ -301,6 +304,7 @@ export function preParshall(v: Vals): Result {
       'Se escoge la más pequeña que sirve: mide con más carga, y más carga es más precisión.',
     ],
     checks: [{ name: 'Una canaleta estándar cubre todo el rango', ok: !!pick, value: pick ? PARSHALL[pick.s].name : 'ninguna' }],
+    data: { size: pick ? pick.s : '', qmin, qmax },
     kid: pick ? `Para medir entre ${f(qmin * 1000, 0)} y ${f(qmax * 1000, 0)} L/s sirve una canaleta Parshall de ${PARSHALL[pick.s].name}.` : 'Ninguna canaleta estándar sirve para todo el rango: divide el rango.',
   };
 }

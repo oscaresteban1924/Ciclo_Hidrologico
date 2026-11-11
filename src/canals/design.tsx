@@ -23,6 +23,9 @@ import {
 } from './designCalc';
 import { MOLINETE_EJEMPLO, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
 import { PARSHALL, PIERS, type ParshallSize, type PierShape } from './advanced';
+import { planFor } from './designPlans';
+import { chartSVG, planSVG } from './plan';
+import { memoriaHTML } from './memoria';
 
 export type DesignPart = 'canal' | 'resalto' | 'puente' | 'alcantarilla' | 'sedimentos' | 'aforo';
 type Level = 'ninos' | 'uni';
@@ -432,33 +435,30 @@ function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind:
   const kid = level === 'ninos';
   const visible = tool.fields.filter((f) => (!kid || f.kid) && (!f.when || f.when[1].includes(String(vals[f.when[0]]))));
   const res = useMemo(() => tool.run(vals), [tool, vals]);
-  const memo = () => {
-    const lines = [
-      `${tool.title} — Ciclo hidrológico, Hidráulica de canales`,
-      `Fecha: ${new Date().toLocaleString('es-CO')}`,
-      '',
-      'DATOS',
-      ...tool.fields.filter((f) => !f.when || f.when[1].includes(String(vals[f.when[0]]))).map((f) => `  ${f.label}: ${f.options ? f.options.find((o) => o.value === vals[f.id])?.label ?? vals[f.id] : vals[f.id]}${f.unit ? ` ${f.unit}` : ''}`),
-      '',
-      'CÁLCULO',
-      ...res.steps.map((s, k) => `  ${k + 1}. ${s}`),
-      '',
-      'RESULTADOS',
-      ...res.outs.map((o) => `  ${o.label}: ${o.value}`),
-      ...(res.checks ? ['', 'VERIFICACIONES', ...res.checks.map((c) => `  [${c.ok ? 'cumple' : 'no cumple'}] ${c.name}: ${c.value}`)] : []),
-      ...(res.error ? ['', `AVISO: ${res.error}`] : []),
-      '',
-      'Prediseño académico: no es un diseño de ingeniería.',
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const extras = useMemo(() => planFor(tool.run, res), [tool, res]);
+  // en el panel, a 420 px de ancho (el texto queda legible); en la memoria y el archivo, a 720 px
+  const planSvgTxt = useMemo(() => (extras.plan ? planSVG(extras.plan, 420) : ''), [extras]);
+  const chartSvgTxt = useMemo(() => (extras.chart ? chartSVG(extras.chart, 420, 250) : ''), [extras]);
+  const planBig = useMemo(() => (extras.plan ? planSVG(extras.plan, 720) : ''), [extras]);
+  const chartBig = useMemo(() => (extras.chart ? chartSVG(extras.chart, 720, 320) : ''), [extras]);
+  const [project, setProject] = useState('');
+  const [author, setAuthor] = useState('');
+  const download = (text: string, name: string, type: string) => {
+    const blob = new Blob([text], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${kind === 'pre' ? 'prediseno' : 'calculo'}-${part}.txt`;
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const shown = tool.fields.filter((f) => !f.when || f.when[1].includes(String(vals[f.when[0]])));
+  const memo = () => {
+    const data = shown.map((f) => ({ label: `${f.label}${f.unit ? ` (${f.unit})` : ''}`, value: f.options ? (f.options.find((o) => o.value === String(vals[f.id]))?.label ?? String(vals[f.id])) : String(vals[f.id]).replace('.', ',') }));
+    const html = memoriaHTML({ title: tool.title, intro: kid ? tool.kidIntro : tool.intro, level: kid ? 'Niños' : 'Universitarios', data, res, planSvg: planBig || undefined, chartSvg: chartBig || undefined, project, author });
+    download(html, `memoria-${kind === 'pre' ? 'prediseno' : 'calculo'}-${part}.html`, 'text/html;charset=utf-8');
   };
   return (
     <section className={`hc-tool is-${kind}`} aria-label={tool.title}>
@@ -525,13 +525,37 @@ function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind:
           </ol>
         </details>
       )}
-      {kind === 'pre' && (
-        <button type="button" className="hc-memo" onClick={memo}>
-          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-            <path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 14v2.5h12V14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Descargar la memoria de cálculo (.txt)
-        </button>
+      {planSvgTxt && <figure className="hc-plan" dangerouslySetInnerHTML={{ __html: planSvgTxt }} />}
+      {chartSvgTxt && <figure className="hc-plan" dangerouslySetInnerHTML={{ __html: chartSvgTxt }} />}
+      {!res.error && (
+        <div className="hc-memo-box">
+          {!kid && (
+            <div className="hc-memo-meta">
+              <label>
+                <span>Proyecto (opcional)</span>
+                <input value={project} maxLength={80} onChange={(e) => setProject(e.target.value)} placeholder="Ej.: canal de riego vereda El Llano" />
+              </label>
+              <label>
+                <span>Elaborado por (opcional)</span>
+                <input value={author} maxLength={80} onChange={(e) => setAuthor(e.target.value)} placeholder="Nombre o grupo" />
+              </label>
+            </div>
+          )}
+          <div className="hc-memo-btns">
+            <button type="button" className="hc-memo" onClick={memo}>
+              <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+                <path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 14v2.5h12V14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Memoria de cálculo (para imprimir o guardar en PDF)
+            </button>
+            {planSvgTxt && (
+              <button type="button" className="hc-memo is-light" onClick={() => download(planBig, `plano-${part}.svg`, 'image/svg+xml')}>
+                Plano (SVG)
+              </button>
+            )}
+          </div>
+          <p className="q3-small">Se arma en este navegador: no se guarda ni se envía a ningún lado.</p>
+        </div>
       )}
     </section>
   );
