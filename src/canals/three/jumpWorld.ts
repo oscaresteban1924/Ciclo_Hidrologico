@@ -9,7 +9,7 @@ import { CHUTE, type JumpResult } from '../hydraulics';
 import { JUMP_DOWN as DOWN, JUMP_UP as UP, jumpSurface } from '../profiles';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { WATER, WaterBody, glassMaterial, polyline, setPolyline, slab, type Station } from './canalKit';
+import { Tracers, WATER, WaterBody, glassMaterial, polyline, setPolyline, slab, stationField, type Station } from './canalKit';
 
 const B = CHUTE.b;
 
@@ -21,6 +21,7 @@ export class JumpWorld {
   private egl: THREE.Line;
   private spray: THREE.InstancedMesh;
   private scour: THREE.Mesh;
+  private tracers: Tracers;
   private r: JumpResult | null = null;
   private jumpSpan: [number, number, number, number] = [0, 0, 0, 0];
   views: Record<'general' | 'resalto' | 'rapida', StageView> = {
@@ -49,9 +50,12 @@ export class JumpWorld {
     sc.add(this.water.group);
     this.egl = polyline('#d0342c');
     sc.add(this.egl);
-    this.spray = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 6, 4), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4, transparent: true, opacity: 0.85 }), 140);
+    this.spray = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.05, 0), new THREE.MeshStandardMaterial({ color: '#f6fbff', roughness: 0.3, transparent: true, opacity: 0.7, depthWrite: false }), 260);
     this.spray.frustumCulled = false;
     sc.add(this.spray);
+    // trazadores junto al vidrio: muestran la velocidad y el remolino del resalto
+    this.tracers = new Tracers(460, 0.07);
+    sc.add(this.tracers.mesh);
     this.scour = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshStandardMaterial({ color: '#6e5536', roughness: 1 }));
     this.scour.rotation.x = -Math.PI / 2;
     sc.add(this.scour);
@@ -117,11 +121,12 @@ export class JumpWorld {
     const L = r.chuteLen;
     const prof = jumpSurface(r);
     const hw = B / 2 - 0.02;
-    const st: Station[] = prof.pts.map((p) => ({ x: p.x, bed: p.bed, depth: p.y, halfW: hw, foam: p.foam }));
+    const q = r.inp.Q / B;
+    const st: Station[] = prof.pts.map((p) => ({ x: p.x, bed: p.bed, depth: p.y, halfW: hw, foam: p.foam, vel: q / Math.max(0.02, p.y) }));
     const egl = prof.egl.map((p) => new THREE.Vector3(p.x, p.e, B / 2 + 0.1));
     this.jumpSpan = prof.jump;
     this.water.update(st);
-    this.water.setSpeed(r.V1 * 0.6);
+    this.tracers.set(stationField(st), st[0].x, st[st.length - 1].x, [B / 2 - 0.75, B / 2 - 0.06], [this.jumpSpan[0], this.jumpSpan[1]], first);
     setPolyline(this.egl, egl, [0.9, 0.5]);
     this.scour.visible = r.place === 'barrido';
     this.scour.scale.set(4.5, 3, 1);
@@ -157,6 +162,7 @@ export class JumpWorld {
     this.time.value = t;
     const r = this.r;
     if (!r) return;
+    this.tracers.update(dt, this.stage.reducedMotion);
     const [x0, x1, yA, yB] = this.jumpSpan;
     const bed = r.place === 'barrido' ? r.inp.weir : 0;
     const m4 = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), sv = new THREE.Vector3(1, 1, 1);
@@ -173,10 +179,9 @@ export class JumpWorld {
       const yS = yA + (yB - yA) * Math.min(1, (x - x0) / Math.max(0.1, x1 - x0) * 1.4);
       const y = bed + yS + Math.sin(ph * Math.PI) * amp * (0.4 + c);
       p.set(x, y, (b - 0.5) * (B - 0.4));
-      sv.setScalar(0.6 + c);
+      sv.setScalar((0.5 + c) * (1 - 0.6 * ph));
       this.spray.setMatrixAt(k, m4.compose(p, q, sv));
     }
     this.spray.instanceMatrix.needsUpdate = true;
-    void dt;
   }
 }

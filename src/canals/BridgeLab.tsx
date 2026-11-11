@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
 import { DesignTab } from './design';
-import { FlatStage, Row, SlopeRange, es } from './common';
+import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
 import { BridgeDiagram } from './diagrams';
 import { CD_PRESSURE, CREEK, CW_DECK, DEBRIS, DEFAULT_BRIDGE, bridgeModel, type BridgeInput, type BridgeResult, type Debris } from './hydraulics';
 import { BridgeWorld } from './three/bridgeWorld';
@@ -125,6 +125,7 @@ export function BridgeLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const dock = (
     <>
       <DockRange label="Caudal de la creciente" value={inp.Q} min={5} max={90} step={1} show={`${es(inp.Q, 0)} m³/s`} onChange={(v) => set({ Q: v })} />
+      <FloodPlayer q={inp.Q} qMax={90} digits={0} onQ={(v) => set({ Q: v })} />
       <SlopeRange value={inp.S} lo={0.001} hi={0.02} onChange={(S) => set({ S })} label="Pendiente de la quebrada" />
       <DockRange label="Luz del puente" value={inp.span} min={3} max={CREEK.b} step={0.5} show={`${es(inp.span, 1)} m`} onChange={(v) => set({ span: v })} />
       <DockRange label="Altura del bajo del puente" value={inp.soffit} min={1.2} max={4} step={0.1} show={`${es(inp.soffit, 1)} m`} onChange={(v) => set({ soffit: Math.round(v * 10) / 10 })} />

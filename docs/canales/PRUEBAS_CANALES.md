@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**15 de 15 cumplen.**
+**22 de 22 cumplen.**
 
 ## H1. Geometría: área, perímetro, ancho de superficie y momento estático de las tres secciones — cumple
 
@@ -67,7 +67,7 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 ## H13. Alcantarillas: control a la entrada continuo y creciente, energía a la salida, reparto con la vía y retos alcanzables — cumple
 
 - Tolerancia: tres entradas × tres diámetros × tres pendientes × tres niveles aguas abajo; el nivel a la entrada nunca baja al subir el caudal y no salta más de 0,25 D entre pasos (transición de HDS-5); sin valores inválidos; caudal por los tubos más el de encima de la vía igual al total (1 × 10⁻⁶) y el de la vía igual al vertedero (0,1 %); nivel = el mayor de los dos controles; pérdida a la salida igual al cálculo a mano (1 × 10⁻⁹); aparecen control a la entrada y a la salida, paso por encima de la vía y un caso que cumple con 5 m³/s o más
-- Medido: 324 casos; inválidos o desbalance 0; bajadas 0; saltos 0; salida a mano 1.6e-16; controles vistos: salida, entrada; retos alcanzables: sí
+- Medido: 648 casos; inválidos o desbalance 0; bajadas 0; saltos 0; salida a mano 1.6e-16; controles vistos: salida, entrada; retos alcanzables: sí
 
 ## H14. Sedimentos: curva de Shields, velocidad de caída, arrastre de fondo, perfil de Rouse y los cinco modos de transporte — cumple
 
@@ -78,3 +78,38 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 - Tolerancia: 400 juegos de datos al azar en las doce herramientas (4 800 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida
 - Medido: 4800 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
+
+## H16. Fuerza tractiva de Lane y rugosidad compuesta de Horton y Einstein — cumple
+
+- Tolerancia: K de Lane para talud 2:1 y reposo de 33° igual a √(1 − sen²θ/sen²φ) = 0,571 (error < 0,1 %); un talud más empinado que el reposo da K = 0; n compuesto de 2 m a 0,013 y 4 m a 0,030 igual a 0,0250 (error < 0,5 %) y con un solo material, ese mismo n
+- Medido: K = 0.5708 (referencia 0.5708); talud 1:1 → K = 0; n = 0.02502; n con un solo material = 0.0200
+
+## H17. Pozos amortiguadores USBR: tipo según F1, V1 y q, y proporciones del tipo III (Peterka) — cumple
+
+- Tolerancia: F1 = 7 con 12 m/s y q = 3,6 m²/s → tipo III, bloques de y1·(4 + F1)/6 y umbral de y1·(18 + F1)/18 (error < 0,1 %), a 0,8·y2 del pie y largo 2,7·y2; con 20 m/s → tipo II con umbral dentado de 0,2·y2; F1 = 3,5 → tipo IV; F1 = 2 → tipo I con el largo del resalto libre
+- Medido: tipos III, II, IV, I; h3 = 0.550 m (ref. 0.550); h4 = 0.417 m (ref. 0.417); largo III 7.62 m frente a libre 17.40 m
+
+## H18. Pilas de puente: remanso de Yarnell y socavación local (HEC-18) — cumple
+
+- Tolerancia: Yarnell igual a la ecuación escrita a mano (error < 1e-9); socavación del ejemplo publicado (y1 = 5,334 m, V = 7,15 m/s, a = 4,52 m, cilindro, agua clara) igual a 10,484 m (error < 0,5 %); el tope de 2,4·a (Fr ≤ 0,8) o 3,0·a (Fr > 0,8) en pila redonda; la pila cuadrada socava 10 % más que la redonda
+- Medido: Δy = 0.0491 m (ref. 0.0491); ys = 10.485 m; pila de 1 m con Fr = 0.79: 2.40 m (tope sí); cuadrada/redonda = 1.100
+
+## H19. Socavación por contracción (HEC-18): agua clara y lecho vivo — cumple
+
+- Tolerancia: grava de 5 cm a 1,1 m/s (por debajo de la velocidad crítica) → agua clara con y2 = [0,025·Q²/(Dm^(2/3)·W²)]^(3/7) (error < 1e-9); arena de 0,5 mm → lecho vivo con k1 de la tabla; sin contracción (W2 = W1) no hay socavación por lecho vivo
+- Medido: agua clara: sí, y2 = 1.805 m (ref. 1.805), ys = 0.000 m; lecho vivo: sí, k1 = 0.69, ys = 0.646 m; sin contracción ys = 0.0000 m
+
+## H20. Transporte de sedimentos con cuatro fórmulas y formas del lecho (van Rijn) — cumple
+
+- Tolerancia: bajo el umbral, Meyer-Peter y Müller y van Rijn dan 0; cada fórmula en su rango de grano: en grava, Meyer-Peter y Müller y Einstein-Brown dentro de un factor de 3; en arena, van Rijn, Einstein-Brown y Engelund-Hansen dentro de un factor de 10; van Rijn fuera de rango en grava; en arena, al subir la velocidad, las formas del lecho siguen el orden quieto → rizos → dunas → transición → lecho plano o antidunas, sin retroceder
+- Medido: bajo el umbral: MPM 0, van Rijn 0; grava: MPM 2.738, Einstein-Brown 3.429 L/s·m (factor 1.3; van Rijn fuera de rango); arena: van Rijn 0.0440, Einstein-Brown 0.4149, Engelund-Hansen 0.1602 L/s·m (factor 9.4); formas: lecho → rizos → rizos → dunas → dunas → lecho → lecho
+
+## H21. Aforo: canaleta Parshall y molinete por sección media (ISO 748) — cumple
+
+- Tolerancia: Parshall de 6 y 9 pulgadas con Ha = 1 pie igual a las tablas del USBR (2,06 y 3,07 pies³/s, error < 0,1 %); la carga inversa recupera la carga (error < 1e-9); sección media de un ejemplo a mano: Q = 2,2 m³/s y A = 3,5 m²
+- Medido: 6 pulgadas: 2.060 pies³/s; 9 pulgadas: 3.070 pies³/s; carga inversa 0.1200 m; molinete Q = 2.200 m³/s, A = 3.500 m²
+
+## H22. Alcantarilla de cajón: control a la entrada (HDS-5, forma 1) y a la salida, y modelo completo — cumple
+
+- Tolerancia: cajón de 2,0 × 1,5 m con 6 m³/s: HW a la entrada igual al cálculo a mano con Hc = 1,5·dc, K = 0,026 y M = 1 (error < 0,1 %); pérdida a la salida con R = A/P del cajón lleno y ke = 0,4 (error < 1e-9); el cajón (3 m²) deja el agua más baja que un tubo de 1,5 m (1,77 m²); una entrada de tubo pedida para un cajón se cambia por aletas de 30° a 75°
+- Medido: X = 2.957; HW = 1.565 m (a mano 1.565); H = 0.3389 m (a mano 0.3389); cajón 1.57 m frente a tubo 2.50 m; entrada corregida: aletas3075

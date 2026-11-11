@@ -10,7 +10,7 @@ import { CREEK, DEBRIS, type BridgeResult } from '../hydraulics';
 import { bridgeSurface } from '../profiles';
 import { concreteMaterial, houses, rng, trees, WALLS, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { WaterBody, glassMaterial, polyline, setPolyline, slab, type Station } from './canalKit';
+import { Tracers, WaterBody, glassMaterial, polyline, setPolyline, slab, stationField, type Station } from './canalKit';
 
 const X0 = -220;
 const X1 = 80;
@@ -23,6 +23,8 @@ export class BridgeWorld {
   private dyn = new THREE.Group();
   private water: WaterBody;
   private flood: WaterBody;
+  private tracers: Tracers;
+  private tracersOn = false;
   private normal: THREE.Line;
   private r: BridgeResult | null = null;
   private built = '';
@@ -46,6 +48,8 @@ export class BridgeWorld {
     this.flood.setColor('#6f8f86');
     this.flood.group.position.z = -HB - 30.3;
     sc.add(this.flood.group);
+    this.tracers = new Tracers(420, 0.07);
+    sc.add(this.tracers.mesh);
     this.normal = polyline('#17324d');
     sc.add(this.normal);
     stage.view(this.views.general, false);
@@ -144,7 +148,7 @@ export class BridgeWorld {
     }
     const st: Station[] = [], fl: Station[] = [];
     for (const p of bridgeSurface(r, X0, X1)) {
-      st.push({ x: p.x, bed: p.bed, depth: p.y, halfW: HB - 0.02, foam: p.foam });
+      st.push({ x: p.x, bed: p.bed, depth: p.y, halfW: HB - 0.02, foam: p.foam, vel: r.inp.Q / (CREEK.b * Math.max(0.05, p.y)) });
       fl.push({ x: p.x, bed: p.bed + CREEK.H, depth: p.y > CREEK.H ? p.y - CREEK.H : -0.08, halfW: 30, foam: 0.05 });
     }
     this.water.update(st);
@@ -153,7 +157,9 @@ export class BridgeWorld {
       this.flood.update(fl);
       this.flood.setSpeed(0.4);
     }
-    this.water.setSpeed(r.inp.Q / (CREEK.b * r.yn));
+    // trazadores cerca del puente: se frenan en el remanso y se aceleran al pasar
+    this.tracers.set(stationField(st), Math.max(X0, -60), Math.min(X1, 40), [HB - 0.8, HB - 0.06], null, !this.tracersOn);
+    this.tracersOn = true;
     setPolyline(
       this.normal,
       [new THREE.Vector3(X0, this.bed(X0) + r.yn, HB + 0.08), new THREE.Vector3(X1, this.bed(X1) + r.yn, HB + 0.08)],
@@ -179,7 +185,7 @@ export class BridgeWorld {
 
   update(dt: number, t: number): void {
     this.time.value = t;
-    void dt;
+    this.tracers.update(dt, this.stage.reducedMotion);
   }
 }
 

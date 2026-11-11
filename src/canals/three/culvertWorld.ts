@@ -8,7 +8,8 @@ import * as THREE from 'three';
 import type { CulvertResult } from '../culvert';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { WaterBody, glassMaterial, slab, type Station } from './canalKit';
+import { Tracers, WaterBody, glassMaterial, slab, stationField, type Station } from './canalKit';
+import { geom } from '../hydraulics';
 
 const SIDE = 2; // talud del terraplén (horizontal por vertical)
 const REACH = 45;
@@ -42,6 +43,8 @@ export class CulvertWorld {
   private down: WaterBody;
   private inner: WaterBody;
   private over: WaterBody;
+  private tracers: Tracers;
+  private tracersOn = false;
   private r: CulvertResult | null = null;
   private built = '';
   views: Record<'general' | 'corte' | 'entrada', StageView> = {
@@ -60,6 +63,8 @@ export class CulvertWorld {
     this.down = new WaterBody(this.time, { opacity: 0.8 });
     this.inner = new WaterBody(this.time);
     this.over = new WaterBody(this.time, { side: false });
+    this.tracers = new Tracers(220, 0.04);
+    sc.add(this.tracers.mesh);
     for (const w of [this.pond, this.down, this.inner, this.over]) {
       w.setColor('#4c8fb0');
       sc.add(w.group);
@@ -118,7 +123,8 @@ export class CulvertWorld {
     emb.receiveShadow = emb.castShadow = true;
     this.dyn.add(emb);
     // cara del corte del terraplén: por encima de la corona del tubo partido
-    const Dout = D + 0.12;
+    const box = r.inp.shape === 'cajon';
+    const Dout = D + (box ? 0.18 : 0.12);
     const t = Dout / (road - (yOut * (L - top)) / (2 * L));
     const u = (road - Dout - (yOut * (top + L)) / (2 * L)) / (road - yOut + (yOut * (L - top)) / (2 * L));
     if (t > 0 && t < 1 && u > 0 && u < 1) {
@@ -135,9 +141,35 @@ export class CulvertWorld {
     for (const sg of [-1, 1]) this.dyn.add(slab(new THREE.MeshStandardMaterial({ color: '#9aa3aa', metalness: 0.5, roughness: 0.4 }), sg * (top / 2) - 0.1, sg * (top / 2) + 0.1, road, road + 0.8, -DEPTH, 0));
     // los tubos: el primero partido por el eje (z ≤ 0), los otros detrás
     const tilt = Math.atan2(-yOut, L);
+    const span = box ? (r.inp.B ?? D) : D;
     for (let k = 0; k < barrels; k++) {
-      const z = -k * (D + 0.8);
+      const z = -k * (span + 0.8);
       const half = k === 0;
+      if (box) {
+        // cajón: losa de fondo, losa de techo y paredes (el primero, partido por el eje: solo la mitad de atrás)
+        const g = new THREE.Group();
+        g.rotation.z = -Math.atan2(-yOut, L);
+        g.position.set(0, yOut / 2, z);
+        const t = 0.18, hb = span / 2;
+        const zf = half ? 0 : hb + t;
+        g.add(slab(conc, -L / 2, L / 2, -t, 0, -hb - t, zf));
+        g.add(slab(conc, -L / 2, L / 2, D, D + t, -hb - t, zf));
+        g.add(slab(conc, -L / 2, L / 2, 0, D, -hb - t, -hb));
+        if (!half) g.add(slab(conc, -L / 2, L / 2, 0, D, hb, hb + t));
+        this.dyn.add(g);
+        const wing = (x0: number, x1: number, y0: number, y1: number) => this.dyn.add(slab(conc, x0, x1, y0, y1, z - hb - 1.2, z + (half ? 0 : hb + 1.2)));
+        wing(-L / 2 - 0.35, -L / 2, -0.4, D + 0.8);
+        wing(L / 2, L / 2 + 0.35, yOut - 0.4, yOut + D + 0.6);
+        // aletas de entrada (dibujadas según el tipo: abiertas, a 90° o paralelas)
+        const ang = inlet === 'aletas3075' ? Math.PI / 4 : inlet === 'aletas90' ? Math.PI / 2 : 0;
+        const wl = 2.4;
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(wl, D + 0.6, 0.25), conc);
+        fin.position.set(-L / 2 - 0.35 - (wl / 2) * Math.cos(ang), (D + 0.6) / 2 - 0.4, z - hb - 0.12 - (wl / 2) * Math.sin(ang));
+        fin.rotation.y = ang;
+        fin.castShadow = true;
+        this.dyn.add(fin);
+        continue;
+      }
       const outer = new THREE.Mesh(new THREE.CylinderGeometry(D / 2 + 0.12, D / 2 + 0.12, L, 32, 1, true, half ? Math.PI / 2 : 0, half ? Math.PI : Math.PI * 2), conc);
       const innerM = new THREE.Mesh(new THREE.CylinderGeometry(D / 2, D / 2, L, 32, 1, true, half ? Math.PI / 2 : 0, half ? Math.PI : Math.PI * 2), new THREE.MeshStandardMaterial({ color: '#a9a49a', roughness: 0.9, side: THREE.BackSide }));
       for (const m of [outer, innerM]) {
@@ -169,7 +201,7 @@ export class CulvertWorld {
     for (let k = 0; k < 60; k++) {
       q.setFromEuler(new THREE.Euler(R() * 3, R() * 3, R() * 3));
       const s = 0.18 + R() * 0.25;
-      rocks.setMatrixAt(k, m4.compose(p.set(L / 2 + 0.6 + R() * 5, yOut + s * 0.3, -2.5 - (barrels - 1) * (D + 0.8) + R() * (2.4 + (barrels - 1) * (D + 0.8))), q, sv.set(s, s * 0.6, s)));
+      rocks.setMatrixAt(k, m4.compose(p.set(L / 2 + 0.6 + R() * 5, yOut + s * 0.3, -2.5 - (barrels - 1) * (span + 0.8) + R() * (2.4 + (barrels - 1) * (span + 0.8))), q, sv.set(s, s * 0.6, s)));
     }
     this.dyn.add(rocks);
     const ts: TreeSpot[] = [];
@@ -185,7 +217,7 @@ export class CulvertWorld {
   set(r: CulvertResult): void {
     this.r = r;
     const { D, L, S, road, barrels, inlet } = r.inp;
-    const key = `${D}-${L}-${S}-${road}-${barrels}-${inlet}`;
+    const key = `${D}-${L}-${S}-${road}-${barrels}-${inlet}-${r.inp.shape}-${r.inp.B}`;
     if (key !== this.built) {
       this.build(r);
       this.built = key;
@@ -200,26 +232,31 @@ export class CulvertWorld {
     const pond: Station[] = [];
     for (let k = 0; k <= 12; k++) pond.push({ x: -L / 2 - REACH + ((xMeet + L / 2 + REACH) * k) / 12, bed: 0, depth: Math.max(0.05, hw), halfW: ph, z0: -ph });
     this.pond.update(pond);
-    this.pond.setSpeed(0.2);
+    this.pond.setSpeed(r.inp.Q / Math.max(0.5, 2 * ph * Math.max(0.1, hw)));
     const tw = Math.max(0.08, r.inp.tw);
     const dh = poolHalf(tw);
     this.down.update([
       { x: L / 2 + 0.36, bed: yOut, depth: tw, halfW: dh, z0: -dh },
       { x: L / 2 + REACH, bed: yOut, depth: tw, halfW: dh, z0: -dh },
     ]);
-    this.down.setSpeed(r.Vout * 0.5);
+    this.down.setSpeed(Math.min(r.Vout, r.inp.Q / Math.max(0.3, 2 * dh * tw)));
     // dentro del primer tubo (corte): de la entrada a la salida
     const yIn = Math.min(D, r.control === 'salida' ? D : Math.max(r.yc, r.yOut));
     const st: Station[] = [];
     for (let k = 0; k <= 30; k++) {
       const f = k / 30, x = -L / 2 + L * f;
       const y = Math.max(0.02, yIn + (r.yOut - yIn) * f);
-      const T = y >= D * 0.999 ? 0.02 : 2 * Math.sqrt(Math.max(0, y * (D - y)));
+      const box = r.inp.shape === 'cajon', Bw = r.inp.B ?? D;
+      // en el cajón el agua ocupa todo el ancho (se ve la mitad de atrás); en el tubo, el ancho de la superficie
+      const T = box ? Bw : y >= D * 0.999 ? 0.02 : 2 * Math.sqrt(Math.max(0, y * (D - y)));
       const w = Math.max(0.02, T / 2);
-      st.push({ x, bed: -S * (x + L / 2), depth: y, halfW: w / 2, z0: -w / 2, foam: f < 0.1 ? 0.4 : 0.1 });
+      const A = box ? Bw * Math.min(D, y) : geom({ shape: 'circ', b: 0, z: 0, D, H: D }, Math.min(D, y)).A;
+      st.push({ x, bed: -S * (x + L / 2), depth: y, halfW: w / 2, z0: -w / 2, foam: f < 0.1 ? 0.4 : 0.1, vel: r.q / Math.max(0.01, A) });
     }
     this.inner.update(st);
-    this.inner.setSpeed(r.Vout * 0.6);
+    // trazadores dentro del tubo partido, junto al corte
+    this.tracers.set(stationField(st), -L / 2, L / 2, [-Math.min(0.3, D * 0.2), -0.03], null, !this.tracersOn);
+    this.tracersOn = true;
     // sobre la vía
     this.over.group.visible = r.overtop;
     if (r.overtop) {
@@ -228,7 +265,7 @@ export class CulvertWorld {
         { x: -top / 2, bed: road + 0.06, depth: Math.max(0.03, hw - road), halfW: hw2 / 2, z0: -hw2 / 2 },
         { x: top / 2, bed: road + 0.06, depth: Math.max(0.03, (hw - road) * 0.6), halfW: hw2 / 2, z0: -hw2 / 2 },
       ]);
-      this.over.setSpeed(2);
+      this.over.setSpeed(r.Qover / Math.max(0.5, hw2 * Math.max(0.03, hw - road)));
     }
     this.views = {
       general: { eye: [-L / 2 - 36, road + 13, 15], target: [2, road / 2, -10], fit: L + 30 },
@@ -244,16 +281,17 @@ export class CulvertWorld {
     const { D, L, road } = r.inp;
     const out: StageLabel[] = [
       { id: 'hw', text: `Agua a la entrada: ${es(r.hw)} m`, sub: `${es(r.ratio)} veces el diámetro · control a la ${r.control}`, at: new THREE.Vector3(-L / 2 - 8, r.hw + 1.2, 2), kind: r.ok ? 'ok' : 'alerta', prio: 6 },
-      { id: 'via', text: 'Vía', sub: `${es(road, 1)} m sobre el fondo del tubo`, at: new THREE.Vector3(0, road + 1.4, -6), kind: 'lugar', prio: 3 },
+      { id: 'via', text: 'Vía', sub: `${es(road, 1)} m sobre el fondo del ${r.inp.shape === 'cajon' ? 'cajón' : 'tubo'}`, at: new THREE.Vector3(0, road + 1.4, -6), kind: 'lugar', prio: 3 },
       { id: 'sal', text: `Salida a ${es(r.Vout, 1)} m/s`, at: new THREE.Vector3(L / 2 + 4, -r.inp.S * L + r.inp.tw + 1.2, 1), kind: r.Vout > 4.5 ? 'alerta' : 'dato', prio: 4 },
     ];
     if (r.overtop) out.push({ id: 'encima', text: 'El agua pasa por encima de la vía', sub: `${es(r.Qover, 1)} m³/s`, at: new THREE.Vector3(0, road + 2.4, -10), kind: 'alerta', prio: 7 });
-    out.push({ id: 'tubo', text: r.inp.barrels > 1 ? `${r.inp.barrels} tubos de ${es(D, 1)} m` : `Tubo de ${es(D, 1)} m`, at: new THREE.Vector3(L / 4, D + 0.6, 0.2), kind: 'lugar', prio: 2 });
+    const bx = r.inp.shape === 'cajon' ? `${es(r.inp.B ?? D, 1)} × ${es(D, 1)} m` : '';
+    out.push({ id: 'tubo', text: r.inp.shape === 'cajon' ? (r.inp.barrels > 1 ? `${r.inp.barrels} cajones de ${bx}` : `Cajón de ${bx}`) : r.inp.barrels > 1 ? `${r.inp.barrels} tubos de ${es(D, 1)} m` : `Tubo de ${es(D, 1)} m`, at: new THREE.Vector3(L / 4, D + 0.6, 0.2), kind: 'lugar', prio: 2 });
     return out;
   }
 
   update(dt: number, t: number): void {
     this.time.value = t;
-    void dt;
+    this.tracers.update(dt, this.stage.reducedMotion);
   }
 }

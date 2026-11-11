@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { FLUME, G, type GaugeResult } from '../hydraulics';
 import { concreteMaterial } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { WATER, WaterBody, glassMaterial, slab, staffGauge, type Station } from './canalKit';
+import { Tracers, WATER, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station } from './canalKit';
 
 const X0 = -4;
 const X1 = 3;
@@ -24,11 +24,13 @@ export class GaugeWorld {
   private jet: WaterBody;
   private fall: WaterBody;
   private float: THREE.Mesh;
+  private tracers: Tracers;
   private meterTex: THREE.CanvasTexture;
   private meterCv: HTMLCanvasElement;
   private r: GaugeResult | null = null;
   private built = '';
   private floatT0: number | null = null;
+  private tracersOn = false;
   readonly views: Record<'general' | 'estructura' | 'regla', StageView> = {
     general: { eye: [0.2, 1.9, 5.2], target: [-0.3, -0.1, 0], fit: 8.5 },
     estructura: { eye: [2.6, 0.55, 1.35], target: [1.6, 0.18, 0], fit: 1.9 },
@@ -89,9 +91,12 @@ export class GaugeWorld {
     g.position.set(XG, 0, HB + 0.016);
     sc.add(g);
     sc.add(this.dyn);
-    this.water = new WaterBody(this.time);
-    this.jet = new WaterBody(this.time);
-    this.fall = new WaterBody(this.time, { side: false });
+    // el canal de laboratorio es pequeño: ondas de 8 cm y color pleno desde 15 cm de agua
+    this.water = new WaterBody(this.time, { scale: 0.08, depthRef: 0.15 });
+    this.jet = new WaterBody(this.time, { scale: 0.05, depthRef: 0.1, cols: 4 });
+    this.fall = new WaterBody(this.time, { side: false, scale: 0.05, depthRef: 0.1, cols: 4 });
+    this.tracers = new Tracers(280, 0.0045);
+    sc.add(this.tracers.mesh);
     for (const w of [this.water, this.jet, this.fall]) {
       w.setColor(WATER.lab);
       sc.add(w.group);
@@ -148,13 +153,13 @@ export class GaugeWorld {
       const x = X0 + ((XD - X0) * k) / 40;
       const near = Math.max(0, 1 - (XD - x) / Math.max(0.05, 3 * r.H));
       const draw = r.inp.device === 'gate' ? 0 : 0.15 * r.H * near * near;
-      st.push({ x, bed: 0, depth: yUp - draw, halfW: hw, foam: 0.02 });
+      st.push({ x, bed: 0, depth: yUp - draw, halfW: hw, foam: 0.02, vel: q / Math.max(0.005, yUp - draw) });
     }
     let xEnd: number, yDown: number;
     if (r.inp.device === 'gate') {
       const y2 = r.gateFree ? r.yUp : r.yVena!;
-      st.push({ x: XD + 0.01, bed: 0, depth: y2 * 1.2, halfW: hw, foam: 0.2 });
-      for (let k = 1; k <= 20; k++) st.push({ x: XD + ((X1 - XD) * k) / 20, bed: 0, depth: y2, halfW: hw, foam: 0.25 });
+      st.push({ x: XD + 0.01, bed: 0, depth: y2 * 1.2, halfW: hw, foam: 0.2, vel: q / (y2 * 1.2) });
+      for (let k = 1; k <= 20; k++) st.push({ x: XD + ((X1 - XD) * k) / 20, bed: 0, depth: y2, halfW: hw, foam: 0.25, vel: q / y2 });
       xEnd = X1;
       yDown = y2;
       this.jet.group.visible = false;
@@ -168,7 +173,7 @@ export class GaugeWorld {
       while (true) {
         const yLow = crest + 0.12 * r.H - 0.5 * G * t * t;
         if (yLow <= 0.0) break;
-        jet.push({ x, bed: yLow, depth: Math.max(0.004, th * (1 - t * 2)), halfW: halfJet, foam: 0.15 });
+        jet.push({ x, bed: yLow, depth: Math.max(0.004, th * (1 - t * 2)), halfW: halfJet, foam: 0.15, vel: Math.hypot(v0, G * t) });
         t += 0.006;
         x = XD + v0 * t;
         if (t > 1) break;
@@ -179,18 +184,19 @@ export class GaugeWorld {
       // al caer, el agua corre rápida y delgada hasta el final del canal
       const Vi = Math.sqrt(v0 * v0 + 2 * G * crest);
       yDown = Math.max(0.004, q / Vi);
-      st.push({ x: XD + 0.008, bed: 0, depth: 0.002, halfW: hw });
-      for (let k = 0; k <= 12; k++) st.push({ x: xi + ((X1 - xi) * k) / 12, bed: 0, depth: yDown, halfW: hw, foam: k < 3 ? 0.6 : 0.2 });
+      st.push({ x: XD + 0.008, bed: 0, depth: 0.002, halfW: hw, vel: Vi });
+      for (let k = 0; k <= 12; k++) st.push({ x: xi + ((X1 - xi) * k) / 12, bed: 0, depth: yDown, halfW: hw, foam: k < 3 ? 0.6 : 0.2, vel: Vi });
       xEnd = X1;
     }
     this.water.update(st);
-    this.water.setSpeed(r.Vup * 4);
-    this.jet.setSpeed(2);
+    // trazadores aguas arriba de la estructura (allí se mide)
+    this.tracers.set(stationField(st.filter((s) => s.x <= XD - 0.01)), X0, XD - 0.02, [HB - 0.03, HB - 0.004], null, !this.tracersOn);
+    this.tracersOn = true;
     // caída al tanque
     for (let k = 0; k <= 12; k++) {
       const t = k * 0.03;
       const x = xEnd + Math.min(0.9, (r.Q / (FLUME.b * yDown)) * t);
-      fall.push({ x, bed: -0.5 * G * t * t, depth: yDown, halfW: hw * 0.95, foam: 0.3 });
+      fall.push({ x, bed: -0.5 * G * t * t, depth: yDown, halfW: hw * 0.95, foam: 0.3, vel: Math.hypot(r.Q / (FLUME.b * yDown), G * t) });
     }
     this.fall.update(fall);
     // pantalla del caudalímetro
@@ -239,6 +245,6 @@ export class GaugeWorld {
     }
     this.float.visible = this.floatT0 !== null;
     this.float.position.set(Math.min(x, XD - 0.05), Math.min(r.yUp, FLUME.H) + 0.012, 0);
-    void dt;
+    this.tracers.update(dt, this.stage.reducedMotion);
   }
 }

@@ -2,7 +2,7 @@
 // las revisen. Cada una recibe los datos del formulario y devuelve resultados, pasos con las fórmulas y los números,
 // verificaciones y la memoria de cálculo. Son prediseños académicos: no son diseños de ingeniería.
 
-import { CULVERT_RULES, INLETS, inletHW, outletHW, N_PIPE, type Inlet } from './culvert';
+import { CULVERT_RULES, INLETS, culvertModel, inletHW, outletHW, type Inlet } from './culvert';
 import { BROAD_C, FLUME, G, MATERIALS, VMIN, alternateDepths, belanger, criticalDepth, froude, geom, jumpKind, JUMP_NAME, manningQ, normalDepth, rectWeirQ, specificEnergy, triWeirQ, gateUpstream, type Material, type Section, type Shape } from './hydraulics';
 import { RHO, RHO_S, RIPRAP, dStar, fallVelocity, shieldsCrit, bedloadStar, KAPPA, SG, MODE_NAME, type Mode } from './sediment';
 
@@ -274,55 +274,67 @@ export function prePuente(v: Vals): Result {
 
 // ------------------------------------------------------------------ 4. alcantarilla
 
+/** Conducto pedido en el formulario: tubo (entrada «entrada») o cajón (entrada «entradaC», ancho B). */
+function culvertShape(v: Vals): { box: boolean; inlet: Inlet; B: number } {
+  const box = v.forma === 'cajon';
+  const key = box ? v.entradaC : v.entrada;
+  let inlet: Inlet = typeof key === 'string' && key in INLETS ? (key as Inlet) : box ? 'aletas3075' : 'muro';
+  if (INLETS[inlet].shape !== (box ? 'cajon' : 'circ')) inlet = box ? 'aletas3075' : 'muro';
+  return { box, inlet, B: num(v.B, 2) };
+}
+
 export function calcAlcantarilla(v: Vals): Result {
-  const Q = num(v.Q, 5), D = num(v.D, 1.2), L = num(v.L, 30), S = num(v.S, 1) / 100, tw = num(v.tw, 0.5), inlet: Inlet = typeof v.entrada === 'string' && v.entrada in INLETS ? (v.entrada as Inlet) : 'muro';
-  if (Q <= 0 || D <= 0 || L <= 0) return { outs: [], steps: [], kid: '', error: 'Revisa los datos.' };
-  const i = inletHW(Q, D, S, inlet), o = outletHW(Q, D, L, S, tw, inlet);
+  const Q = num(v.Q, 5), D = num(v.D, 1.2), L = num(v.L, 30), S = num(v.S, 1) / 100, tw = num(v.tw, 0.5);
+  const { box, inlet, B } = culvertShape(v);
+  if (Q <= 0 || D <= 0 || L <= 0 || (box && B <= 0)) return { outs: [], steps: [], kid: '', error: 'Revisa los datos.' };
+  const i = inletHW(Q, D, S, inlet, box ? B : undefined), o = outletHW(Q, D, L, S, tw, inlet, box ? B : undefined);
   const hw = Math.max(i.hw, o.hw), ctrl = i.hw >= o.hw ? 'entrada' : 'salida';
+  const what = box ? `cajón de ${f(B, 2)} × ${f(D, 2)} m` : `tubo de ${f(D, 2)} m`;
   return {
     outs: [
       { label: 'Agua a la entrada', value: `${f(hw, 3)} m`, kid: true },
-      { label: 'Veces el diámetro', value: f(hw / D), kid: true },
+      { label: box ? 'Veces la altura del cajón' : 'Veces el diámetro', value: f(hw / D), kid: true },
       { label: 'Manda', value: `la ${ctrl}`, kid: true },
       { label: 'Control a la entrada', value: `${f(i.hw, 3)} m` },
       { label: 'Control a la salida', value: `${f(o.hw, 3)} m` },
       { label: 'Ku·Q/(A·D^0,5)', value: f(i.X, 2) },
     ],
     steps: [
-      `Entrada (${INLETS[inlet].name.toLowerCase()}): X = Ku·Q/(A·D^0,5) = ${f(i.X, 3)}; ${i.regime === 'libre' ? 'sin ahogar (forma 1)' : i.regime === 'sumergida' ? 'ahogada' : 'transición'} → HWi = ${f(i.hw, 3)} m.`,
+      `Conducto: ${what}; área ${f(box ? B * D : (Math.PI * D * D) / 4, 3)} m²${box ? `; radio hidráulico lleno A/P = ${f((B * D) / (2 * (B + D)), 3)} m` : ''}.`,
+      `Entrada (${INLETS[inlet].name.toLowerCase()}; HDS-5: K ${INLETS[inlet].K}, M ${INLETS[inlet].M}, c ${INLETS[inlet].c}, Y ${INLETS[inlet].Y}): X = Ku·Q/(A·D^0,5) = ${f(i.X, 3)}; ${i.regime === 'libre' ? 'sin ahogar (forma 1)' : i.regime === 'sumergida' ? 'ahogada' : 'transición'} → HWi = ${f(i.hw, 3)} m.`,
       `Salida: H = [1 + ${INLETS[inlet].ke} + 2g·n²·L/R^(4/3)]·V²/2g = ${f(o.H, 3)} m; ho = ${f(o.ho, 3)} m; HWo = H + ho − L·S = ${f(o.hw, 3)} m.`,
       `Manda el mayor: ${f(hw, 3)} m (control a la ${ctrl}).`,
     ],
-    kid: `El agua sube ${f(hw, 2)} m antes de entrar al tubo (${f(hw / D, 1)} veces su diámetro).`,
+    kid: `El agua sube ${f(hw, 2)} m antes de entrar al ${box ? 'cajón' : 'tubo'} (${f(hw / D, 1)} veces su ${box ? 'altura' : 'diámetro'}).`,
   };
 }
 
 export const PIPES = [0.6, 0.8, 0.9, 1.0, 1.2, 1.4, 1.5, 1.8, 2.0, 2.4, 2.7, 3.0];
+/** Cajones: anchos y alturas de 0,5 en 0,5 m (de 1,0 a 4,0 m de ancho y de 1,0 a 3,0 m de alto). */
+export const BOX_SPANS = [1, 1.5, 2, 2.5, 3, 3.5, 4];
+export const BOX_RISES = [1, 1.5, 2, 2.5, 3];
 
 export function preAlcantarilla(v: Vals): Result {
-  const Q = num(v.Q, 8), L = num(v.L, 30), S = num(v.S, 1) / 100, tw = num(v.tw, 0.5), road = num(v.road, 4), inlet: Inlet = typeof v.entrada === 'string' && v.entrada in INLETS ? (v.entrada as Inlet) : 'muro';
+  const Q = num(v.Q, 8), L = num(v.L, 30), S = num(v.S, 1) / 100, tw = num(v.tw, 0.5), road = num(v.road, 4);
+  const { box, inlet } = culvertShape(v);
   const hwd = num(v.hwd, CULVERT_RULES.hwd), free = num(v.free, CULVERT_RULES.free), vmax = num(v.vmax, CULVERT_RULES.vout);
   if (Q <= 0 || L <= 0) return { outs: [], steps: [], kid: '', error: 'Revisa los datos.' };
-  const options: { D: number; nb: number; hw: number; V: number; ctrl: string; area: number }[] = [];
-  for (const D of PIPES)
+  const options: { D: number; B: number; nb: number; hw: number; V: number; ctrl: string; area: number }[] = [];
+  const sizes: { D: number; B: number }[] = box ? BOX_RISES.flatMap((D) => BOX_SPANS.map((B) => ({ D, B }))) : PIPES.map((D) => ({ D, B: D }));
+  for (const { D, B } of sizes)
     for (let nb = 1; nb <= 3; nb++) {
-      const q = Q / nb;
-      const i = inletHW(q, D, S, inlet), o = outletHW(q, D, L, S, tw, inlet);
-      const hw = Math.max(i.hw, o.hw);
-      const sec: Section = { shape: 'circ', b: 0, z: 0, D, H: D };
-      const yn = S > 0 ? normalDepth(sec, N_PIPE, S, q) : NaN;
-      const yc = criticalDepth(sec, q);
-      const yOut = i.hw >= o.hw ? (Number.isNaN(yn) ? D : Math.min(D, yn)) : tw >= D ? D : Math.min(D, Math.max(yc, tw));
-      const A = yOut >= D * 0.999 ? (Math.PI * D * D) / 4 : geom(sec, yOut).A;
-      const V = q / A;
-      if (hw / D <= hwd && road - hw >= free && V <= vmax) options.push({ D, nb, hw, V, ctrl: i.hw >= o.hw ? 'entrada' : 'salida', area: nb * D * D });
+      const r = culvertModel({ Q, D, B, barrels: nb, L, S, tw, inlet, road: 12, shape: box ? 'cajon' : 'circ' });
+      if (r.overtop) continue;
+      if (r.hw / D <= hwd && road - r.hw >= free && r.Vout <= vmax) options.push({ D, B, nb, hw: r.hw, V: r.Vout, ctrl: r.control, area: nb * (box ? B * D : (Math.PI * D * D) / 4) });
     }
   options.sort((a, b) => a.area - b.area || a.nb - b.nb);
   const best = options[0];
-  if (!best) return { outs: [], steps: [`Se probaron ${PIPES.length} diámetros (0,6 a 3,0 m) con 1 a 3 tubos: ninguno cumple.`], kid: 'Ningún tubo alcanza: hace falta un puente o un cajón más grande.', error: 'Ninguna combinación de 1 a 3 tubos de 0,6 a 3,0 m cumple: considera un puente, un cajón o subir la vía.' };
+  const tried = box ? `${sizes.length} cajones (1,0 a 4,0 m de ancho, 1,0 a 3,0 m de alto)` : `${PIPES.length} diámetros (0,6 a 3,0 m)`;
+  if (!best) return { outs: [], steps: [`Se probaron ${tried} con 1 a 3 conductos: ninguno cumple.`], kid: 'Ningún conducto alcanza: hace falta un puente o subir la vía.', error: `Ninguna combinación de 1 a 3 ${box ? 'cajones' : 'tubos'} cumple: considera un puente, ${box ? 'tubos' : 'un cajón'} o subir la vía.` };
+  const name = (o: typeof best) => (box ? `${o.nb} de ${f(o.B, 1)} × ${f(o.D, 1)} m` : `${o.nb} de ${f(o.D, 1)} m`);
   return {
     outs: [
-      { label: 'Tubos', value: `${best.nb} de ${f(best.D, 1)} m`, kid: true },
+      { label: box ? 'Cajones' : 'Tubos', value: name(best), kid: true },
       { label: 'Agua a la entrada', value: `${f(best.hw, 2)} m (${f(best.hw / best.D)} D)`, kid: true },
       { label: 'Bajo la vía quedan', value: `${f(road - best.hw, 2)} m`, kid: true },
       { label: 'Velocidad a la salida', value: `${f(best.V, 2)} m/s` },
@@ -330,16 +342,16 @@ export function preAlcantarilla(v: Vals): Result {
       { label: 'Otras opciones que cumplen', value: `${options.length - 1}` },
     ],
     steps: [
-      `Se probaron ${PIPES.length} diámetros comerciales (0,6 a 3,0 m) con 1, 2 y 3 tubos; para cada uno, el nivel a la entrada es el mayor entre el control a la entrada y a la salida (HDS-5).`,
+      `Se probaron ${tried} con 1, 2 y 3 conductos (${INLETS[inlet].name.toLowerCase()}); para cada uno, el nivel a la entrada es el mayor entre el control a la entrada y a la salida (HDS-5).`,
       `Criterios: HW ≤ ${f(hwd, 2)} D, al menos ${f(free, 2)} m bajo la vía y velocidad a la salida ≤ ${f(vmax, 1)} m/s.`,
-      `Cumplen ${options.length} combinaciones (la escogida y ${options.length - 1} más); se escoge la de menor área de tubo: ${best.nb} × ${f(best.D, 1)} m.`,
+      `Cumplen ${options.length} combinaciones (la escogida y ${options.length - 1} más); se escoge la de menor área: ${name(best)}.`,
     ],
     checks: [
       { name: `HW ≤ ${f(hwd, 1)} D`, ok: best.hw / best.D <= hwd, value: `${f(best.hw / best.D)} D` },
       { name: `Al menos ${f(free, 1)} m bajo la vía`, ok: road - best.hw >= free, value: `${f(road - best.hw)} m` },
       { name: `Salida ≤ ${f(vmax, 1)} m/s`, ok: best.V <= vmax, value: `${f(best.V)} m/s` },
     ],
-    kid: `${best.nb === 1 ? 'Un tubo' : `${best.nb} tubos`} de ${f(best.D, 1)} m deja${best.nb === 1 ? '' : 'n'} pasar la creciente sin que el agua llegue a la vía.`,
+    kid: `${best.nb === 1 ? (box ? 'Un cajón' : 'Un tubo') : `${best.nb} ${box ? 'cajones' : 'tubos'}`} de ${box ? `${f(best.B, 1)} × ${f(best.D, 1)} m` : `${f(best.D, 1)} m`} deja${best.nb === 1 ? '' : 'n'} pasar la creciente sin que el agua llegue a la vía.`,
   };
 }
 

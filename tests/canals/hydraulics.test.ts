@@ -38,6 +38,7 @@ import {
 } from '../../src/canals/hydraulics';
 import { calcAforo, calcAlcantarilla, calcCanal, calcPuente, calcResalto, calcSedimento, preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente } from '../../src/canals/designCalc';
 import { CR_ROAD, INLETS, ROAD_LEN, culvertModel, inletHW, outletHW, type Inlet } from '../../src/canals/culvert';
+import { BEDFORM_NAME, contractionScour, hortonN, laneK, midSection, parshallH, parshallQ, pierScour, transport, usbrBasin, yarnell, type Bedform } from '../../src/canals/advanced';
 import { GRAINS, RIPRAP, RHO, RHO_S, bedloadStar, dStar, fallVelocity, sedimentModel, shieldsCrit, rouseProfile, type Mode } from '../../src/canals/sediment';
 
 interface Result {
@@ -500,6 +501,145 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     tolerance: '400 juegos de datos al azar en las doce herramientas (4 800 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida',
     measured: `${n} llamadas; excepciones ${thrown}; con valores inválidos ${bad}; propuestas de ejemplo ${okProps ? 'cumplen' : 'NO cumplen'} (alcantarilla: ${pa.outs[0]?.value ?? pa.error})`,
     pass: thrown === 0 && bad === 0 && okProps,
+  });
+}
+
+// H16) Canal en tierra (Lane) y rugosidad compuesta (Horton y Einstein)
+{
+  const K = laneK(2, 33);
+  const Kref = Math.sqrt(1 - Math.sin(Math.atan(0.5)) ** 2 / Math.sin((33 * Math.PI) / 180) ** 2);
+  const n = hortonN([{ P: 2, n: 0.013 }, { P: 4, n: 0.03 }]);
+  const nSame = hortonN([{ P: 3, n: 0.02 }, { P: 5, n: 0.02 }]);
+  const steep = laneK(1, 33);
+  record({
+    id: 'H16',
+    name: 'Fuerza tractiva de Lane y rugosidad compuesta de Horton y Einstein',
+    tolerance: 'K de Lane para talud 2:1 y reposo de 33° igual a √(1 − sen²θ/sen²φ) = 0,571 (error < 0,1 %); un talud más empinado que el reposo da K = 0; n compuesto de 2 m a 0,013 y 4 m a 0,030 igual a 0,0250 (error < 0,5 %) y con un solo material, ese mismo n',
+    measured: `K = ${K.toFixed(4)} (referencia ${Kref.toFixed(4)}); talud 1:1 → K = ${steep}; n = ${n.toFixed(5)}; n con un solo material = ${nSame.toFixed(4)}`,
+    pass: rel(K, 0.5708) < 1e-3 && rel(K, Kref) < 1e-9 && steep === 0 && rel(n, 0.02503) < 5e-3 && rel(nSame, 0.02) < 1e-9,
+  });
+}
+
+// H17) Pozos USBR: selección del tipo y proporciones del tipo III
+{
+  const y1 = 0.3, V1 = 12, F1 = V1 / Math.sqrt(9.81 * y1), y2 = (y1 / 2) * (Math.sqrt(1 + 8 * F1 * F1) - 1);
+  const b3 = usbrBasin(y1, V1, F1, y2, V1 * y1);
+  const b2 = usbrBasin(y1, 20, 20 / Math.sqrt(9.81 * y1), y2, 6);
+  const b4 = usbrBasin(0.5, 7.7, 3.5, 2.2, 3.85);
+  const b1 = usbrBasin(0.8, 5.6, 2, 1.9, 4.5);
+  const h3 = (y1 * (4 + F1)) / 6, h4 = (y1 * (18 + F1)) / 18;
+  record({
+    id: 'H17',
+    name: 'Pozos amortiguadores USBR: tipo según F1, V1 y q, y proporciones del tipo III (Peterka)',
+    tolerance: 'F1 = 7 con 12 m/s y q = 3,6 m²/s → tipo III, bloques de y1·(4 + F1)/6 y umbral de y1·(18 + F1)/18 (error < 0,1 %), a 0,8·y2 del pie y largo 2,7·y2; con 20 m/s → tipo II con umbral dentado de 0,2·y2; F1 = 3,5 → tipo IV; F1 = 2 → tipo I con el largo del resalto libre',
+    measured: `tipos ${b3.type}, ${b2.type}, ${b4.type}, ${b1.type}; h3 = ${b3.baffle?.h.toFixed(3)} m (ref. ${h3.toFixed(3)}); h4 = ${b3.sill.h.toFixed(3)} m (ref. ${h4.toFixed(3)}); largo III ${b3.L.toFixed(2)} m frente a libre ${b3.Lfree.toFixed(2)} m`,
+    pass: b3.type === 'III' && b2.type === 'II' && b4.type === 'IV' && b1.type === 'I' && rel(b3.baffle!.h, h3) < 1e-3 && rel(b3.sill.h, h4) < 1e-3 && rel(b3.baffle!.x, 0.8 * y2) < 1e-9 && rel(b3.L, 2.7 * y2) < 1e-9 && b2.sill.dentated && rel(b2.sill.h, 0.2 * y2) < 1e-9 && rel(b1.L, 6.9 * (1.9 - 0.8)) < 1e-9 && b3.L < b3.Lfree,
+  });
+}
+
+// H18) Pilas: remanso de Yarnell y socavación local de HEC-18 (ejemplo publicado)
+{
+  const dy = yarnell(0.9, 2, 2, 0.1);
+  const F2 = 4 / (9.81 * 2);
+  const ref = 0.9 * F2 * (0.9 + 5 * F2 - 0.6) * (0.1 + 15 * 1e-4) * 2;
+  // ejemplo de la calculadora HEC-18 de Ponce (SDSU): y1 = 5,334 m, V = 7,15 m/s, a = 4,52 m, cilindro, agua clara → 10,484 m
+  const ex = pierScour(4.52, 5.334, 7.15, 1.0);
+  const big = pierScour(1, 2, 3.5, 1.0);
+  const sq = pierScour(1, 3, 1.5, 1.1), rd = pierScour(1, 3, 1.5, 1.0);
+  record({
+    id: 'H18',
+    name: 'Pilas de puente: remanso de Yarnell y socavación local (HEC-18)',
+    tolerance: 'Yarnell igual a la ecuación escrita a mano (error < 1e-9); socavación del ejemplo publicado (y1 = 5,334 m, V = 7,15 m/s, a = 4,52 m, cilindro, agua clara) igual a 10,484 m (error < 0,5 %); el tope de 2,4·a (Fr ≤ 0,8) o 3,0·a (Fr > 0,8) en pila redonda; la pila cuadrada socava 10 % más que la redonda',
+    measured: `Δy = ${dy.toFixed(4)} m (ref. ${ref.toFixed(4)}); ys = ${ex.ys.toFixed(3)} m; pila de 1 m con Fr = ${big.Fr.toFixed(2)}: ${big.ys.toFixed(2)} m (tope ${big.capped ? 'sí' : 'no'}); cuadrada/redonda = ${(sq.ys / rd.ys).toFixed(3)}`,
+    pass: rel(dy, ref) < 1e-9 && rel(ex.ys, 10.484) < 5e-3 && big.capped && rel(big.ys, big.Fr <= 0.8 ? 2.4 : 3.0) < 1e-9 && rel(sq.ys / rd.ys, 1.1) < 1e-9,
+  });
+}
+
+// H19) Socavación por contracción (HEC-18): agua clara a mano y lecho vivo
+{
+  const cw = contractionScour(100, 30, 20, 3, 3, 0.05, 0.002);
+  const Dm = 1.25 * 0.05;
+  const y2 = Math.pow((0.025 * 100 * 100) / (Math.pow(Dm, 2 / 3) * 400), 3 / 7);
+  const lb = contractionScour(100, 30, 20, 2, 2, 0.0005, 0.002);
+  const lbWide = contractionScour(100, 30, 30, 2, 2, 0.0005, 0.002);
+  record({
+    id: 'H19',
+    name: 'Socavación por contracción (HEC-18): agua clara y lecho vivo',
+    tolerance: 'grava de 5 cm a 1,1 m/s (por debajo de la velocidad crítica) → agua clara con y2 = [0,025·Q²/(Dm^(2/3)·W²)]^(3/7) (error < 1e-9); arena de 0,5 mm → lecho vivo con k1 de la tabla; sin contracción (W2 = W1) no hay socavación por lecho vivo',
+    measured: `agua clara: ${cw.live ? 'no' : 'sí'}, y2 = ${cw.y2.toFixed(3)} m (ref. ${y2.toFixed(3)}), ys = ${cw.ys.toFixed(3)} m; lecho vivo: ${lb.live ? 'sí' : 'no'}, k1 = ${lb.k1}, ys = ${lb.ys.toFixed(3)} m; sin contracción ys = ${lbWide.ys.toFixed(4)} m`,
+    pass: !cw.live && rel(cw.y2, y2) < 1e-9 && lb.live && [0.59, 0.64, 0.69].includes(lb.k1) && lb.ys > 0 && lbWide.ys < 1e-9,
+  });
+}
+
+// H20) Sedimentos: cuatro fórmulas y formas del lecho
+{
+  const sec = (d: number, V: number, h: number, S: number) => transport({ d, h, V, S, R: (10 * h) / (10 + 2 * h) });
+  const still = sec(0.05, 0.5, 1, 0.0005);
+  const gravel = sec(0.02, 2.5, 1.5, 0.006);
+  const order: Bedform[] = ['plano-quieto', 'rizos', 'dunas', 'transicion', 'plano-alto', 'antidunas'];
+  const forms: number[] = [];
+  let mono = true, prev = -1;
+  for (const V of [0.25, 0.4, 0.6, 0.9, 1.3, 1.8, 2.5]) {
+    const r = sec(0.0003, V, 2, (V * 0.022) ** 2 / Math.pow(1.6, 4 / 3));
+    const k = order.indexOf(r.bedform) === 5 ? 4 : order.indexOf(r.bedform);
+    forms.push(order.indexOf(r.bedform));
+    if (k < prev) mono = false;
+    prev = k;
+    if (r.mpm < 0 || r.vanRijn < 0 || r.engelundHansen < 0) mono = false;
+  }
+  // cada fórmula en su rango: en grava, MPM y Einstein-Brown; en arena, van Rijn, Einstein-Brown y Engelund-Hansen
+  const spread = Math.max(gravel.mpm, gravel.einsteinBrown) / Math.min(gravel.mpm, gravel.einsteinBrown);
+  const sand = sec(0.0005, 1.0, 2, 0.0004);
+  const sv = [sand.vanRijn, sand.einsteinBrown, sand.engelundHansen];
+  const spreadS = Math.max(...sv) / Math.min(...sv);
+  record({
+    id: 'H20',
+    name: 'Transporte de sedimentos con cuatro fórmulas y formas del lecho (van Rijn)',
+    tolerance: 'bajo el umbral, Meyer-Peter y Müller y van Rijn dan 0; cada fórmula en su rango de grano: en grava, Meyer-Peter y Müller y Einstein-Brown dentro de un factor de 3; en arena, van Rijn, Einstein-Brown y Engelund-Hansen dentro de un factor de 10; van Rijn fuera de rango en grava; en arena, al subir la velocidad, las formas del lecho siguen el orden quieto → rizos → dunas → transición → lecho plano o antidunas, sin retroceder',
+    measured: `bajo el umbral: MPM ${still.mpm}, van Rijn ${still.vanRijn}; grava: MPM ${(gravel.mpm * 1e3).toFixed(3)}, Einstein-Brown ${(gravel.einsteinBrown * 1e3).toFixed(3)} L/s·m (factor ${spread.toFixed(1)}; van Rijn ${gravel.valid.vanRijn ? 'en rango' : 'fuera de rango'}); arena: van Rijn ${(sand.vanRijn * 1e3).toFixed(4)}, Einstein-Brown ${(sand.einsteinBrown * 1e3).toFixed(4)}, Engelund-Hansen ${(sand.engelundHansen * 1e3).toFixed(4)} L/s·m (factor ${spreadS.toFixed(1)}); formas: ${forms.map((k) => BEDFORM_NAME[order[k]].split(' ')[0]).join(' → ')}`,
+    pass: still.mpm === 0 && still.vanRijn === 0 && spread < 3 && spreadS < 10 && !gravel.valid.vanRijn && sand.valid.vanRijn && mono && forms[0] <= 1 && forms[forms.length - 1] >= 3,
+  });
+}
+
+// H21) Aforo: canaleta Parshall (tablas del USBR) y molinete por sección media
+{
+  const q6 = parshallQ('6in', 0.3048), q9 = parshallQ('9in', 0.3048);
+  const back = parshallH('3in', parshallQ('3in', 0.12));
+  const ms = midSection([
+    { x: 0, d: 0, v: 0 },
+    { x: 1, d: 1, v: 0.5 },
+    { x: 2, d: 1.5, v: 0.8 },
+    { x: 3, d: 1, v: 0.5 },
+    { x: 4, d: 0, v: 0 },
+  ]);
+  record({
+    id: 'H21',
+    name: 'Aforo: canaleta Parshall y molinete por sección media (ISO 748)',
+    tolerance: 'Parshall de 6 y 9 pulgadas con Ha = 1 pie igual a las tablas del USBR (2,06 y 3,07 pies³/s, error < 0,1 %); la carga inversa recupera la carga (error < 1e-9); sección media de un ejemplo a mano: Q = 2,2 m³/s y A = 3,5 m²',
+    measured: `6 pulgadas: ${(q6 / 0.0283168).toFixed(3)} pies³/s; 9 pulgadas: ${(q9 / 0.0283168).toFixed(3)} pies³/s; carga inversa ${back.toFixed(4)} m; molinete Q = ${ms.Q.toFixed(3)} m³/s, A = ${ms.A.toFixed(3)} m²`,
+    pass: rel(q6 / 0.0283168, 2.06) < 1e-3 && rel(q9 / 0.0283168, 3.07) < 1e-3 && rel(back, 0.12) < 1e-9 && rel(ms.Q, 2.2) < 1e-9 && rel(ms.A, 3.5) < 1e-9,
+  });
+}
+
+// H22) Alcantarilla de cajón (HDS-5, aletas de 30° a 75°): control a la entrada a mano y modelo completo
+{
+  // cajón de 2,0 × 1,5 m, Q = 6 m³/s, S = 1 %: X = 1,811·6/(3·√1,5) = 2,957 < 3,5 → forma 1 sin ahogar
+  const X = (1.811 * 6) / (3 * Math.sqrt(1.5));
+  const dc = Math.cbrt((3 * 3) / 9.81);
+  const ref = 1.5 * ((1.5 * dc) / 1.5 + 0.026 * X - 0.5 * 0.01);
+  const i = inletHW(6, 1.5, 0.01, 'aletas3075', 2.0);
+  const mBox = culvertModel({ Q: 6, D: 1.5, B: 2.0, barrels: 1, L: 30, S: 0.01, inlet: 'aletas3075', tw: 0.5, road: 4, shape: 'cajon' });
+  const mPipe = culvertModel({ Q: 6, D: 1.5, barrels: 1, L: 30, S: 0.01, inlet: 'muro', tw: 0.5, road: 4, shape: 'circ' });
+  const fixInlet = culvertModel({ Q: 6, D: 1.5, B: 2, shape: 'cajon', inlet: 'muro' });
+  const o = outletHW(6, 1.5, 30, 0.01, 2.0, 'aletas3075', 2.0);
+  const R = 3 / 7, V = 2;
+  const Href = ((1 + 0.4 + (2 * 9.81 * 0.012 ** 2 * 30) / Math.pow(R, 4 / 3)) * (V * V)) / (2 * 9.81);
+  record({
+    id: 'H22',
+    name: 'Alcantarilla de cajón: control a la entrada (HDS-5, forma 1) y a la salida, y modelo completo',
+    tolerance: 'cajón de 2,0 × 1,5 m con 6 m³/s: HW a la entrada igual al cálculo a mano con Hc = 1,5·dc, K = 0,026 y M = 1 (error < 0,1 %); pérdida a la salida con R = A/P del cajón lleno y ke = 0,4 (error < 1e-9); el cajón (3 m²) deja el agua más baja que un tubo de 1,5 m (1,77 m²); una entrada de tubo pedida para un cajón se cambia por aletas de 30° a 75°',
+    measured: `X = ${X.toFixed(3)}; HW = ${i.hw.toFixed(3)} m (a mano ${ref.toFixed(3)}); H = ${o.H.toFixed(4)} m (a mano ${Href.toFixed(4)}); cajón ${mBox.hw.toFixed(2)} m frente a tubo ${mPipe.hw.toFixed(2)} m; entrada corregida: ${fixInlet.inp.inlet}`,
+    pass: i.regime === 'libre' && rel(i.hw, ref) < 1e-3 && rel(o.H, Href) < 1e-9 && mBox.hw < mPipe.hw && fixInlet.inp.inlet === 'aletas3075',
   });
 }
 

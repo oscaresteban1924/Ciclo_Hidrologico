@@ -21,6 +21,8 @@ import {
   type Result,
   type Vals,
 } from './designCalc';
+import { MOLINETE_EJEMPLO, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
+import { PARSHALL, PIERS, type ParshallSize, type PierShape } from './advanced';
 
 export type DesignPart = 'canal' | 'resalto' | 'puente' | 'alcantarilla' | 'sedimentos' | 'aforo';
 type Level = 'ninos' | 'uni';
@@ -34,6 +36,8 @@ interface Field {
   options?: { value: string; label: string }[];
   /** Solo si otro campo tiene ese valor. */
   when?: [string, string[]];
+  /** Texto de varias líneas (tabla). */
+  text?: boolean;
 }
 
 interface Tool {
@@ -45,7 +49,9 @@ interface Tool {
 }
 
 const MAT_OPTS = (Object.keys(MATERIALS) as Material[]).map((m) => ({ value: m, label: `${MATERIALS[m].name} (n ${MATERIALS[m].n})` }));
-const INLET_OPTS = (Object.keys(INLETS) as Inlet[]).map((i) => ({ value: i, label: INLETS[i].name }));
+const INLET_OPTS = (Object.keys(INLETS) as Inlet[]).filter((i) => INLETS[i].shape === 'circ').map((i) => ({ value: i, label: INLETS[i].name }));
+const BOX_OPTS = (Object.keys(INLETS) as Inlet[]).filter((i) => INLETS[i].shape === 'cajon').map((i) => ({ value: i, label: INLETS[i].name }));
+const SHAPE_FIELD: Field = { id: 'forma', label: 'Conducto', def: 'circ', kid: true, options: [{ value: 'circ', label: 'Tubo circular' }, { value: 'cajon', label: 'Cajón' }] };
 
 const TOOLS: Record<DesignPart, { calc: Tool; pre: Tool }> = {
   canal: {
@@ -139,29 +145,34 @@ const TOOLS: Record<DesignPart, { calc: Tool; pre: Tool }> = {
   alcantarilla: {
     calc: {
       title: 'Calculadora de alcantarilla (HDS-5)',
-      intro: 'Nivel del agua a la entrada por control a la entrada y a la salida, para un tubo circular de concreto.',
-      kidIntro: '¿Hasta dónde sube el agua antes de entrar al tubo?',
+      intro: 'Nivel del agua a la entrada por control a la entrada y a la salida, para un tubo circular o un cajón de concreto.',
+      kidIntro: '¿Hasta dónde sube el agua antes de entrar a la alcantarilla?',
       fields: [
+        SHAPE_FIELD,
         { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 5, kid: true },
-        { id: 'D', label: 'Diámetro', unit: 'm', def: 1.2, kid: true },
+        { id: 'D', label: 'Diámetro o alto', unit: 'm', def: 1.2, kid: true },
+        { id: 'B', label: 'Ancho del cajón', unit: 'm', def: 2, kid: true, when: ['forma', ['cajon']] },
         { id: 'L', label: 'Largo', unit: 'm', def: 30 },
         { id: 'S', label: 'Pendiente', unit: '%', def: 1 },
         { id: 'tw', label: 'Nivel aguas abajo', unit: 'm', def: 0.5 },
-        { id: 'entrada', label: 'Entrada', def: 'muro', options: INLET_OPTS },
+        { id: 'entrada', label: 'Entrada', def: 'muro', options: INLET_OPTS, when: ['forma', ['circ']] },
+        { id: 'entradaC', label: 'Entrada', def: 'aletas3075', options: BOX_OPTS, when: ['forma', ['cajon']] },
       ],
       run: calcAlcantarilla,
     },
     pre: {
       title: 'Prediseño de alcantarilla',
-      intro: 'Prueba tubos comerciales de 0,6 a 3,0 m con 1 a 3 tubos y escoge el de menor área que cumple los criterios.',
-      kidIntro: 'Dime cuánta agua pasa y qué tan alta es la vía: te digo qué tubos poner.',
+      intro: 'Prueba tubos comerciales de 0,6 a 3,0 m, o cajones de 1,0 a 4,0 m de ancho, con 1 a 3 conductos, y escoge el de menor área que cumple los criterios.',
+      kidIntro: 'Dime cuánta agua pasa y qué tan alta es la vía: te digo qué alcantarilla poner.',
       fields: [
+        SHAPE_FIELD,
         { id: 'Q', label: 'Creciente de diseño', unit: 'm³/s', def: 8, kid: true },
         { id: 'road', label: 'Altura de la vía', unit: 'm', def: 4, kid: true },
         { id: 'L', label: 'Largo', unit: 'm', def: 30 },
         { id: 'S', label: 'Pendiente', unit: '%', def: 1 },
         { id: 'tw', label: 'Nivel aguas abajo', unit: 'm', def: 0.5 },
-        { id: 'entrada', label: 'Entrada', def: 'muro', options: INLET_OPTS },
+        { id: 'entrada', label: 'Entrada', def: 'muro', options: INLET_OPTS, when: ['forma', ['circ']] },
+        { id: 'entradaC', label: 'Entrada', def: 'aletas3075', options: BOX_OPTS, when: ['forma', ['cajon']] },
         { id: 'hwd', label: 'HW máximo', unit: 'veces D', def: 1.5 },
         { id: 'free', label: 'Mínimo bajo la vía', unit: 'm', def: 0.5 },
         { id: 'vmax', label: 'Velocidad máxima a la salida', unit: 'm/s', def: 4.5 },
@@ -228,6 +239,148 @@ const TOOLS: Record<DesignPart, { calc: Tool; pre: Tool }> = {
   },
 };
 
+/** Herramientas avanzadas (nivel universitario). */
+const PIER_OPTS = (Object.keys(PIERS) as PierShape[]).map((p) => ({ value: p, label: `${PIERS[p].name} (K ${PIERS[p].K})` }));
+const PARSHALL_OPTS = (Object.keys(PARSHALL) as ParshallSize[]).map((p) => ({ value: p, label: PARSHALL[p].name }));
+const EXTRA: Record<DesignPart, (Tool & { kind: 'calc' | 'pre' })[]> = {
+  canal: [
+    {
+      kind: 'calc',
+      title: 'Rugosidad compuesta (Horton y Einstein)',
+      intro: 'Un canal con fondo de un material y paredes de otro: n equivalente y caudal.',
+      kidIntro: 'Fondo de piedras y paredes de concreto: ¿cuánta agua lleva?',
+      fields: [
+        { id: 'forma', label: 'Forma', def: 'trap', options: [{ value: 'rect', label: 'Rectangular' }, { value: 'trap', label: 'Trapecial' }] },
+        { id: 'b', label: 'Ancho del fondo', unit: 'm', def: 3 },
+        { id: 'z', label: 'Talud (horizontal : 1)', def: 1.5, when: ['forma', ['trap']] },
+        { id: 'y', label: 'Profundidad del agua', unit: 'm', def: 1 },
+        { id: 'nb', label: 'n del fondo', def: 0.03 },
+        { id: 'nw', label: 'n de las paredes', def: 0.014 },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.1 },
+      ],
+      run: calcRugosidad,
+    },
+    {
+      kind: 'pre',
+      title: 'Prediseño de canal en tierra (fuerza tractiva de Lane)',
+      intro: 'Canal trapecial sin revestir en material grueso: la mayor profundidad que no arrastra el fondo ni los taludes, y el ancho que lleva el caudal.',
+      kidIntro: 'Un canal de tierra y piedras que el agua no se lleva.',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 5 },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.15 },
+        { id: 'd75', label: 'd75 del material', unit: 'mm', def: 25 },
+        { id: 'phi', label: 'Ángulo de reposo', unit: '°', def: 33 },
+        { id: 'z', label: 'Talud (horizontal : 1)', def: 2 },
+        { id: 'n', label: 'n de Manning', def: 0.025 },
+        { id: 'fb', label: 'Borde libre', unit: '%', def: 20 },
+      ],
+      run: preCanalTierra,
+    },
+  ],
+  resalto: [
+    {
+      kind: 'pre',
+      title: 'Prediseño de pozo USBR (tipos II, III y IV)',
+      intro: 'Escoge el tipo de pozo según F1, V1 y q, dimensiona dados, bloques y umbral (Peterka) y baja el piso si el agua de abajo no alcanza.',
+      kidIntro: 'Un pozo con bloques en el piso para frenar el agua.',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 12 },
+        { id: 'b', label: 'Ancho del pozo', unit: 'm', def: 4 },
+        { id: 'H', label: 'Caída hasta el piso', unit: 'm', def: 6 },
+        { id: 'loss', label: 'Pérdida en la rápida', unit: '%', def: 10 },
+        { id: 'tw', label: 'Agua disponible a la salida', unit: 'm', def: 2.2 },
+      ],
+      run: prePozoUSBR,
+    },
+  ],
+  puente: [
+    {
+      kind: 'calc',
+      title: 'Pilas: remanso (Yarnell) y socavación local (HEC-18)',
+      intro: 'Cuánto suben el agua las pilas y qué tan hondo excava el agua junto a ellas.',
+      kidIntro: 'Las patas del puente frenan el agua y el agua cava a su alrededor.',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 60 },
+        { id: 'B', label: 'Ancho del cauce', unit: 'm', def: 20 },
+        { id: 'y3', label: 'Profundidad aguas abajo', unit: 'm', def: 2.5 },
+        { id: 'np', label: 'Número de pilas', def: 2 },
+        { id: 'a', label: 'Ancho de cada pila', unit: 'm', def: 1 },
+        { id: 'Lp', label: 'Largo de la pila', unit: 'm', def: 6 },
+        { id: 'pila', label: 'Forma', def: 'semicircular', options: PIER_OPTS },
+        { id: 'skew', label: 'Ángulo del flujo', unit: '°', def: 0 },
+        { id: 'K3', label: 'K3 del lecho', def: 1.1, options: [{ value: '1.1', label: 'Agua clara, lecho plano o dunas pequeñas (1,1)' }, { value: '1.2', label: 'Dunas medianas (1,2)' }, { value: '1.3', label: 'Dunas grandes (1,3)' }] },
+      ],
+      run: calcPilas,
+    },
+    {
+      kind: 'calc',
+      title: 'Socavación por contracción (HEC-18)',
+      intro: 'Cuánto baja el fondo bajo el puente cuando el puente angosta el cauce: lecho vivo (Laursen) o agua clara.',
+      kidIntro: 'Si el puente angosta el río, el agua cava el fondo.',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 120 },
+        { id: 'W1', label: 'Ancho aguas arriba', unit: 'm', def: 40 },
+        { id: 'W2', label: 'Ancho bajo el puente', unit: 'm', def: 25 },
+        { id: 'y1', label: 'Profundidad aguas arriba', unit: 'm', def: 2.5 },
+        { id: 'y0', label: 'Profundidad bajo el puente (antes)', unit: 'm', def: 2.5 },
+        { id: 'd50', label: 'D50 del lecho', unit: 'mm', def: 2 },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.2 },
+      ],
+      run: calcContraccion,
+    },
+  ],
+  alcantarilla: [],
+  sedimentos: [
+    {
+      kind: 'calc',
+      title: 'Cuatro fórmulas de transporte y formas del lecho',
+      intro: 'Meyer-Peter y Müller, Einstein y Brown, van Rijn y Engelund y Hansen para el mismo cauce, con su rango de validez, y las formas del lecho de van Rijn.',
+      kidIntro: '¿Cuánta arena se lleva el río? Cuatro fórmulas para comparar.',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 30 },
+        { id: 'b', label: 'Ancho del cauce', unit: 'm', def: 10 },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.3 },
+        { id: 'd', label: 'd50 del lecho', unit: 'mm', def: 2 },
+        { id: 'n', label: 'n de Manning (0 = Strickler)', def: 0 },
+      ],
+      run: calcFormulas,
+    },
+  ],
+  aforo: [
+    {
+      kind: 'calc',
+      title: 'Canaleta Parshall',
+      intro: 'Caudal en flujo libre con la carga Ha (tablas del USBR) y revisión de la sumergencia Hb/Ha.',
+      kidIntro: 'Una canaleta que mide el agua de un canal.',
+      fields: [
+        { id: 'size', label: 'Tamaño de la garganta', def: '6in', options: PARSHALL_OPTS },
+        { id: 'Ha', label: 'Carga Ha', unit: 'cm', def: 15 },
+        { id: 'Hb', label: 'Carga Hb (0 si no se mide)', unit: 'cm', def: 0 },
+      ],
+      run: calcParshall,
+    },
+    {
+      kind: 'pre',
+      title: 'Escoger una canaleta Parshall',
+      intro: 'El tamaño más pequeño cuyo rango de carga cubre los caudales mínimo y máximo.',
+      kidIntro: '¿Qué canaleta sirve para medir mi canal?',
+      fields: [
+        { id: 'qmin', label: 'Caudal mínimo', unit: 'L/s', def: 5 },
+        { id: 'qmax', label: 'Caudal máximo', unit: 'L/s', def: 120 },
+      ],
+      run: preParshall,
+    },
+    {
+      kind: 'calc',
+      title: 'Aforo con molinete (sección media)',
+      intro: 'Caudal de una quebrada a partir de verticales medidas: distancia a la orilla, profundidad y velocidad media en cada una.',
+      kidIntro: 'Medimos la velocidad en varios puntos y sumamos.',
+      fields: [{ id: 'tabla', label: 'Verticales: distancia (m), profundidad (m), velocidad (m/s), una por línea', def: MOLINETE_EJEMPLO, text: true }],
+      run: calcMolinete,
+    },
+  ],
+};
+
 const LEVEL_KEY = 'ciclo-hidrologico:canales-nivel';
 
 function loadLevel(): Level {
@@ -248,6 +401,9 @@ export function DesignTab({ part }: { part: DesignPart }) {
     }
   }, [level]);
   const t = TOOLS[part];
+  const list: (Tool & { kind: 'calc' | 'pre' })[] = [{ ...t.calc, kind: 'calc' }, { ...t.pre, kind: 'pre' }, ...(level === 'uni' ? EXTRA[part] : [])];
+  const [pick, setPick] = useState(0);
+  const sel = list[Math.min(pick, list.length - 1)];
   return (
     <div className="q3-exps">
       <div className="hc-level" role="radiogroup" aria-label="Nivel">
@@ -257,8 +413,15 @@ export function DesignTab({ part }: { part: DesignPart }) {
           </button>
         ))}
       </div>
-      <ToolForm tool={t.calc} level={level} kind="calc" part={part} />
-      <ToolForm tool={t.pre} level={level} kind="pre" part={part} />
+      <div className="hc-picker" role="tablist" aria-label="Herramientas">
+        {list.map((x, k) => (
+          <button key={x.title} type="button" role="tab" aria-selected={x === sel} className={`${x === sel ? 'is-on ' : ''}is-${x.kind}`} onClick={() => setPick(k)}>
+            <span>{x.kind === 'calc' ? 'Calculadora' : 'Prediseñador'}</span>
+            {x.title.replace(/^Calculadora (de |del )?/, '').replace(/^Prediseño (de |del )?/, '').replace(/^./, (c) => c.toUpperCase())}
+          </button>
+        ))}
+      </div>
+      <ToolForm key={sel.title} tool={sel} level={level} kind={sel.kind} part={part} />
       <p className="hc-note">Prediseño académico para aprender: no es un diseño de ingeniería. Un diseño real necesita estudios de campo, hidrología, geotecnia, normas vigentes y la firma de un profesional.</p>
     </div>
   );
@@ -308,7 +471,9 @@ function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind:
             <span>
               {f.label} {f.unit && <span className="hc-unit">({f.unit})</span>}
             </span>
-            {f.options ? (
+            {f.text ? (
+              <textarea rows={8} value={String(vals[f.id])} onChange={(e) => setVals((v) => ({ ...v, [f.id]: e.target.value }))} spellCheck={false} />
+            ) : f.options ? (
               <select value={String(vals[f.id])} onChange={(e) => setVals((v) => ({ ...v, [f.id]: e.target.value }))}>
                 {f.options.map((o) => (
                   <option key={o.value} value={o.value}>

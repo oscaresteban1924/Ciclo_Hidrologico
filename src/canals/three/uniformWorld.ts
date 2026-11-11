@@ -68,6 +68,74 @@ function waterPoly(s: Section, y: number): [number, number][] {
   ];
 }
 
+/**
+ * Velocidades en la sección (isotacas): ley logarítmica con la distancia d a la pared o al fondo más cercano,
+ * u = (u* / κ)·ln(d / z0), con z0 = ks/30 y ks de Strickler (n = ks^(1/6)/21,1); se escala para que la media en el
+ * área sea la velocidad media calculada. La superficie libre no frena el agua. Es una aproximación: no dibuja el
+ * máximo bajo la superficie que aparece en canales angostos.
+ */
+export function sectionVelocity(poly: [number, number][], wet: [[number, number], [number, number]][], V: number, n: number, W = 192, H = 96): { cv: HTMLCanvasElement; umax: number; box: [number, number, number, number] } {
+  const zs = poly.map((p) => p[0]), ys = poly.map((p) => p[1]);
+  const z0 = Math.min(...zs), z1 = Math.max(...zs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const ks = Math.pow(21.1 * n, 6), zr = Math.max(1e-4, ks / 30);
+  const inside = (z: number, y: number) => {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [zi, yi] = poly[i], [zj, yj] = poly[j];
+      if (yi > y !== yj > y && z < ((zj - zi) * (y - yi)) / (yj - yi) + zi) c = !c;
+    }
+    return c;
+  };
+  const segDist = (z: number, y: number, a: [number, number], b: [number, number]) => {
+    const dz = b[0] - a[0], dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((z - a[0]) * dz + (y - a[1]) * dy) / (dz * dz + dy * dy || 1)));
+    return Math.hypot(z - a[0] - t * dz, y - a[1] - t * dy);
+  };
+  const val = new Float32Array(W * H).fill(NaN);
+  let sum = 0, cnt = 0;
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++) {
+      const z = z0 + ((i + 0.5) / W) * (z1 - z0), y = y1 - ((j + 0.5) / H) * (y1 - y0);
+      if (!inside(z, y)) continue;
+      let d = Infinity;
+      for (const [a, b] of wet) d = Math.min(d, segDist(z, y, a, b));
+      const l = Math.log(Math.max(d, zr * 2.72) / zr);
+      val[j * W + i] = l;
+      sum += l;
+      cnt++;
+    }
+  const k = cnt ? V / (sum / cnt) : 0;
+  let umax = 0;
+  for (let q = 0; q < val.length; q++) if (!Number.isNaN(val[q])) umax = Math.max(umax, (val[q] *= k));
+  const cv = document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(W, H);
+  // rampa secuencial de un solo tono: claro = lento, oscuro = rápido
+  const lo = [214, 236, 248], hi = [8, 56, 112];
+  // la mitad lenta casi no ocupa área: la rampa va de 50 % a 100 % de la máxima, con isotacas cada 5 %
+  const level = (u: number) => Math.floor((u / (umax || 1)) * 20);
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++) {
+      const q = j * W + i, u = val[q];
+      if (Number.isNaN(u)) continue;
+      const f = Math.max(0, Math.min(1, (u / (umax || 1) - 0.5) / 0.5));
+      let r = lo[0] + (hi[0] - lo[0]) * f, gg = lo[1] + (hi[1] - lo[1]) * f, b = lo[2] + (hi[2] - lo[2]) * f;
+      // isotacas
+      const L0 = level(u);
+      const nb = [q + 1, q - 1, q + W, q - W].some((o) => o >= 0 && o < val.length && !Number.isNaN(val[o]) && level(val[o]) !== L0);
+      if (nb && L0 >= 10) {
+        r = r * 0.55 + 255 * 0.45;
+        gg = gg * 0.55 + 255 * 0.45;
+        b = b * 0.55 + 255 * 0.45;
+      }
+      img.data.set([r, gg, b, 235], q * 4);
+    }
+  g.putImageData(img, 0, 0);
+  return { cv, umax, box: [z0, y0, z1, y1] };
+}
+
 export interface UniformView {
   inp: UniformInput;
   r: UniformResult;
@@ -81,7 +149,11 @@ export class UniformWorld {
   private water: WaterBody;
   private flood: WaterBody;
   private cut: THREE.Mesh;
-  private cutMat = new THREE.MeshStandardMaterial({ color: '#3a8fc2', transparent: true, opacity: 0.78, roughness: 0.2, side: THREE.DoubleSide });
+  private cutMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.92, side: THREE.DoubleSide });
+  private cutTex: THREE.CanvasTexture | null = null;
+  private umax = 0;
+  private leaves: THREE.InstancedMesh;
+  private leafSeeds: { x: number; z: number; s: number; r: number }[] = [];
   private float: THREE.Mesh;
   private grains: THREE.InstancedMesh;
   private bars: THREE.InstancedMesh;
@@ -126,6 +198,18 @@ export class UniformWorld {
     this.bars = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 8), new THREE.MeshStandardMaterial({ color: '#d8c38f', roughness: 1 }), 8);
     this.grains.frustumCulled = this.bars.frustumCulled = false;
     sc.add(this.grains, this.bars);
+    // hojas que flotan: muestran que la superficie corre más rápido en el centro que junto a las paredes
+    const leaf = new THREE.CircleGeometry(0.09, 7);
+    leaf.scale(1.6, 1, 1);
+    leaf.rotateX(-Math.PI / 2);
+    this.leaves = new THREE.InstancedMesh(leaf, new THREE.MeshStandardMaterial({ color: '#7a8f2e', roughness: 0.8, side: THREE.DoubleSide }), 70);
+    this.leaves.frustumCulled = false;
+    const RL = rng(33);
+    for (let k = 0; k < this.leaves.count; k++) {
+      this.leafSeeds.push({ x: RL() * L, z: RL() * 2 - 1, s: 0.7 + RL() * 0.6, r: RL() * 6.28 });
+      this.leaves.setColorAt(k, new THREE.Color(RL() < 0.5 ? '#7a8f2e' : '#a07a35'));
+    }
+    sc.add(this.leaves);
     stage.view(this.views.general, false);
   }
 
@@ -234,7 +318,21 @@ export class UniformWorld {
     this.cut.geometry.dispose();
     this.cut.geometry = g;
     this.cut.position.set(L / 2 + 0.015, 0, 0);
-    this.cutMat.color.set(color);
+    // velocidades en la sección (isotacas), con la profundidad a escala
+    const poly = waterPoly(s, y);
+    // bordes mojados: el arco del tubo, o las dos paredes y el fondo (la superficie no cuenta)
+    const wet: [[number, number], [number, number]][] = s.shape === 'circ' ? poly.slice(0, -1).map((a, k) => [a, poly[k + 1]]) : [[poly[3], poly[0]], [poly[0], poly[1]], [poly[1], poly[2]]];
+    const sv0 = sectionVelocity(poly, wet, pressure ? 0 : r.V, MATERIALS[v.inp.material].n);
+    this.umax = sv0.umax;
+    this.cutTex?.dispose();
+    this.cutTex = new THREE.CanvasTexture(sv0.cv);
+    this.cutTex.colorSpace = THREE.SRGBColorSpace;
+    const [bz0, by0, bz1, by1] = sv0.box;
+    this.cutTex.repeat.set(1 / (bz1 - bz0 || 1), 1 / (by1 - by0 || 1));
+    this.cutTex.offset.set(-bz0 / (bz1 - bz0 || 1), -by0 / (by1 - by0 || 1));
+    this.cutMat.map = this.cutTex;
+    this.cutMat.needsUpdate = true;
+    void color;
     // bancos de arena cuando va lento
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3();
     const R = rng(8);
@@ -258,6 +356,7 @@ export class UniformWorld {
     if (r.overflow && s.shape !== 'circ') out.push({ id: 'over', text: 'Se desborda', at: new THREE.Vector3(0, s.H + 0.8, geom(s, s.H).T / 2 + 3), kind: 'alerta', prio: 5 });
     if (r.erosion) out.push({ id: 'ero', text: 'El agua arranca el fondo', sub: `más de ${es(MATERIALS[v.inp.material].vmax ?? 0, 2)} m/s en ${MATERIALS[v.inp.material].name.toLowerCase()}`, at: new THREE.Vector3(-8, 0.3, 0), kind: 'alerta', prio: 4 });
     if (r.sediment) out.push({ id: 'sed', text: 'Se deposita arena', sub: 'el agua va a menos de 0,6 m/s', at: new THREE.Vector3(-12, 0.3, 0), kind: 'alerta', prio: 4 });
+    if (!Number.isNaN(r.yn) && this.umax > 0) out.push({ id: 'iso', text: 'Velocidad en la sección', sub: `oscuro = rápido · máxima ${es(this.umax, 1)} m/s, media ${es(r.V, 1)} m/s`, at: new THREE.Vector3(L / 2 + 0.05, -0.35, (s.shape === 'circ' ? s.D / 2 : s.b / 2) + 0.4), kind: 'dato', prio: 1 });
     if (r.unstable) out.push({ id: 'uns', text: 'Olas: flujo cerca del crítico', at: new THREE.Vector3(6, Math.min(r.yn, s.H) + 0.6, 0), kind: 'alerta', prio: 3 });
     return out;
   }
@@ -291,6 +390,22 @@ export class UniformWorld {
       this.grains.setMatrixAt(k, m4.compose(p, q, sv));
     }
     this.grains.instanceMatrix.needsUpdate = true;
-    void dt;
+    // hojas: u(z) = Vs·(1 − |2z/T|)^(1/7), más rápidas en el centro
+    const T = pressure ? 0 : s.shape === 'circ' ? geom(s, Math.min(y, s.D * 0.999)).T : geom(s, Math.min(y, s.H)).T;
+    const hT = Math.max(0, T / 2 - 0.12);
+    for (let k = 0; k < this.leaves.count; k++) {
+      const sd = this.leafSeeds[k];
+      if (pressure || hT <= 0.05) {
+        this.leaves.setMatrixAt(k, m4.makeScale(0, 0, 0));
+        continue;
+      }
+      const u = Vs * Math.pow(Math.max(0.02, 1 - Math.abs(sd.z)), 1 / 7);
+      if (!this.stage.reducedMotion) sd.x = (sd.x + u * Math.min(0.05, dt)) % L;
+      q.setFromEuler(new THREE.Euler(0, sd.r + t * 0.2 * (sd.s - 1), 0));
+      p.set(sd.x - L / 2, y + 0.012, sd.z * hT);
+      sv.setScalar(sd.s);
+      this.leaves.setMatrixAt(k, m4.compose(p, q, sv));
+    }
+    this.leaves.instanceMatrix.needsUpdate = true;
   }
 }

@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
 import { INK, Lens, Tag, useLensUid, type Chip } from '../quality/lensKit';
-import { FlatStage, Row, SlopeRange, es } from './common';
+import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
 import { CR_ROAD, CULVERT_RULES, DEFAULT_CULVERT, INLETS, KU, N_PIPE, ROAD_LEN, culvertModel, ratingCurve, type CulvertInput, type CulvertResult, type Inlet } from './culvert';
 import { CulvertWorld } from './three/culvertWorld';
 import { DesignTab } from './design';
@@ -93,14 +93,23 @@ export function CulvertLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     </>
   );
 
+  const box = inp.shape === 'cajon';
   const dock = (
     <>
       <DockRange label="Caudal de la creciente" value={inp.Q} min={0.5} max={40} step={0.5} show={`${es(inp.Q, 1)} m³/s`} onChange={(v) => set({ Q: v })} />
-      <DockRange label="Diámetro del tubo" value={inp.D} min={0.6} max={3} step={0.1} show={`${es(inp.D, 1)} m`} onChange={(v) => set({ D: Math.round(v * 10) / 10 })} />
-      <DockRange label="Tubos" value={inp.barrels} min={1} max={3} step={1} show={`${inp.barrels}`} onChange={(v) => set({ barrels: v })} />
+      <FloodPlayer q={inp.Q} qMax={40} onQ={(v) => set({ Q: v })} />
+      <DockChoice<'circ' | 'cajon'> label="Conducto" value={inp.shape ?? 'circ'} options={[{ value: 'circ', label: 'Tubo' }, { value: 'cajon', label: 'Cajón' }]} onChange={(v) => set({ shape: v, inlet: v === 'cajon' ? 'aletas3075' : 'muro' })} />
+      <DockRange label={box ? 'Alto del cajón' : 'Diámetro del tubo'} value={inp.D} min={0.6} max={3} step={0.1} show={`${es(inp.D, 1)} m`} onChange={(v) => set({ D: Math.round(v * 10) / 10 })} />
+      {box && <DockRange label="Ancho del cajón" value={inp.B ?? 1.5} min={0.8} max={4} step={0.1} show={`${es(inp.B ?? 1.5, 1)} m`} onChange={(v) => set({ B: Math.round(v * 10) / 10 })} />}
+      <DockRange label={box ? 'Cajones' : 'Tubos'} value={inp.barrels} min={1} max={3} step={1} show={`${inp.barrels}`} onChange={(v) => set({ barrels: v })} />
       <SlopeRange value={Math.max(0.0005, inp.S)} lo={0.0005} hi={0.06} onChange={(S) => set({ S })} label="Pendiente del tubo" />
       <DockRange label="Nivel aguas abajo" value={inp.tw} min={0} max={3} step={0.1} show={`${es(inp.tw, 1)} m`} onChange={(v) => set({ tw: Math.round(v * 10) / 10 })} />
-      <DockChoice<Inlet> label="Entrada" value={inp.inlet} options={[{ value: 'muro', label: 'Borde recto' }, { value: 'campana', label: 'Campana' }, { value: 'saliente', label: 'Saliente' }]} onChange={(v) => set({ inlet: v })} />
+      <DockChoice<Inlet>
+        label="Entrada"
+        value={inp.inlet}
+        options={box ? [{ value: 'aletas3075', label: 'Aletas 30–75°' }, { value: 'aletas90', label: 'Aletas 90°' }, { value: 'aletas0', label: 'Aletas 0°' }] : [{ value: 'muro', label: 'Borde recto' }, { value: 'campana', label: 'Campana' }, { value: 'saliente', label: 'Saliente' }]}
+        onChange={(v) => set({ inlet: v })}
+      />
     </>
   );
 
@@ -152,7 +161,7 @@ export function CulvertLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         <table className="q3-table">
           <caption>La alcantarilla</caption>
           <tbody>
-            <Row name="Tubos" value={`${inp.barrels} de ${es(inp.D, 2)} m, ${es(inp.L, 0)} m de largo`} note={`concreto, n = ${es(N_PIPE, 3)}`} />
+            <Row name={box ? 'Cajones' : 'Tubos'} value={box ? `${inp.barrels} de ${es(inp.B ?? 1.5, 2)} × ${es(inp.D, 2)} m, ${es(inp.L, 0)} m de largo` : `${inp.barrels} de ${es(inp.D, 2)} m, ${es(inp.L, 0)} m de largo`} note={`concreto, n = ${es(N_PIPE, 3)}`} />
             <Row name="Caudal por tubo" value={`${es(r.q, 2)} m³/s`} />
             <Row name="Entrada" value={INLETS[inp.inlet].name} note={`HDS-5: K ${INLETS[inp.inlet].K}, M ${INLETS[inp.inlet].M}, c ${INLETS[inp.inlet].c}, Y ${INLETS[inp.inlet].Y}; ke ${INLETS[inp.inlet].ke}`} />
             <Row name="Nivel por control a la entrada" value={`${es(r.hwInlet, 2)} m`} note={`boca ${r.regime === 'libre' ? 'sin ahogar' : r.regime === 'sumergida' ? 'ahogada' : 'en transición'}`} />

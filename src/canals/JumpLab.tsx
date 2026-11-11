@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
 import { DesignTab } from './design';
-import { FlatStage, Row, es } from './common';
+import { FlatStage, FloodPlayer, Row, es } from './common';
 import { JumpDiagram } from './diagrams';
 import { CHUTE, DEFAULT_JUMP, G, JUMP_NAME, jumpModel, type JumpInput, type JumpKind, type JumpResult } from './hydraulics';
 import { JumpWorld } from './three/jumpWorld';
@@ -123,6 +123,7 @@ export function JumpLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const dock = (
     <>
       <DockRange label="Caudal" value={inp.Q} min={2} max={30} step={1} show={`${es(inp.Q, 0)} m³/s`} onChange={(v) => set({ Q: v })} />
+      <FloodPlayer q={inp.Q} qMax={30} digits={1} onQ={(v) => set({ Q: v })} />
       <DockRange label="Altura de la caída" value={inp.drop} min={2} max={12} step={0.5} show={`${es(inp.drop, 1)} m`} onChange={(v) => set({ drop: v })} />
       <DockRange label="Vertedero del pozo" value={inp.weir} min={0} max={4} step={0.1} show={`${es(inp.weir, 1)} m`} onChange={(v) => set({ weir: Math.round(v * 10) / 10 })} />
       <DockRange label="Largo del pozo" value={inp.basin} min={6} max={40} step={1} show={`${es(inp.basin, 0)} m`} onChange={(v) => set({ basin: v })} />

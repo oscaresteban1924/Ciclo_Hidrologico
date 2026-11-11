@@ -240,3 +240,87 @@
   padding-left: 8px;
   margin: 8px 0;
 }
+
+/* creciente simulada */
+.hc-flood {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+.hc-flood button {
+  padding: 7px 12px;
+  border: 1px solid #2f7fb0;
+  border-radius: 8px;
+  background: #eef6fb;
+  color: #1d5f88;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hc-flood button:hover {
+  background: #e0eff8;
+}
+.hc-flood-q {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  min-width: 82px;
+}
+
+/* selector de herramientas de la pestaña Diseño */
+.hc-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.hc-picker button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1px solid #d6e1e8;
+  border-left: 4px solid #2f7fb0;
+  border-radius: 8px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+.hc-picker button.is-pre {
+  border-left-color: #4f8f5f;
+}
+.hc-picker button span {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5b6b78;
+}
+.hc-picker button.is-on {
+  background: #eef5fa;
+  border-color: #2f7fb0;
+  box-shadow: 0 1px 3px rgba(23, 50, 77, 0.15);
+}
+.hc-picker button.is-pre.is-on {
+  background: #eef6f0;
+  border-color: #4f8f5f;
+}
+.hc-form label:has(textarea) {
+  grid-column: 1 / -1;
+}
+.hc-form textarea {
+  padding: 6px 8px;
+  border: 1px solid #b8c7d2;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--ink);
+  resize: vertical;
+}
