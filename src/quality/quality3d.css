@@ -1030,7 +1030,7 @@
 .q3-lens2 {
   display: block;
   width: 100%;
-  max-width: 440px;
+  max-width: 560px;
   height: auto;
   border-radius: 10px;
   box-shadow: inset 0 0 0 1px var(--line);
@@ -1190,4 +1190,28 @@
     grid-template-columns: 1fr;
     justify-items: center;
   }
+}
+
+/* ---- animaciones «con lupa» (480 × 300) */
+.q3-lens2 .lz-s {
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.q3-lens2 .lz-m {
+  font-size: 12.5px;
+  font-weight: 750;
+}
+.q3-lens2 .lz-l {
+  font-size: 15px;
+  font-weight: 800;
+}
+.q3-lens2 .lz-v {
+  font-size: 13px;
+  font-weight: 800;
+}
+.q3-lens2 .lz-halo {
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 3.2px;
+  stroke-linejoin: round;
 }

@@ -22,11 +22,19 @@ import './quality3d.css';
 type PartId = 'quebrada' | 'llave' | 'ptar' | 'ciudad';
 
 const PARTS: { id: PartId; name: string; short: string }[] = [
-  { id: 'quebrada', name: 'La quebrada y su salud', short: 'Quebrada' },
+  { id: 'quebrada', name: 'La quebrada y su salud', short: 'La quebrada' },
   { id: 'llave', name: 'Del río a la llave', short: 'Del río a la llave' },
   { id: 'ptar', name: 'De la casa al río', short: 'De la casa al río' },
-  { id: 'ciudad', name: 'La ciudad y la lluvia', short: 'Ciudad y lluvia' },
+  { id: 'ciudad', name: 'La ciudad y la lluvia', short: 'La ciudad y la lluvia' },
 ];
+
+/** Íconos de las partes (trazo, 20 × 20). */
+const PART_ICON: Record<PartId, string> = {
+  quebrada: 'M2 7.5c2.7-2.6 5.3 2.6 8 0s5.3 2.6 8 0M2 12.5c2.7-2.6 5.3 2.6 8 0s5.3 2.6 8 0M5 16.5c1.7-1.4 3.3 1.4 5 0s3.3 1.4 5 0',
+  llave: 'M2.5 7.5h8a4 4 0 0 1 4 4v1.5M7 4.5v3M4.5 4.5h5M14.5 15.5c-.9 1.2-1.3 2-1.3 2.6a1.3 1.3 0 0 0 2.6 0c0-.6-.4-1.4-1.3-2.6z',
+  ptar: 'M2 10.5 6.5 7l4.5 3.5V16H2zM5 16v-3h3v3M12.5 12h3.5m-1.5-2 2 2-2 2M12.5 17.5c1.2-1 2.3 1 3.5 0s2.3 1 3.5 0',
+  ciudad: 'M6 11.5a3.3 3.3 0 1 1 .9-6.5 4.4 4.4 0 0 1 8.4 1.7A2.4 2.4 0 0 1 15 11.5zM7 14l-1 2.5M10.5 14l-1 2.5M14 14l-1 2.5',
+};
 
 const KEY = 'ciclo-hidrologico:calidad';
 
@@ -79,8 +87,10 @@ export default function QualityLab() {
               if (e.key === 'ArrowLeft') go(PARTS[(k + PARTS.length - 1) % PARTS.length].id, true);
             }}
           >
-            <span className="lbl-long">{p.name}</span>
-            <span className="lbl-short">{p.short}</span>
+            <svg className="q-tab-ico" viewBox="0 0 20 20" aria-hidden="true">
+              <path d={PART_ICON[p.id]} />
+            </svg>
+            <span className="q-tab-txt">{p.short}</span>
           </button>
         ))}
       </div>

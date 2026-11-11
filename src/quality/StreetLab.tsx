@@ -104,7 +104,7 @@ export function StreetLab({ head }: { head: ReactNode }) {
   const stage = (
     <>
       <Scene3D
-        label="Una cuadra en 3D con sus casas, la calle, el sumidero y los dos tubos que van debajo: aguas lluvias hacia la quebrada y aguas residuales hacia la planta de tratamiento. Toca una casa para hacer la prueba del colorante."
+        label="Una cuadra ilustrativa en 3D con sus casas de barrio, la calle, el sumidero y, en un corte del suelo, los dos tubos que van debajo: aguas lluvias hacia la quebrada y aguas residuales hacia la planta de tratamiento. Toca una casa para hacer la prueba del colorante."
         viewNames={[
           { id: 'general', label: 'La cuadra' },
           { id: 'calle', label: 'En la calle' },
@@ -336,7 +336,7 @@ export function StreetLab({ head }: { head: ReactNode }) {
           <strong>Conexiones erradas.</strong> 4 personas por casa y 102 L de agua usada por persona al día con 10⁷ coliformes fecales por 100 mL (orden de magnitud del agua residual doméstica cruda). Las cantidades de mugre y de basura son ilustrativas: muestran la forma del proceso, no medidas de una calle de Medellín.
         </p>
         <p className="q3-small">
-          En la escena, cada mancha y cada papel salen de la calle cuando la fracción lavada calculada llega a su turno; lo que la lluvia no alcanza a lavar se queda. La animación dura {fmt(StreetWorld.SEC_PER_MIN, 1)} s por minuto de lluvia. La tierra se dibuja transparente para ver los tubos.
+          En la escena, cada mancha y cada papel salen de la calle cuando la fracción lavada calculada llega a su turno; lo que la lluvia no alcanza a lavar se queda. La animación dura {fmt(StreetWorld.SEC_PER_MIN, 1)} s por minuto de lluvia. La tierra se dibuja en corte, con un vidrio al frente y en el costado, para ver los tubos. La cuadra es un dibujo ilustrativo: sus casas, tubos, pozos, cajas de inspección, sumidero y descarga no son el levantamiento de una calle de Medellín.
         </p>
         <h3>Para conversar en clase</h3>
         <ol>
