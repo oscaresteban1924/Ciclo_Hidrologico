@@ -555,6 +555,23 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Pruebas: 26 de 26 de «Calidad del agua». Superposiciones: 100 de 100 estados sin choques ni cortes en las cuatro pantallas. Archivo único: 4,17 MB (antes 4,11 MB).
 
+## 4 tervicies. Módulo «Hidráulica de canales» con calculadoras y prediseñadores (ejecutada)
+
+**Pedido.** «Necesito que generemos un módulo para hidráulica de canales.» Y después: «Quiero todos los alcances que propones, alcantarillas o transporte de sedimentos en lugar de alguna de estas partes. Adicionalmente quiero que cada uno de los módulos tenga calculadoras y prediseñadores, para que desde el juego y la interacción los estudiantes (niños y universitarios) hagan diseños técnicos.»
+
+**Cómo se interpretó.** Seis partes en lugar de cuatro: el canal y su caudal, la caída y el resalto, el puente y el remanso, las alcantarillas, el transporte de sedimentos y medir el caudal. «Cada uno de los módulos» se tomó como cada una de las seis partes: todas tienen la pestaña Diseño con una calculadora (revisa lo que se propone) y un prediseñador (propone las medidas y las revisa), en dos niveles, Niños y Universitarios, y el prediseñador descarga la memoria de cálculo. Todo se presenta como prediseño académico. Las ecuaciones, los coeficientes y las fuentes están en `docs/canales/MODELO_CANALES.md`.
+
+**Pruebas.** 15 de 15 de «Hidráulica de canales» (`npm run test:canals`), con tolerancias declaradas antes de ejecutar: geometría, Manning, crítica, conjugadas, paso directo contra Runge-Kutta (0,07 %), resalto, puente, aforos, alcantarillas (HDS-5), sedimentos y, en H15, las doce herramientas de diseño llamadas 4 800 veces con datos al azar sin excepciones ni valores no numéricos, y con propuestas de ejemplo que cumplen lo que dicen. «Calidad del agua» sigue en 26 de 26 (el módulo nuevo reutiliza su marco, su escena y sus lupas).
+
+**En el navegador.** Las seis partes se revisaron con capturas en escritorio y teléfono, en sus vistas de cámara. Las memorias de las seis partes se descargaron en los dos niveles (12 archivos, sin valores no numéricos). Lo que se corrigió en el camino:
+- Prediseñadores: el del canal fallaba con un material desconocido y el del puente con una luz más ancha que el cauce (la grilla de 0,5 m no llegaba a 1,5 veces el cauce); ahora el puente avisa cuando hay que ensanchar el cauce. Los datos de ejemplo del aforador pasaron a un rango que un vertedero sí cubre (3 a 15 L/s).
+- Alcantarilla: la cara del corte del terraplén tapaba el tubo y delante del corte no había terreno (se veía el cielo). Ahora el terraplén tiene la cara del corte con el hueco del tubo, el valle tiene orillas y fondo que baja con el tubo, el charco llega hasta el talud y se ve en corte, y delante del corte hay una base de maqueta. La alcantarilla por defecto pasó de 1,2 m a 1,5 m: deja pasar la creciente sin cumplir las reglas, para que el reto «el agua sobre la vía» no se gane al abrir la parte.
+- Sedimentos: la cámara quedaba lejos y los granos de 3 cm no se veían. Ahora el vidrio tiene marco, regla y zócalo; los granos se dibujan en la franja junto al vidrio y con al menos 8 cm (la escena dice cuántas veces se aumentaron); el agua es más transparente y la cámara mira por el vidrio. El lecho usa granos de 20 caras para no recargar la escena.
+- Encabezado: con seis modos, las herramientas del encabezado se cortaban entre 1 180 y 1 480 px y por encima de 1 720 px. Se subieron los cortes (subtítulo y etiquetas a 1 480 px, nombres largos a 2 040 px) y entre 901 y 1 320 px las pestañas de los modos pasan a su propia fila. Medido de 901 a 2 200 px: nada se desborda.
+- Teléfonos: las seis pestañas del panel caben sin desplazar desde 320 px.
+
+**Resultado.** Superposiciones: 136 de 136 estados sin choques ni cortes en las cuatro pantallas, 36 de ellos de «Hidráulica de canales» (las seis partes, la alcantarilla con el agua sobre la vía, el fondo del cauce de sedimentos y la pestaña Diseño). Archivo único: 4 360 kB (1 736 kB comprimido con gzip).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

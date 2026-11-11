@@ -131,6 +131,8 @@ export function waterMaterial(time: { value: number }, opts: { opacity?: number;
   // la velocidad va en un uniform: three.js comparte un mismo programa entre materiales con el mismo
   // onBeforeCompile, así que una constante escrita en el código del shader quedaría igual para todos
   const speed = { value: opts.speed ?? 0.6 };
+  // queda a mano para cambiar la velocidad de las vetas después (hidráulica de canales)
+  m.userData.speed = speed;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = time;
     sh.uniforms.uSpeed = speed;

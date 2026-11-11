@@ -1,4 +1,4 @@
-# Superposiciones: recorre los módulos y vistas principales en cuatro pantallas (escritorio 1440 × 900, portátil
+# Superposiciones: recorre los módulos y vistas principales (incluida la hidráulica de canales) en cuatro pantallas (escritorio 1440 × 900, portátil
 # 1280 × 720, tableta 820 × 1180 y teléfono 390 × 844) y mide, en cada estado, si algún elemento flotante se monta
 # sobre otro: rótulos de las escenas 3D, avisos, barras, leyendas, columna de cámara, tarjetas, preguntas y paneles
 # sobre la escena. También informa los que quedan cortados por el borde de la escena o de la pantalla.
@@ -94,6 +94,10 @@ def check(pg, screen, state, shots, report):
         pg.evaluate("() => document.getElementById('__ov')?.remove()")
 
 
+RANGE = """([l, v]) => { const el = [...document.querySelectorAll('.q3-range')].find((r) => r.textContent.includes(l)); const i = el && el.querySelector('input'); if (!i) return; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, v); i.dispatchEvent(new Event('input', { bubbles: true })); }"""
+BTN = """(t) => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === t); if (b) b.click(); }"""
+
+
 def top(pg):
     pg.evaluate('() => window.scrollTo(0, 0)'); pg.wait_for_timeout(300)
 
@@ -162,6 +166,21 @@ def run(screens, shots):
             top(pg); check(pg, screen, 'calidad-ptar-aguacero', shots, report)
             pg.get_by_role('tab', name='La ciudad y la lluvia').click(); pg.wait_for_timeout(3500)
             top(pg); check(pg, screen, 'calidad-ciudad', shots, report)
+            # Hidráulica de canales: las seis partes, la alcantarilla con el agua sobre la vía, el fondo del cauce
+            # de sedimentos y la pestaña Diseño
+            mode(pg, 'Hidráulica de canales'); pg.wait_for_timeout(4000)
+            for part, tag in [('El canal y su caudal', 'canal'), ('La caída y el resalto', 'resalto'), ('El puente y el remanso', 'puente'),
+                              ('Las alcantarillas', 'alcantarilla'), ('El transporte de sedimentos', 'sedimentos'), ('Medir el caudal', 'aforo')]:
+                pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+                top(pg); check(pg, screen, f'canales-{tag}', shots, report)
+                if tag == 'alcantarilla':
+                    pg.evaluate(RANGE, ['Caudal de la creciente', '14']); pg.wait_for_timeout(2500)
+                    top(pg); check(pg, screen, 'canales-alcantarilla-encima', shots, report)
+                if tag == 'sedimentos':
+                    pg.evaluate(BTN, 'El fondo'); pg.wait_for_timeout(2500)
+                    top(pg); check(pg, screen, 'canales-sedimentos-fondo', shots, report)
+                    pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+                    top(pg); check(pg, screen, 'canales-diseno', shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

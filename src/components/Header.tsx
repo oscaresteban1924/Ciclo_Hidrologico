@@ -8,7 +8,7 @@ import { useStore, type Mode, type Tool } from '../state/store';
 import { Disclosure, Icon, Segmented, Toggle } from './ui';
 
 
-const MODES: Mode[] = ['guided', 'explore', 'lab', 'city', 'quality'];
+const MODES: Mode[] = ['guided', 'explore', 'lab', 'city', 'quality', 'canals'];
 const TOOLS: Exclude<Tool, null>[] = ['tracer', 'challenges', 'logbook', 'glossary'];
 
 function Mark() {

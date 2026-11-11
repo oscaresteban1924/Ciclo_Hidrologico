@@ -1982,7 +1982,7 @@ button.scene-label:hover {
 /* Pantallas medianas y pequeñas                                        */
 /* ------------------------------------------------------------------ */
 
-@media (max-width: 1380px) {
+@media (max-width: 1480px) {
   .brand p {
     display: none;
   }
@@ -1991,6 +1991,22 @@ button.scene-label:hover {
   }
   .modes {
     gap: 8px;
+  }
+}
+
+/* Entre 900 y 1320 px las pestañas de los módulos pasan a su propia fila, para que nada quede recortado. */
+@media (max-width: 1320px) and (min-width: 901px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 8px 14px 6px;
+  }
+  .modes {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .header-actions {
+    margin-left: auto;
   }
 }
 
@@ -4225,7 +4241,8 @@ button.scene-label:hover {
 .lbl-short {
   display: none;
 }
-@media (max-width: 1720px) {
+/* Con seis módulos, los nombres largos solo caben en pantallas muy anchas. */
+@media (max-width: 2040px) {
   .lbl-long {
     display: none;
   }

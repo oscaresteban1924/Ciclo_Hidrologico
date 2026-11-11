@@ -17,13 +17,14 @@ npm run preview      # sirve la versión de producción para revisarla
 npm run typecheck    # verificación de tipos
 npm run test:city    # pruebas del motor de lluvia urbana (escribe docs/medellin/PRUEBAS.md)
 npm run test:quality # pruebas del modelo de calidad del agua (escribe docs/calidad/PRUEBAS_CALIDAD.md)
+npm run test:canals  # pruebas de la hidráulica de canales y de sus calculadoras (escribe docs/canales/PRUEBAS_CANALES.md)
 ```
 
 La versión `dist-single/index.html` incluye en un solo archivo el código, los estilos y las fuentes. Se abre directamente en el navegador, sin servidor y sin conexión a internet. La carpeta `dist/` puede publicarse en cualquier servidor web estático.
 
 ## Publicación en línea
 
-Es un sitio estático: el cálculo y el dibujo 3D corren en el navegador de cada visitante, y el servidor solo entrega archivos (≈ 1,7 MB; ≈ 0,5 MB comprimidos). No necesita base de datos, funciones de servidor ni variables de entorno, y no hace peticiones a otros sitios.
+Es un sitio estático: el cálculo y el dibujo 3D corren en el navegador de cada visitante, y el servidor solo entrega archivos (≈ 4,3 MB en total, ≈ 1,6 MB comprimidos). Al abrir se descargan ≈ 0,7 MB (≈ 0,2 MB comprimidos) más las fuentes; cada módulo pesado (Medellín, Calidad del agua, Hidráulica de canales) se descarga solo cuando se entra en él. No necesita base de datos, funciones de servidor ni variables de entorno, y no hace peticiones a otros sitios.
 
 - **Vercel u otro servicio estático:** preset «Vite», comando de compilación `npm run build`, carpeta de salida `dist`. No requiere `vercel.json`, porque la aplicación no usa rutas del lado del servidor.
 - **Servidor propio (VPS):** basta 1 vCPU y 1 GB de RAM con Caddy o Nginx, HTTPS, compresión y caché larga para `assets/` (sin caché para `index.html`). Funciona también en una subcarpeta.
@@ -52,6 +53,7 @@ Cada vista de detalle es una secuencia con inicio, desarrollo y resultado. Tiene
 | **Retos** | Sin cronómetros ni penalizaciones: cada respuesta no esperada recibe una pista y la opción de observar de nuevo. |
 | **Bitácora** | Registra observaciones (al completar vistas de detalle), predicciones e hipótesis, comparaciones y explicaciones escritas por el niño. Los niveles (Observación, Exploración, Investigación, Hidrología) premian observar, comparar y explicar, no hacer clics. Se puede descargar como texto. |
 | **Calidad del agua** | Cuatro escenas 3D con una pregunta cada una, retos con medalla y experimentos animados: una quebrada con peces, sonda, lupa y microscopio (índice BMWP/Col); una planta de potabilización convencional con sus once procesos (pestaña Procesos con animación «con lupa», valores del juego y criterios de la Resolución 0330 de 2017, y recorrido por la planta), tanques de vidrio con el agua en movimiento y flechas del flujo en las tuberías, prueba de jarras en tiempo real, cloro y la Resolución 2115 de 2007 (IRCA); «De la casa al río», una planta de aguas residuales de lodos activados con sus once partes y su línea de lodos (aliviadero, primario, reactor con aire, secundario con recirculación, luz UV, digestores con biogás), el río que recibe la descarga con sus peces, la Resolución 0631 de 2015, la probeta de 30 minutos y el cono Imhoff; y una cuadra con el aguacero, el primer lavado y la prueba del colorante para hallar conexiones erradas. La pestaña Medellín de la quebrada compara el modelo con mediciones reales de 68 sitios en 18 quebradas de San Antonio de Prado (Alcaldía de Medellín, 2017–2018). Sin WebGL, versión en dibujos planos. Ver `docs/calidad/MODELO_CALIDAD.md`. |
+| **Hidráulica de canales** | Seis escenas 3D con una pregunta cada una, retos con medalla y experimentos: el canal y su caudal (Manning, profundidad normal y crítica, erosión y sedimentación); la caída y el resalto (rápida, pozo amortiguador y tipos de resalto); el puente y el remanso (estrangulamiento, paso a presión, palos y basura, perfil M1); las alcantarillas (control a la entrada y a la salida con FHWA HDS-5, agua sobre la vía); el transporte de sedimentos (Shields, arrastre de fondo, número de Rouse, enrocado); y medir el caudal (vertederos, compuerta, flotador y curva de calibración). Cada parte tiene la pestaña **Diseño** con una calculadora y un prediseñador en dos niveles, Niños y Universitarios, que entrega la memoria de cálculo en un archivo de texto. Son prediseños académicos, no diseños de ingeniería. Ver `docs/canales/MODELO_CANALES.md`. |
 | **Glosario** | 109 términos con búsqueda; cada uno puede iluminar su lugar en el paisaje. |
 
 Una sola **pausa** controla toda la experiencia: paisaje, subtítulos, vistas de detalle y laboratorio. La **velocidad** de reproducción cambia el ritmo de las animaciones, nunca las condiciones ni los resultados. El panel lateral puede **contraerse** para ampliar el paisaje. La ayuda («Cómo explorar») resume los controles.
@@ -150,6 +152,8 @@ Documentos del módulo:
 | `docs/medellin/GUIA_DOCENTE.md` | Uso en clase, misiones, palabras clave y accesibilidad (incluye el módulo de calidad del agua) |
 | `docs/calidad/MODELO_CALIDAD.md` | Módulo «Calidad del agua»: ecuaciones, reglas didácticas, normas y fuentes |
 | `docs/calidad/PRUEBAS_CALIDAD.md` | Pruebas del módulo de calidad del agua (generado) |
+| `docs/canales/MODELO_CANALES.md` | Módulo «Hidráulica de canales»: ecuaciones, reglas del juego, calculadoras, límites y fuentes |
+| `docs/canales/PRUEBAS_CANALES.md` | Pruebas de la hidráulica de canales y de sus calculadoras (generado) |
 
 Estructura del código del módulo:
 
@@ -168,6 +172,8 @@ src/city/
 tests/city/    Pruebas obligatorias, rendimiento y verificación de escenarios externos
 src/quality/   Módulo «Calidad del agua»: modelo puro (model.ts y ptar.ts), procesos de las plantas (processes.ts, ptarUnits.ts), escenas 3D (three/), retos y experimentos; classic/ sin WebGL
 tests/quality/ Pruebas del modelo de calidad del agua
+src/canals/    Módulo «Hidráulica de canales»: cálculo puro (hydraulics.ts, culvert.ts, sediment.ts, profiles.ts), calculadoras y prediseñadores (designCalc.ts, design.tsx), escenas 3D (three/), un laboratorio por parte (UniformLab, JumpLab, BridgeLab, CulvertLab, SedimentLab, GaugeLab) y dibujos planos cuando no hay WebGL
+tests/canals/  Pruebas de la hidráulica de canales y de las calculadoras
 tools/geo/     Pipeline de datos reales y su prueba sin red
 ```
 

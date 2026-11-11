@@ -96,8 +96,8 @@ export function Scene3D<W extends WorldLike>({
 
 // ------------------------------------------------------------------ distribución
 
-export type PanelTab = 'procesos' | 'retos' | 'experimentos' | 'datos' | 'medellin' | 'docente';
-const TAB_LABEL: Record<PanelTab, string> = { procesos: 'Procesos', retos: 'Retos', experimentos: 'Experimentos', datos: 'Datos', medellin: 'Medellín', docente: 'Docente' };
+export type PanelTab = 'procesos' | 'esquema' | 'retos' | 'experimentos' | 'diseno' | 'datos' | 'medellin' | 'docente';
+const TAB_LABEL: Record<PanelTab, string> = { procesos: 'Procesos', esquema: 'Esquema', retos: 'Retos', experimentos: 'Experimentos', diseno: 'Diseño', datos: 'Datos', medellin: 'Medellín', docente: 'Docente' };
 const DEFAULT_TABS: PanelTab[] = ['retos', 'experimentos', 'datos', 'docente'];
 
 export const PartTab = createContext('');

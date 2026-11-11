@@ -1,0 +1,242 @@
+/* Hidráulica de canales: lo que no comparte con «Calidad del agua». */
+
+.hc-tabs.n6 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.hc-tabs.n6 button {
+  min-height: 50px;
+  border-radius: 10px;
+}
+
+/* sin WebGL: el esquema ocupa la escena */
+.hc-flat {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 16px 16px;
+  background: linear-gradient(#e6f1f7, #f6fafc);
+  overflow: auto;
+}
+.hc-flat .q3-lens2 {
+  max-width: 900px;
+  width: 100%;
+}
+
+.hc-exp-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #f7fbfd;
+  border: 1px solid #d5e2ea;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.hc-kinds {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 0.86rem;
+}
+.hc-kinds li {
+  margin: 4px 0;
+  color: var(--ink-2);
+}
+.hc-kinds li.is-on {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.hc-read {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.hc-read label {
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.hc-read input {
+  width: 7em;
+  padding: 6px 8px;
+  border: 1px solid #b8c7d2;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.hc-use {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+/* pestaña Diseño */
+.hc-tool {
+  margin: 0 0 14px;
+  padding: 12px 14px 14px;
+  border: 1px solid #d6e1e8;
+  border-radius: 12px;
+  background: #ffffff;
+}
+.hc-tool.is-pre {
+  border-color: #c9dccd;
+  box-shadow: inset 4px 0 0 #4f8f5f;
+}
+.hc-tool.is-calc {
+  box-shadow: inset 4px 0 0 #2f7fb0;
+}
+.hc-tool h3 {
+  margin: 2px 0 4px;
+}
+.hc-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5b6b78;
+}
+.hc-details summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  padding: 2px 0;
+}
+.hc-memo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 12px;
+  border: 1px solid #4f8f5f;
+  border-radius: 8px;
+  background: #eef6f0;
+  color: #2f6a3f;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hc-memo:hover {
+  background: #e1efe5;
+}
+.hc-level {
+  display: inline-flex;
+  gap: 4px;
+  margin: 2px 0 10px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eef3f6;
+}
+.hc-level button {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.hc-level button.is-on {
+  background: #ffffff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(23, 50, 77, 0.18);
+}
+.hc-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 10px;
+  margin: 6px 0 10px;
+}
+.hc-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.hc-form input,
+.hc-form select {
+  padding: 6px 8px;
+  border: 1px solid #b8c7d2;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: #ffffff;
+}
+.hc-form .hc-unit {
+  font-weight: 400;
+  color: #5b6b78;
+}
+.hc-steps {
+  margin: 4px 0 10px;
+  padding-left: 20px;
+  font-size: 0.86rem;
+}
+.hc-steps li {
+  margin: 3px 0;
+}
+.hc-steps code {
+  font-size: 0.82rem;
+  background: #f1f5f8;
+  padding: 0 3px;
+  border-radius: 4px;
+}
+.hc-checks {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0;
+  font-size: 0.86rem;
+}
+.hc-checks li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin: 2px 0;
+}
+.hc-checks li.is-ok {
+  background: #e7f5ec;
+}
+.hc-checks li.is-bad {
+  background: #fbe9e5;
+}
+.hc-checks li b {
+  white-space: nowrap;
+}
+.hc-result {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+.hc-result div {
+  background: #f1f6f9;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.hc-result span {
+  display: block;
+  font-size: 0.74rem;
+  color: #5b6b78;
+}
+.hc-result b {
+  font-size: 0.98rem;
+  color: var(--ink);
+}
+.hc-note {
+  font-size: 0.8rem;
+  color: #5b6b78;
+  border-left: 3px solid #c8d6df;
+  padding-left: 8px;
+  margin: 8px 0;
+}

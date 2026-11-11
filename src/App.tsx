@@ -17,6 +17,7 @@ import { useStore } from './state/store';
 
 const CityLab = lazy(() => import('./city/CityLab'));
 const QualityLab = lazy(() => import('./quality/QualityLab'));
+const CanalsLab = lazy(() => import('./canals/CanalsLab'));
 
 export function App() {
   const { state, dispatch } = useStore();
@@ -124,6 +125,18 @@ export function App() {
           }
         >
           <QualityLab />
+        </Suspense>
+      ) : state.mode === 'canals' && !state.tool ? (
+        <Suspense
+          fallback={
+            <main className="layout layout-quality">
+              <div className="city-loading" role="status">
+                Cargando el laboratorio de hidráulica de canales…
+              </div>
+            </main>
+          }
+        >
+          <CanalsLab />
         </Suspense>
       ) : (
       <main className={`layout${state.panelCollapsed ? ' is-collapsed' : ''}`}>

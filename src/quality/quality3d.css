@@ -1215,3 +1215,21 @@
   stroke-width: 3.2px;
   stroke-linejoin: round;
 }
+
+/* Teléfonos: con seis pestañas (Hidráulica de canales) todas caben sin desplazar. */
+@media (max-width: 480px) {
+  .q3-ptabs {
+    gap: 0;
+    padding: 0 4px;
+  }
+  .q3-ptabs button {
+    padding: 4px 3px;
+    font-size: 0.8rem;
+  }
+}
+@media (max-width: 340px) {
+  .q3-ptabs button {
+    padding: 4px 2px;
+    font-size: 0.72rem;
+  }
+}

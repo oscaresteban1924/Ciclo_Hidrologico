@@ -8,7 +8,7 @@ import type { LayerId } from '../content/types';
 import { loadSaved, save } from '../lib/storage';
 import type { Balance, RainProfile, StormSample } from '../lab/storm';
 
-export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality';
+export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality' | 'canals';
 export type Tool = 'tracer' | 'challenges' | 'glossary' | 'logbook' | null;
 export type Speed = 0.5 | 1 | 2;
 export type Quality = 'auto' | 'alta' | 'ligera';
