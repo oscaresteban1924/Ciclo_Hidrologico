@@ -123,6 +123,6 @@ export const LEGEND: LegendEntry[] = [
 /** Créditos del desarrollo y dedicatoria: se muestran al pie de Ayuda y de Ajustes. */
 export const CREDITS = {
   author: 'Diseñado y desarrollado por Oscar Cossio.',
-  dedicatedTo: 'Leidy Hernandez Acevedo',
-  dedication: 'Porque tú lo inspiraste, y a través de él enseñas y transformas territorios y vidas.',
+  dedicatedTo: 'Leidy Hernandez',
+  dedication: 'Por inspirar este laboratorio y porque, a través de él, enseñas y transformas territorios y vidas.',
 };

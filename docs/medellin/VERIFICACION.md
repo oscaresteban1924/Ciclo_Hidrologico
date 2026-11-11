@@ -648,6 +648,8 @@ El canal también tiene ahora «Simular una creciente». Se revisaron en captura
 
 **Cambio.** Al pie de Ayuda y de Ajustes, en el README y como autor del documento (`<meta name="author">`): «Diseñado y desarrollado por Oscar Cossio.» y, debajo, «Dedicado a Leidy Hernandez Acevedo: «Porque tú lo inspiraste, y a través de él enseñas y transformas territorios y vidas.»». Reemplaza el crédito anterior («Diseñado y elaborado por Leidy Hernandez Acevedo»). Se revisó en escritorio y teléfono.
 
+**Ajuste posterior.** A pedido, la dedicatoria quedó «Dedicado a Leidy Hernandez: «Por inspirar este laboratorio y porque, a través de él, enseñas y transformas territorios y vidas.»», sin el segundo apellido y con una redacción que nombra lo que se inspiró (este laboratorio).
+
 ## 4 novovicies. «Laboratorio del agua»: portada y navegación por salas (ejecutada)
 
 **Pedido.** «Cambiemos el nombre del ciclo hidrológico a laboratorio del agua y refactoriza la interfaz.» Alcance escogido: portada con tarjetas por sala y navegación en dos niveles.

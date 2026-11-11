@@ -211,7 +211,7 @@ El contenido educativo, el modelo de simulación, el estado de navegación y la 
 
 Diseñado y desarrollado por Oscar Cossio.
 
-Dedicado a Leidy Hernandez Acevedo: «Porque tú lo inspiraste, y a través de él enseñas y transformas territorios y vidas.»
+Dedicado a Leidy Hernandez: «Por inspirar este laboratorio y porque, a través de él, enseñas y transformas territorios y vidas.»
 
 ## Licencias
 
