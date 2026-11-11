@@ -63,7 +63,7 @@ export function Settings() {
         <TeacherSources />
       </Disclosure>
       <p className="privacy">{UI.settings.privacy}</p>
-      <p className="credits">{CREDITS}</p>
+      <Credits />
       <button type="button" className="btn-ghost small" onClick={() => dispatch({ type: 'resetProgress' })}>
         {UI.settings.resetProgress}
       </button>
@@ -113,7 +113,7 @@ export function Help({ onClose }: { onClose: () => void }) {
         <dt>Bitácora</dt>
         <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones. Solo queda en este dispositivo.</dd>
       </dl>
-      <p className="credits">{CREDITS}</p>
+      <Credits />
     </div>
   );
 }
@@ -179,5 +179,17 @@ export function Header() {
       {state.settingsOpen && <Settings />}
       {help && <Help onClose={() => setHelp(false)} />}
     </header>
+  );
+}
+
+/** Créditos y dedicatoria, al pie de Ayuda y de Ajustes. */
+function Credits() {
+  return (
+    <div className="credits">
+      <p>{CREDITS.author}</p>
+      <p className="dedication">
+        Dedicado a {CREDITS.dedicatedTo}: <q>{CREDITS.dedication}</q>
+      </p>
+    </div>
   );
 }

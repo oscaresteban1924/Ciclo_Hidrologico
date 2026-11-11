@@ -107,5 +107,9 @@ export const LEGEND: LegendEntry[] = [
   { id: 'pin', label: 'Pregunta para investigar', desc: 'Marca rosada con «?» en la exploración libre.' },
 ];
 
-/** Créditos del desarrollo: se muestran al pie de Ayuda y de Ajustes. */
-export const CREDITS = 'Diseñado y elaborado por Leidy Hernandez Acevedo.';
+/** Créditos del desarrollo y dedicatoria: se muestran al pie de Ayuda y de Ajustes. */
+export const CREDITS = {
+  author: 'Diseñado y desarrollado por Oscar Cossio.',
+  dedicatedTo: 'Leidy Hernandez Acevedo',
+  dedication: 'Porque tú lo inspiraste, y a través de él enseñas y transformas territorios y vidas.',
+};

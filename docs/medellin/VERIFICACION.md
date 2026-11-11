@@ -642,6 +642,12 @@ El canal también tiene ahora «Simular una creciente». Se revisaron en captura
 
 **Resultado.** Pruebas: 33 de 33 de «Hidráulica de canales» y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 44 de 44 estados sin choques ni cortes en las cuatro pantallas, con los instrumentos nuevos en todas las partes. Archivo único: 4 518 kB (1 791 kB comprimido con gzip).
 
+## 4 octovicies. Créditos y dedicatoria (ejecutada)
+
+**Pedido.** «Agrega el diseñado y desarrollado por Oscar Cossio. Dedicado a Leidy Hernandez Acevedo: "Por que lo inspiraste y con ello enseñas y transformas territorios y vidas". Mejora la redacción del mensaje.»
+
+**Cambio.** Al pie de Ayuda y de Ajustes, en el README y como autor del documento (`<meta name="author">`): «Diseñado y desarrollado por Oscar Cossio.» y, debajo, «Dedicado a Leidy Hernandez Acevedo: «Porque tú lo inspiraste, y a través de él enseñas y transformas territorios y vidas.»». Reemplaza el crédito anterior («Diseñado y elaborado por Leidy Hernandez Acevedo»). Se revisó en escritorio y teléfono.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
