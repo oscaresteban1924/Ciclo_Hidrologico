@@ -664,7 +664,7 @@ El canal también tiene ahora «Simular una creciente». Se revisaron en captura
 
 **Scripts de verificación.** Los guiones de `tools/verificacion/` abren ahora `#recorrido`, como antes de la portada. `superposiciones.py` revisa también la portada. `city5.py` entra a la sala del ciclo antes de pedir el recorrido.
 
-**Comprobado.** Portada en escritorio, tableta y teléfono; paso de la portada a una sala y regreso por el nombre; enlace directo, «atrás», «adelante» y recarga; pruebas 33 de 33 de canales y 26 de 26 de calidad. Superposiciones de toda la aplicación: 152 de 152 estados sin choques ni cortes en las cuatro pantallas, incluida la portada.
+**Comprobado.** Portada en escritorio, tableta y teléfono; paso de la portada a una sala y regreso por el nombre; enlace directo, «atrás», «adelante» y recarga; pruebas 33 de 33 de canales y 26 de 26 de calidad. Superposiciones de toda la aplicación: 152 de 152 estados sin choques ni cortes en las cuatro pantallas. La portada no tiene elementos flotantes que esa revisión mida; se revisó en capturas.
 
 ## 5. Rendimiento medido
 
