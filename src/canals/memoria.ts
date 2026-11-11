@@ -64,7 +64,7 @@ export function memoriaHTML(m: MemoriaInput): string {
   <h1>Memoria de cálculo: ${esc(m.title)}</h1>
   <p>${esc(m.intro)}</p>
   <p><b>Proyecto:</b> ${esc(m.project?.trim() || '—')} · <b>Elaborado por:</b> ${esc(m.author?.trim() || '—')} · <b>Nivel:</b> ${m.level} · <b>Fecha:</b> ${esc(date)}</p>
-  <p>Ciclo hidrológico · Hidráulica de canales</p>
+  <p>Laboratorio del agua · Hidráulica de canales</p>
 </header>
 <p class="kid">${esc(m.res.kid)}</p>
 ${sections.map((x, k) => x.replace('§', `${k + 1}.`)).join('\n')}

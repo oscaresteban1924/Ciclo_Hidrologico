@@ -6,6 +6,7 @@ import { GuidedPanel, StepNav, StepProgress, shortName } from './components/Guid
 import { Icon } from './components/ui';
 import { StepCaption } from './components/StepCaption';
 import { Header } from './components/Header';
+import { Home } from './components/Home';
 import { LabPanel } from './components/LabPanel';
 import { LogbookPanel } from './components/LogbookPanel';
 import { TracerPanel } from './components/TracerPanel';
@@ -13,7 +14,7 @@ import { STEPS } from './content/steps';
 import { UI } from './content/ui';
 import { SceneView } from './scene/SceneView';
 import { buildSpec } from './state/spec';
-import { useStore } from './state/store';
+import { MODE_HASH, modeFromHash, useStore } from './state/store';
 
 const CityLab = lazy(() => import('./city/CityLab'));
 const QualityLab = lazy(() => import('./quality/QualityLab'));
@@ -72,14 +73,48 @@ export function App() {
         dispatch({ type: 'pause' });
         setAnnounce(state.paused ? 'Animaciones reanudadas' : 'Animaciones en pausa');
       }
-      if (state.mode === 'guided' && !state.tool) {
+      if (state.mode === 'guided' && !state.tool && !state.home) {
         if (e.key === 'ArrowRight') dispatch({ type: 'next' });
         if (e.key === 'ArrowLeft') dispatch({ type: 'prev' });
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dispatch, state.mode, state.tool, state.paused]);
+  }, [dispatch, state.mode, state.tool, state.paused, state.home]);
+
+  // La dirección lleva la sala o el modo (#recorrido, #canales…): se puede volver al mismo lugar, compartir el
+  // enlace y usar «atrás» del navegador entre la portada y las salas.
+  const synced = useRef(false);
+  useEffect(() => {
+    try {
+      const want = state.home ? '' : `#${MODE_HASH[state.mode]}`;
+      if (window.location.hash !== want) {
+        const url = `${window.location.pathname}${window.location.search}${want}`;
+        if (synced.current) window.history.pushState(null, '', url);
+        else window.history.replaceState(null, '', url);
+      }
+      synced.current = true;
+    } catch {
+      /* algunas vistas incrustadas no permiten cambiar la dirección */
+    }
+  }, [state.home, state.mode]);
+  const latest = useRef({ home: state.home, mode: state.mode });
+  latest.current = { home: state.home, mode: state.mode };
+  useEffect(() => {
+    const onNav = () => {
+      const m = modeFromHash();
+      const cur = latest.current;
+      if (m === null) {
+        if (!cur.home) dispatch({ type: 'home' });
+      } else if (cur.home || m !== cur.mode) dispatch({ type: 'mode', mode: m });
+    };
+    window.addEventListener('popstate', onNav);
+    window.addEventListener('hashchange', onNav);
+    return () => {
+      window.removeEventListener('popstate', onNav);
+      window.removeEventListener('hashchange', onNav);
+    };
+  }, [dispatch]);
 
   // Detener animaciones cuando la pestaña no está visible
   useEffect(() => {
@@ -97,12 +132,14 @@ export function App() {
   const guided = state.mode === 'guided' && !state.tool;
 
   return (
-    <div className={`app mode-${state.mode}${state.tool ? ` tool-${state.tool}` : ''}`}>
+    <div className={`app mode-${state.mode}${state.tool ? ` tool-${state.tool}` : ''}${state.home ? ' is-home' : ''}`}>
       <a className="skip" href="#panel">
         Ir a la explicación
       </a>
       <Header />
-      {state.mode === 'city' && !state.tool ? (
+      {state.home ? (
+        <Home />
+      ) : state.mode === 'city' && !state.tool ? (
         <Suspense
           fallback={
             <main className="layout layout-city">

@@ -1,4 +1,4 @@
-// Laboratorio del agua: explorar condiciones (modelo cualitativo con balance) y comparar escenarios A/B.
+// Experimentos del ciclo del agua: explorar condiciones (modelo cualitativo con balance) y comparar escenarios A/B.
 
 import { useRef, useState } from 'react';
 import {
@@ -145,7 +145,7 @@ export function LabPanel({ spec }: { spec: SceneSpec }) {
   return (
     <div className="lab">
       <header>
-        <h2 className="term">Laboratorio del agua</h2>
+        <h2 className="term">Experimentos</h2>
         <p className="lead">{tab === 'reparto' ? 'Cambia las condiciones y observa el paisaje.' : 'Compara dos escenarios que solo se diferencian en una condición.'}</p>
         <p className="disclaimer">
           {tab === 'reparto'
@@ -154,7 +154,7 @@ export function LabPanel({ spec }: { spec: SceneSpec }) {
         </p>
       </header>
 
-      <div className="lab-tabs" role="tablist" aria-label="Secciones del laboratorio">
+      <div className="lab-tabs" role="tablist" aria-label="Secciones de Experimentos">
         {LAB_TABS.map((t, i) => (
           <button
             key={t.id}

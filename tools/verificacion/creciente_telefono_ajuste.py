@@ -4,7 +4,7 @@ ARGS = ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=ARGS)
     pg = b.new_page(viewport={'width': 390, 'height': 844})
-    pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(900)
+    pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(900)
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').first.click()
     pg.wait_for_selector('.city-pick', timeout=30000)
     pg.locator('.city-pick button', has_text='Ladera con quebrada').click(force=True)

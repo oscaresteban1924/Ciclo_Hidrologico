@@ -505,7 +505,7 @@ export const STEPS: Step[] = [
     what:
       'Una misma porción de agua puede evaporarse del mar, caer en el bosque y volver al aire en pocos días; otra puede pasar siglos bajo tierra antes de llegar a un río.',
     cause: 'La energía solar y la gravedad actúan sin pausa en todo el paisaje.',
-    interactionPrompt: 'Elige qué quieres hacer ahora: seguir una gota trazadora, experimentar en el laboratorio o resolver retos.',
+    interactionPrompt: 'Elige qué quieres hacer ahora: seguir una gota trazadora, hacer experimentos o resolver retos.',
     interaction: 'final',
     question: {
       prompt: '¿Cuál de estas rutas del agua es posible?',

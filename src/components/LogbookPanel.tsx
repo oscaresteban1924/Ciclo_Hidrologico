@@ -34,7 +34,7 @@ function levels(log: LogEntry[]): Level[] {
       name: 'Investigación',
       checks: [
         { label: 'Dos comparaciones', ok: n('comparacion') >= 2 },
-        { label: 'Dos predicciones comprobadas en el laboratorio', ok: checked >= 2 },
+        { label: 'Dos predicciones comprobadas en Experimentos', ok: checked >= 2 },
       ],
     },
     {
@@ -141,7 +141,7 @@ export function LogbookPanel() {
             </ul>
           </>
         ) : (
-          <p>Completaste todos los niveles. ¡Ahora formula tu propia pregunta y diseña un experimento en el laboratorio!</p>
+          <p>Completaste todos los niveles. ¡Ahora formula tu propia pregunta y diseña un experimento en Experimentos!</p>
         )}
       </section>
 
@@ -159,7 +159,7 @@ export function LogbookPanel() {
       {shown.length === 0 ? (
         <div className="log-empty">
           <p>
-            <strong>Todavía no hay registros{filter !== 'todo' ? ' de este tipo' : ''}.</strong> Completa una vista de detalle («Ver de cerca»), compara dos escenarios en el laboratorio o escribe una hipótesis en una pregunta para investigar.
+            <strong>Todavía no hay registros{filter !== 'todo' ? ' de este tipo' : ''}.</strong> Completa una vista de detalle («Ver de cerca»), compara dos escenarios en Experimentos o escribe una hipótesis en una pregunta para investigar.
           </p>
         </div>
       ) : (

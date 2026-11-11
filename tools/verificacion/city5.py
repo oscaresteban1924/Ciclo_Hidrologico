@@ -7,7 +7,7 @@ with sync_playwright() as p:
     pg.on('console', lambda m: logs.append(f'{m.type}: {m.text}') if m.type == 'error' or (m.type == 'warning' and 'GL Driver' not in m.text) else None)
     pg.on('pageerror', lambda e: logs.append(f'pageerror: {e}'))
     pg.add_init_script("""(() => { const orig = HTMLCanvasElement.prototype.getContext; window.__gl = 0; HTMLCanvasElement.prototype.getContext = function(t, o) { const c = orig.call(this, t, o); if (c && (t === 'webgl2' || t === 'webgl')) { if (!this.__counted) { this.__counted = true; window.__gl++; } } return c; }; })();""")
-    pg.goto('http://127.0.0.1:5173/')
+    pg.goto('http://127.0.0.1:5173/#recorrido')
     pg.wait_for_timeout(1000)
     for rep in range(3):
         pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
@@ -17,6 +17,7 @@ with sync_playwright() as p:
         pg.locator('.city-simbar .btn').first.click()
         pg.wait_for_timeout(1500)
         live = pg.evaluate('window.__cityDebug.live')
+        pg.locator('.mode-tab[aria-label="El ciclo del agua"]').first.click(); pg.wait_for_timeout(300)
         pg.get_by_role('button', name='Recorrido guiado').click()
         pg.wait_for_timeout(800)
         st = pg.evaluate("() => ({ live: window.__cityDebug.live, last: window.__cityDebug.lastDisposed, canvases: document.querySelectorAll('canvas.city-canvas').length, labels: document.querySelectorAll('.city-labels').length, glCreated: window.__gl })")
@@ -25,7 +26,7 @@ with sync_playwright() as p:
     pg.keyboard.press('ArrowRight'); pg.wait_for_timeout(400); pg.keyboard.press('ArrowRight'); pg.wait_for_timeout(600)
     title = pg.locator('.panel h2').first.inner_text()
     print('recorrido guiado funciona; paso actual:', title)
-    pg.get_by_role('button', name='Laboratorio del agua').click(); pg.wait_for_timeout(600)
+    pg.get_by_role('button', name='Experimentos', exact=True).click(); pg.wait_for_timeout(600)
     print('laboratorio del agua visible:', pg.locator('.panel').first.is_visible())
     # Salida por una herramienta (glosario) también libera
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()

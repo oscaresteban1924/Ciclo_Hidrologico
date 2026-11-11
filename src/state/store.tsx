@@ -10,6 +10,22 @@ import type { Balance, RainProfile, StormSample } from '../lab/storm';
 
 export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality' | 'canals';
 export type Tool = 'tracer' | 'challenges' | 'glossary' | 'logbook' | null;
+/** Salas: el ciclo del agua agrupa el recorrido, la exploración y los experimentos. */
+export type Room = 'ciclo' | 'city' | 'quality' | 'canals';
+export const roomOf = (m: Mode): Room => (m === 'city' || m === 'quality' || m === 'canals' ? m : 'ciclo');
+
+/** Enlaces directos: la dirección termina en #recorrido, #explorar, #experimentos, #medellin, #calidad o #canales. */
+export const MODE_HASH: Record<Mode, string> = { guided: 'recorrido', explore: 'explorar', lab: 'experimentos', city: 'medellin', quality: 'calidad', canals: 'canales' };
+
+export function modeFromHash(): Mode | null {
+  try {
+    const h = decodeURIComponent(window.location.hash.replace(/^#/, '')).toLowerCase();
+    const hit = (Object.keys(MODE_HASH) as Mode[]).find((m) => MODE_HASH[m] === h);
+    return hit ?? (h === 'ciclo' ? 'guided' : null);
+  } catch {
+    return null;
+  }
+}
 export type Speed = 0.5 | 1 | 2;
 export type Quality = 'auto' | 'alta' | 'ligera';
 export type DetailId = 'poros' | 'zonas' | 'planta' | 'nube' | 'subterraneo';
@@ -120,6 +136,8 @@ export const DEFAULT_KNOBS: StepKnobs = {
 };
 
 export interface State {
+  /** Portada con las salas (al abrir y con el nombre de la aplicación). */
+  home: boolean;
   mode: Mode;
   tool: Tool;
   step: number;
@@ -159,6 +177,7 @@ export interface ExploreLayers {
 
 export type Action =
   | { type: 'mode'; mode: Mode }
+  | { type: 'home' }
   | { type: 'tool'; tool: Tool }
   | { type: 'step'; index: number }
   | { type: 'next' }
@@ -207,6 +226,7 @@ const systemReducedMotion = () =>
 
 function initial(): State {
   const saved = loadSaved();
+  const linked = typeof window !== 'undefined' ? modeFromHash() : null;
   const startStep = Math.min(saved?.step ?? 0, STEPS.length - 1);
   const visited = saved?.progress?.visited ?? [];
   const prefs: Prefs = {
@@ -217,7 +237,8 @@ function initial(): State {
     arrows: saved?.prefs?.arrows ?? true,
   };
   return {
-    mode: 'guided',
+    home: linked === null,
+    mode: linked ?? 'guided',
     tool: null,
     step: startStep,
     paused: false,
@@ -274,9 +295,12 @@ function goStep(s: State, index: number): State {
 
 function reducer(s: State, a: Action): State {
   switch (a.type) {
+    case 'home':
+      return { ...s, home: true, tool: null, detail: null, focus: null, selected: null, tracer: null, inquiry: null, cmp: { ...s.cmp, running: false } };
     case 'mode':
       return {
         ...s,
+        home: false,
         cmp: { ...s.cmp, running: false },
         inquiry: null,
         mode: a.mode,
@@ -292,7 +316,7 @@ function reducer(s: State, a: Action): State {
         progress: a.mode === 'guided' ? visit(s.progress, s.step) : s.progress,
       };
     case 'tool':
-      return { ...s, tool: a.tool, focus: null, tracer: a.tool === 'tracer' ? s.tracer : null, selected: null, term: null };
+      return { ...s, home: a.tool ? false : s.home, tool: a.tool, focus: null, tracer: a.tool === 'tracer' ? s.tracer : null, selected: null, term: null };
     case 'step':
       return { ...goStep(s, a.index), detail: null };
     case 'next':

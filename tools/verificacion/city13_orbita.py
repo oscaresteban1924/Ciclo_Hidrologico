@@ -8,7 +8,7 @@ name = sys.argv[1]; tag = sys.argv[2]
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=ARGS)
     ctx = b.new_context(viewport={'width': 1440, 'height': 900}); ctx.add_init_script(INIT); pg = ctx.new_page()
-    pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(800)
+    pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(800)
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
     pg.wait_for_function("() => window.__cityDebug && window.__cityDebug.controller", timeout=30000)
     pg.locator('.city-pick button', has_text=name).click()

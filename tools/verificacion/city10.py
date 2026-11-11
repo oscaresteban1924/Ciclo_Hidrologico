@@ -10,7 +10,7 @@ def page(b, W, H):
     pg = ctx.new_page()
     pg.on('console', lambda m: logs.append(f'{m.type}: {m.text[:400]}') if m.type in ('error', 'warning') and 'GL Driver' not in m.text and 'GPU stall' not in m.text else None)
     pg.on('pageerror', lambda e: logs.append(f'pageerror: {e}'))
-    pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(800)
+    pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(800)
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
     pg.wait_for_function("() => window.__cityDebug && window.__cityDebug.controller", timeout=30000)
     return ctx, pg

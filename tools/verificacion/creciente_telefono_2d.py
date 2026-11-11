@@ -9,7 +9,7 @@ def go(b, w, h, name, extra_args=None):
     pg = b.new_page(viewport={'width': w, 'height': h})
     pg.on('console', lambda m: logs.append(f'{m.type}: {m.text}') if m.type == 'error' else None)
     pg.on('pageerror', lambda e: logs.append(f'pageerror: {e}'))
-    pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(900)
+    pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(900)
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').first.click()
     pg.wait_for_selector('.city-pick', timeout=30000)
     pg.locator('.city-pick button', has_text=name).click(force=True)

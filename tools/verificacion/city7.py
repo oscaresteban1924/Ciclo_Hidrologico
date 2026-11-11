@@ -7,7 +7,7 @@ with sync_playwright() as p:
     for (W, H) in [(1280, 720), (390, 844)]:
         for sector in ['Calle de prueba', 'Ladera con quebrada']:
             pg = b.new_page(viewport={'width': W, 'height': H})
-            pg.goto('http://127.0.0.1:5173/')
+            pg.goto('http://127.0.0.1:5173/#recorrido')
             pg.wait_for_timeout(800)
             pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
             pg.wait_for_selector('.city-pick', timeout=30000)

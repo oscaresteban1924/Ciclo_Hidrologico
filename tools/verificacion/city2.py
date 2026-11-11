@@ -1,7 +1,7 @@
 # Sector elegido, lluvia acelerada y vistas: realista, materiales, resultados, bajo la calle, calle.
 import sys
 from playwright.sync_api import sync_playwright
-URL = 'http://127.0.0.1:5173/'
+URL = 'http://127.0.0.1:5173/#recorrido'
 sector = sys.argv[1]
 W = int(sys.argv[2]); H = int(sys.argv[3])
 tag = f'{sector}-{W}x{H}'

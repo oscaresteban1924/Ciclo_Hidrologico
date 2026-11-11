@@ -9,7 +9,7 @@ import json, os, sys
 from playwright.sync_api import sync_playwright
 
 OUT = '/home/claude/shots/overlap'
-URL = os.environ.get('URL', 'http://127.0.0.1:5173/')
+URL = os.environ.get('URL', 'http://127.0.0.1:5173/#recorrido')
 ARGS = ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 SCREENS = {
     'escritorio': dict(viewport={'width': 1440, 'height': 900}),
@@ -119,9 +119,13 @@ def run(screens, shots):
             pg.set_default_timeout(90000)
             pg.goto(URL); pg.wait_for_timeout(900)
             pg.evaluate('() => localStorage.clear()'); pg.reload(); pg.wait_for_timeout(2500)
+            # portada (sin sala en la dirección) y luego el recorrido
+            pg.goto(URL.split('#')[0]); pg.wait_for_timeout(1500)
+            check(pg, screen, 'portada', shots, report)
+            pg.goto(URL); pg.wait_for_timeout(2500)
             check(pg, screen, 'recorrido', shots, report)
             mode(pg, 'Exploración libre'); check(pg, screen, 'exploracion', shots, report)
-            mode(pg, 'Laboratorio del agua'); check(pg, screen, 'laboratorio', shots, report)
+            mode(pg, 'Experimentos'); check(pg, screen, 'laboratorio', shots, report)
             # Medellín: valle, sectores, vistas, creciente, cine
             mode(pg, 'Medellín: laboratorio de lluvia')
             pg.wait_for_selector('.city-pick', timeout=60000); pg.wait_for_timeout(2500)

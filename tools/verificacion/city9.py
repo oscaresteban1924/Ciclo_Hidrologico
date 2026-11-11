@@ -5,7 +5,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=ARGS)
     for W, H in [(1440, 900), (1280, 800), (1280, 720), (1024, 1366), (390, 844)]:
         ctx = b.new_context(viewport={'width': W, 'height': H})
-        pg = ctx.new_page(); pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(800)
+        pg = ctx.new_page(); pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(800)
         pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()
         pg.wait_for_selector('.city-tabs', timeout=30000)
         r = pg.evaluate("""() => { const t = document.querySelector('.city-tabs'); const bs=[...t.querySelectorAll('button')];

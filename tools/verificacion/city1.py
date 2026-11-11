@@ -1,7 +1,7 @@
 # Recorrido básico del módulo Medellín: valle → sector → lluvia; capturas y consola.
 import sys, time
 from playwright.sync_api import sync_playwright
-URL = sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:5173/'
+URL = sys.argv[1] if len(sys.argv) > 1 else 'http://127.0.0.1:5173/#recorrido'
 W = int(sys.argv[2]) if len(sys.argv) > 2 else 1440
 H = int(sys.argv[3]) if len(sys.argv) > 3 else 900
 tag = f'{W}x{H}'

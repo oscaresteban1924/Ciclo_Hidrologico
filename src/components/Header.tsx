@@ -1,15 +1,20 @@
-// Encabezado: modos conectados, herramientas, pausa global y ajustes de accesibilidad.
+// Encabezado del Laboratorio del agua: el nombre (vuelve a la portada), las cuatro salas, las herramientas comunes
+// (retos, bitácora, glosario), ayuda y ajustes. Dentro del ciclo del agua, una segunda fila con sus tres modos y la
+// gota trazadora.
 
 import { useEffect, useRef, useState } from 'react';
 import { TeacherSources } from './FactCard';
-import { CREDITS, UI } from '../content/ui';
+import { UI } from '../content/ui';
+import { Credits } from './Credits';
 import { speechSupported } from '../lib/speech';
-import { useStore, type Mode, type Tool } from '../state/store';
+import { roomOf, useStore, type Mode, type Room, type Tool } from '../state/store';
 import { Disclosure, Icon, Segmented, Toggle } from './ui';
 
 
-const MODES: Mode[] = ['guided', 'explore', 'lab', 'city', 'quality', 'canals'];
-const TOOLS: Exclude<Tool, null>[] = ['tracer', 'challenges', 'logbook', 'glossary'];
+const ROOMS: Room[] = ['ciclo', 'city', 'quality', 'canals'];
+const CICLO: Mode[] = ['guided', 'explore', 'lab'];
+/** Herramientas de todas las salas; la gota trazadora es del ciclo del agua. */
+const TOOLS: Exclude<Tool, null>[] = ['challenges', 'logbook', 'glossary'];
 
 function Mark() {
   return (
@@ -88,30 +93,32 @@ export function Help({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <dl className="help-list">
-        <dt>Tres escalas</dt>
+        <dt>Portada y salas</dt>
         <dd>
-          Arriba a la izquierda del paisaje: <strong>Cuenca</strong> muestra todo; <strong>Proceso</strong> acerca la zona que estudias; <strong>Detalle</strong> abre una vista de lo que no se ve a simple vista, como los poros del suelo o el interior de una nube.
+          El nombre <strong>Laboratorio del agua</strong>, arriba a la izquierda, vuelve a la portada. Arriba están las cuatro salas: <strong>El ciclo del agua</strong>, <strong>Medellín</strong>, <strong>Calidad del agua</strong> e <strong>Hidráulica de canales</strong>. Retos, Bitácora y Glosario sirven en todas.
         </dd>
-        <dt>Reproducción</dt>
-        <dd>Abajo a la izquierda: pausa, repite y elige la velocidad. La velocidad cambia el ritmo de la animación, no los resultados.</dd>
-        <dt>Recorrido guiado</dt>
-        <dd>Quince pasos. En cada uno: <strong>Observa</strong> lo que pasa, <strong>Investiga</strong> con una acción y <strong>Profundiza</strong> si quieres saber más.</dd>
-        <dt>Exploración libre</dt>
-        <dd>Enciende las capas que quieras, toca cualquier lugar del paisaje y abre las preguntas marcadas con «?».</dd>
-        <dt>Laboratorio</dt>
-        <dd>Explora condiciones o compara dos escenarios que solo se diferencian en una cosa. Predice antes de ejecutar.</dd>
+        <dt>El ciclo del agua</dt>
+        <dd>
+          Tiene tres modos en la segunda fila. <strong>Recorrido guiado</strong>: quince pasos; en cada uno, <strong>Observa</strong>, <strong>Investiga</strong> con una acción y <strong>Profundiza</strong> si quieres saber más. <strong>Exploración libre</strong>: enciende capas, toca el paisaje y abre las preguntas marcadas con «?». <strong>Experimentos</strong>: cambia condiciones o compara dos escenarios que solo se diferencian en una cosa; predice antes de ejecutar. La <strong>Gota trazadora</strong> sigue una pequeña porción de agua por el camino que elijas.
+        </dd>
+        <dt>Escalas y reproducción</dt>
+        <dd>
+          En el paisaje del ciclo: <strong>Cuenca</strong> muestra todo, <strong>Proceso</strong> acerca la zona que estudias y <strong>Detalle</strong> abre lo que no se ve a simple vista. Abajo a la izquierda: pausa, repite y velocidad (cambia el ritmo, no los resultados).
+        </dd>
         <dt>Medellín: laboratorio de lluvia</dt>
         <dd>
           Una maqueta 3D de un sector de ciudad donde la lluvia se calcula de verdad: elige un sector en el valle, crea lluvia, cambia superficies, construye un jardín de lluvia o limpia un sumidero, y compara dos versiones con la misma lluvia. Es educativo: no es un pronóstico oficial.
         </dd>
         <dt>Calidad del agua</dt>
         <dd>
-          Mide la salud de una quebrada con una sonda y con los bichos que viven debajo de las piedras, sigue el agua del río hasta la llave en una planta de potabilización y mira qué arrastra la lluvia de las calles. Los valores son típicos de la literatura: no es un monitoreo de una quebrada real.
+          Mide la salud de una quebrada con una sonda y con los bichos que viven debajo de las piedras, sigue el agua del río hasta la llave, mira qué arrastra la lluvia de las calles y recorre una planta de aguas residuales. Los valores son típicos de la literatura: no es un monitoreo de una quebrada real.
         </dd>
-        <dt>Gota trazadora</dt>
-        <dd>Sigue una pequeña porción de agua y elige su camino. Cada camino tarda tiempos muy distintos.</dd>
+        <dt>Hidráulica de canales</dt>
+        <dd>
+          Siete partes con escenas 3D, retos, instrumentos en vivo y una pestaña de diseño con calculadoras, prediseñadores y memoria de cálculo: el canal, el resalto, el puente, las alcantarillas, los sedimentos, la medición del caudal y las ondas y crecientes. Son prediseños académicos, no diseños de ingeniería.
+        </dd>
         <dt>Bitácora</dt>
-        <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones. Solo queda en este dispositivo.</dd>
+        <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones de todas las salas. Solo queda en este dispositivo.</dd>
       </dl>
       <Credits />
     </div>
@@ -121,34 +128,42 @@ export function Help({ onClose }: { onClose: () => void }) {
 export function Header() {
   const { state, dispatch } = useStore();
   const [help, setHelp] = useState(false);
+  const room = roomOf(state.mode);
+  const lastCiclo = useRef<Mode>('guided');
+  if (CICLO.includes(state.mode)) lastCiclo.current = state.mode;
+  const inRoom = (r: Room) => !state.home && !state.tool && room === r;
+  const enter = (r: Room) => dispatch({ type: 'mode', mode: r === 'ciclo' ? (room === 'ciclo' && !state.home ? state.mode : lastCiclo.current) : r });
+  const showCiclo = !state.home && (room === 'ciclo' || state.tool === 'tracer');
   return (
-    <header className="app-header">
-      <div className="brand">
-        <Mark />
-        <div>
-          <h1>{UI.appTitle}</h1>
-          <p>{UI.appSubtitle}</p>
-        </div>
-      </div>
-      <nav className="modes" aria-label="Modos">
-        <div className="mode-tabs" role="group" aria-label="Modos de exploración">
-          {MODES.map((m) => (
+    <header className={`app-header${showCiclo ? ' has-sub' : ''}`}>
+      <h1 className="brand">
+        <button type="button" className="brand-link" onClick={() => dispatch({ type: 'home' })} aria-label={`${UI.appTitle}: ir a la portada`} aria-current={state.home ? 'page' : undefined}>
+          <Mark />
+          <span className="brand-text">
+            <span className="brand-name">{UI.appTitle}</span>
+            <span className="brand-sub">{UI.appSubtitle}</span>
+          </span>
+        </button>
+      </h1>
+      <nav className="modes" aria-label="Salas y herramientas">
+        <div className="mode-tabs room-tabs" role="group" aria-label="Salas">
+          {ROOMS.map((r) => (
             <button
-              key={m}
+              key={r}
               type="button"
-              className={`mode-tab${state.mode === m && !state.tool ? ' is-on' : ''}`}
-              aria-pressed={state.mode === m && !state.tool}
-              aria-label={UI.modes[m]}
-              onClick={() => dispatch({ type: 'mode', mode: m })}
+              className={`mode-tab room-tab${inRoom(r) ? ' is-on' : ''}`}
+              aria-pressed={inRoom(r)}
+              aria-label={UI.rooms[r]}
+              onClick={() => enter(r)}
             >
-              <span className="lbl-long">{UI.modes[m]}</span>
+              <span className="lbl-long">{UI.rooms[r]}</span>
               <span className="lbl-short" aria-hidden="true">
-                {UI.modesShort[m]}
+                {UI.roomsShort[r]}
               </span>
             </button>
           ))}
         </div>
-        <div className="tool-tabs" role="group" aria-label="Herramientas">
+        <div className="tool-tabs" role="group" aria-label="Herramientas de todas las salas">
           {TOOLS.map((t) => (
             <button
               key={t}
@@ -158,10 +173,7 @@ export function Header() {
               aria-label={UI.tools[t]}
               onClick={() => dispatch({ type: 'tool', tool: state.tool === t ? null : t })}
             >
-              <span className="lbl-long">{UI.tools[t]}</span>
-              <span className="lbl-short" aria-hidden="true">
-                {UI.toolsShort[t]}
-              </span>
+              {UI.toolsShort[t]}
             </button>
           ))}
         </div>
@@ -176,20 +188,36 @@ export function Header() {
           <span>{UI.settings.title}</span>
         </button>
       </div>
+      {showCiclo && (
+        <nav className="subnav" aria-label="Modos del ciclo del agua">
+          <span className="subnav-title">{UI.rooms.ciclo}</span>
+          <div className="mode-tabs" role="group" aria-label="Modos del ciclo del agua">
+            {CICLO.map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`mode-tab${state.mode === m && !state.tool ? ' is-on' : ''}`}
+                aria-pressed={state.mode === m && !state.tool}
+                aria-label={UI.modes[m]}
+                onClick={() => dispatch({ type: 'mode', mode: m })}
+              >
+                <span className="sub-long">{UI.modes[m]}</span>
+                <span className="sub-short" aria-hidden="true">
+                  {UI.modesShort[m]}
+                </span>
+              </button>
+            ))}
+          </div>
+          <button type="button" className={`tool-tab${state.tool === 'tracer' ? ' is-on' : ''}`} aria-pressed={state.tool === 'tracer'} aria-label={UI.tools.tracer} onClick={() => dispatch({ type: 'tool', tool: state.tool === 'tracer' ? null : 'tracer' })}>
+            <span className="sub-long">{UI.tools.tracer}</span>
+            <span className="sub-short" aria-hidden="true">
+              {UI.toolsShort.tracer}
+            </span>
+          </button>
+        </nav>
+      )}
       {state.settingsOpen && <Settings />}
       {help && <Help onClose={() => setHelp(false)} />}
     </header>
-  );
-}
-
-/** Créditos y dedicatoria, al pie de Ayuda y de Ajustes. */
-function Credits() {
-  return (
-    <div className="credits">
-      <p>{CREDITS.author}</p>
-      <p className="dedication">
-        Dedicado a {CREDITS.dedicatedTo}: <q>{CREDITS.dedication}</q>
-      </p>
-    </div>
   );
 }

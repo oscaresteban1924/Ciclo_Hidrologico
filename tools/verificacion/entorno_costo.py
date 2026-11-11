@@ -4,7 +4,7 @@ SECTOR = sys.argv[1] if len(sys.argv) > 1 else 'Calle de prueba'
 with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     pg = b.new_page(viewport={'width': 1280, 'height': 720})
-    pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(800)
+    pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(800)
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click(); pg.wait_for_timeout(1500)
     pg.wait_for_selector('.city-pick', timeout=30000)
     pg.locator('.city-pick button', has_text=SECTOR).click(force=True)

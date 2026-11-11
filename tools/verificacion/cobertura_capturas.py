@@ -14,7 +14,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={'width': 1440, 'height': 900})
     pg.on('console', lambda m: logs.append(f'{m.type}: {m.text}') if m.type == 'error' else None)
     pg.on('pageerror', lambda e: logs.append(f'pageerror: {e}'))
-    pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(900)
+    pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(900)
     pg.evaluate("() => localStorage.clear()")
     pg.reload(); pg.wait_for_timeout(900)
     pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click()

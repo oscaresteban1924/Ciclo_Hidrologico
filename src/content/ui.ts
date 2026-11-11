@@ -1,12 +1,12 @@
 // Textos de la interfaz.
 
 export const UI = {
-  appTitle: 'Ciclo hidrológico',
+  appTitle: 'Laboratorio del agua',
   appSubtitle: 'Observa, pregunta y experimenta',
   modes: {
     guided: 'Recorrido guiado',
     explore: 'Exploración libre',
-    lab: 'Laboratorio del agua',
+    lab: 'Experimentos',
     city: 'Medellín: laboratorio de lluvia',
     quality: 'Calidad del agua',
     canals: 'Hidráulica de canales',
@@ -20,7 +20,20 @@ export const UI = {
   modesShort: {
     guided: 'Recorrido',
     explore: 'Explorar',
-    lab: 'Laboratorio',
+    lab: 'Experimentos',
+    city: 'Medellín',
+    quality: 'Calidad',
+    canals: 'Canales',
+  },
+  /** Salas de la portada: el ciclo del agua (con sus tres modos) y los tres laboratorios. */
+  rooms: {
+    ciclo: 'El ciclo del agua',
+    city: 'Medellín: laboratorio de lluvia',
+    quality: 'Calidad del agua',
+    canals: 'Hidráulica de canales',
+  },
+  roomsShort: {
+    ciclo: 'Ciclo del agua',
     city: 'Medellín',
     quality: 'Calidad',
     canals: 'Canales',

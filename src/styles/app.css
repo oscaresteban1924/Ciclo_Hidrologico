@@ -130,28 +130,85 @@ kbd {
 }
 
 .brand {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: inherit;
+}
+.brand-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: var(--r-m);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.brand-link:hover .brand-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .brand .mark {
   width: 38px;
   height: 38px;
 }
-.brand h1 {
-  margin: 0;
+.brand-text {
+  display: flex;
+  flex-direction: column;
+}
+.brand-name {
   font-family: var(--font-display);
   font-size: 21px;
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.1;
 }
-.brand p {
-  margin: 0;
+.brand-sub {
   font-size: 13.5px;
+  font-weight: 400;
   color: var(--ink-2);
   line-height: 1.2;
+}
+
+/* Segunda fila del encabezado: los modos del ciclo del agua y la gota trazadora. */
+.app-header.has-sub {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.subnav {
+  order: 5;
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subnav::-webkit-scrollbar {
+  display: none;
+}
+.subnav-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--moss);
+  white-space: nowrap;
+}
+.subnav .mode-tab {
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: 14.5px;
+}
+.subnav .tool-tab {
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: 14.5px;
+  border-radius: 9px;
 }
 
 .modes {
@@ -2021,7 +2078,7 @@ button.scene-label:hover {
 }
 
 @media (max-width: 1180px) {
-  .brand p {
+  .brand-sub {
     display: none;
   }
   .modes {
@@ -2144,7 +2201,7 @@ button.scene-label:hover {
     min-height: 52px;
     padding: 4px 10px;
   }
-  .brand div {
+  .brand-text {
     display: none;
   }
   .modes {
@@ -4251,8 +4308,8 @@ button.scene-label:hover {
 .lbl-short {
   display: none;
 }
-/* Con seis módulos, los nombres largos solo caben en pantallas muy anchas. */
-@media (max-width: 2040px) {
+/* Los nombres largos de las salas caben en pantallas anchas; en las demás, los cortos. */
+@media (max-width: 1560px) {
   .lbl-long {
     display: none;
   }
@@ -4260,12 +4317,17 @@ button.scene-label:hover {
     display: inline;
   }
 }
+/* En el teléfono, los nombres cortos de las salas caben sin desplazar; en la segunda fila del ciclo, también. */
+.sub-short {
+  display: none;
+}
 @media (max-width: 900px) {
-  .lbl-long {
-    display: inline;
-  }
-  .lbl-short {
+  .sub-long,
+  .subnav-title {
     display: none;
+  }
+  .sub-short {
+    display: inline;
   }
 }
 
@@ -4383,4 +4445,147 @@ button.scene-label:hover {
   align-self: center;
   font-size: 13.5px;
   color: var(--ink-2);
+}
+
+/* ------------------------------------------------------------------ */
+/* Portada                                                              */
+/* ------------------------------------------------------------------ */
+
+.home {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 30px clamp(16px, 4vw, 56px) 40px;
+  background: var(--paper);
+}
+.home:focus {
+  outline: none;
+}
+.home-hero {
+  max-width: 1180px;
+  margin: 0 auto 24px;
+}
+.home-kicker {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--moss);
+}
+.home-hero h2 {
+  margin: 6px 0 10px;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 4.2vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.home-lead {
+  margin: 0;
+  max-width: 760px;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.home-rooms {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 18px;
+}
+.room-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--water);
+  border-radius: var(--r-l);
+  box-shadow: 0 1px 2px rgba(23, 50, 77, 0.06);
+}
+.room-card.tone-moss {
+  border-top-color: var(--moss);
+}
+.room-card.tone-ink {
+  border-top-color: var(--ink);
+}
+.room-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.room-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px 18px;
+}
+.room-body h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.room-body p {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.room-items {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.room-enter {
+  margin-top: auto;
+  padding-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.room-enter .btn,
+.room-enter .btn-ghost {
+  min-height: 42px;
+  padding: 6px 14px;
+  font-size: 15px;
+}
+.home-tools {
+  max-width: 1180px;
+  margin: 24px auto 0;
+  color: var(--ink-2);
+}
+.home-tools p {
+  margin: 0;
+}
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--water-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.home-foot {
+  max-width: 1180px;
+  margin: 18px auto 0;
+}
+@media (max-width: 900px) {
+  .home {
+    padding: 22px 16px 32px;
+  }
+  .home-lead {
+    font-size: 16.5px;
+  }
 }

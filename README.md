@@ -1,6 +1,8 @@
-# Ciclo hidrológico: exploración interactiva
+# Laboratorio del agua
 
-Aplicación educativa para niñas y niños de 8 a 12 años. Explica el ciclo hidrológico como un sistema: cómo se mueve, se almacena y cambia de estado el agua; qué energía lo impulsa; qué papel cumple la gravedad; y cómo se conectan la atmósfera, la vegetación, el suelo, los ríos, los acuíferos y el océano.
+Aplicación educativa en cuatro salas: **El ciclo del agua**, **Medellín: laboratorio de lluvia**, **Calidad del agua** e **Hidráulica de canales**. Se abre en una portada con una tarjeta por sala (o directo en una sala con un enlace que termine en `#recorrido`, `#explorar`, `#experimentos`, `#medellin`, `#calidad` o `#canales`; el botón «atrás» del navegador vuelve entre la portada y las salas); arriba, el encabezado lleva las salas, las herramientas que sirven en todas (Retos, Bitácora, Glosario), Ayuda y Ajustes, y el nombre vuelve a la portada. Dentro del ciclo del agua, una segunda fila tiene sus tres modos y la gota trazadora.
+
+La sala del ciclo del agua está pensada para niñas y niños de 8 a 12 años. Explica el ciclo hidrológico como un sistema: cómo se mueve, se almacena y cambia de estado el agua; qué energía lo impulsa; qué papel cumple la gravedad; y cómo se conectan la atmósfera, la vegetación, el suelo, los ríos, los acuíferos y el océano.
 
 Todo el contenido está en español. No requiere cuentas, servicios de pago ni claves de API. No recolecta datos personales: el progreso, las preferencias y la bitácora se guardan solo en el navegador.
 
@@ -42,13 +44,13 @@ Es un sitio estático: el cálculo y el dibujo 3D corren en el navegador de cada
 
 Cada vista de detalle es una secuencia con inicio, desarrollo y resultado. Tiene pausa, repetición, velocidad (½×, 1× y 2×) y una barra para revisarla. Incluye una variable para investigar: tipo de suelo, recarga o temporada seca, condiciones de la planta, tipo de nube o material del acuífero. Termina con el resultado, una invitación a explicar con palabras propias y una nueva pregunta.
 
-### Modos y herramientas
+### Salas, modos y herramientas
 
-| Modo | Qué permite |
+| Sala, modo o herramienta | Qué permite |
 | --- | --- |
 | **Recorrido guiado** | 15 pasos con nombres y progreso visible (introducción, reservorios, evaporación, transpiración, condensación, transporte, precipitación, intercepción, infiltración, percolación y recarga, escorrentía, agua subterránea, almacenamiento, las personas en el ciclo y cierre). Cada paso tiene una idea principal y una misión concreta, organizadas en **Observa**, **Investiga** y **Profundiza**. Sobre el paisaje, un subtítulo guía la mirada en tres momentos: inicio, desarrollo y resultado. El avance siempre lo controla el niño. |
 | **Exploración libre** | Capas que se encienden a voluntad: reservorios, todos los procesos, elementos y preguntas. Cualquier punto del paisaje abre su ficha. Las marcas «?» plantean preguntas que llevan a una observación, una vista de detalle, un experimento o la gota trazadora. |
-| **Laboratorio del agua** | *Explorar condiciones*: modelo cualitativo con reglas visibles y balance de la lluvia. *Comparar escenarios A/B*: dos cuencas imaginarias que difieren en una sola condición, simuladas a la vez. Sigue seis pasos: pregunta, predicción, cambio, ejecución, comparación y explicación. |
+| **Experimentos** (antes «Laboratorio del agua») | *Explorar condiciones*: modelo cualitativo con reglas visibles y balance de la lluvia. *Comparar escenarios A/B*: dos cuencas imaginarias que difieren en una sola condición, simuladas a la vez. Sigue seis pasos: pregunta, predicción, cambio, ejecución, comparación y explicación. |
 | **Gota trazadora** | Sigue una porción de agua por rutas ramificadas elegidas en cada bifurcación, con su estado y el tiempo de permanencia aproximado en cada reservorio. |
 | **Retos** | Sin cronómetros ni penalizaciones: cada respuesta no esperada recibe una pista y la opción de observar de nuevo. |
 | **Bitácora** | Registra observaciones (al completar vistas de detalle), predicciones e hipótesis, comparaciones y explicaciones escritas por el niño. Los niveles (Observación, Exploración, Investigación, Hidrología) premian observar, comparar y explicar, no hacer clics. Se puede descargar como texto. |
@@ -184,14 +186,14 @@ src/
   content/      Textos: pasos, secuencias, vistas de detalle, preguntas, datos con fuentes,
                 elementos, glosario, rutas, retos, experimentos de comparación, interfaz
   lab/          Modelo cualitativo y modelo de tormenta (balance en mm)
-  state/        Estado de la experiencia (store) y especificación de escena por modo
+  state/        Estado de la experiencia (store: portada, salas, modos y enlaces directos) y especificación de escena por modo
   scene/
     geometry.ts Coordenadas del paisaje, perfiles, trayectos y regiones
     art/        Ilustración SVG: cielo, montaña y páramo, superficie, corte, personas, flujos
     details/    Ilustraciones de las cinco vistas de detalle
     engine.ts   Motor de partículas en Canvas (un solo bucle, elementos reutilizados)
     SceneView   Cámara, capas, rótulos, lupas, preguntas y gota trazadora
-  components/   Paneles e interfaz (recorrido, exploración, laboratorio, bitácora, detalle)
+  components/   Portada (Home), encabezado con salas (Header), créditos y paneles (recorrido, exploración, experimentos, bitácora, detalle)
   lib/          Utilidades: trayectos, reloj de secuencias, almacenamiento local, audio, narración
   styles/       Estilos y fuentes
 ```

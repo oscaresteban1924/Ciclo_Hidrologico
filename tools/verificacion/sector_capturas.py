@@ -16,7 +16,7 @@ with sync_playwright() as p:
         pg = ctx.new_page()
         pg.on('console', lambda m: logs.append(f'{m.type}: {m.text}') if m.type == 'error' or (m.type == 'warning' and 'GL Driver' not in m.text) else None)
         pg.on('pageerror', lambda e: logs.append(f'pageerror: {e}'))
-        pg.goto('http://127.0.0.1:5173/'); pg.wait_for_timeout(900)
+        pg.goto('http://127.0.0.1:5173/#recorrido'); pg.wait_for_timeout(900)
         pg.get_by_role('button', name='Ajustes').first.click(); pg.get_by_role('radio', name='Alta' if Q == 'alta' else 'Ligera').click(); pg.keyboard.press('Escape'); pg.wait_for_timeout(300)
         pg.get_by_role('button', name='Medellín: laboratorio de lluvia').click(); pg.wait_for_timeout(1500)
         pg.wait_for_selector('.city-pick', timeout=30000)

@@ -648,6 +648,24 @@ El canal también tiene ahora «Simular una creciente». Se revisaron en captura
 
 **Cambio.** Al pie de Ayuda y de Ajustes, en el README y como autor del documento (`<meta name="author">`): «Diseñado y desarrollado por Oscar Cossio.» y, debajo, «Dedicado a Leidy Hernandez Acevedo: «Porque tú lo inspiraste, y a través de él enseñas y transformas territorios y vidas.»». Reemplaza el crédito anterior («Diseñado y elaborado por Leidy Hernandez Acevedo»). Se revisó en escritorio y teléfono.
 
+## 4 novovicies. «Laboratorio del agua»: portada y navegación por salas (ejecutada)
+
+**Pedido.** «Cambiemos el nombre del ciclo hidrológico a laboratorio del agua y refactoriza la interfaz.» Alcance escogido: portada con tarjetas por sala y navegación en dos niveles.
+
+**Nombre.** La aplicación se llama ahora «Laboratorio del agua»: encabezado, título de la página, descripción, memoria de cálculo de canales, README y título del artefacto. El modo que se llamaba «Laboratorio del agua» pasa a «Experimentos», para no confundirlo con el nombre de la aplicación. «Ciclo hidrológico» sigue como concepto: primer paso del recorrido y glosario.
+
+**Interfaz.**
+- **Portada.** Una tarjeta por sala, con su dibujo propio, qué se hace en ella y la entrada: el ciclo del agua tiene tres (Recorrido guiado, Exploración libre, Experimentos). Debajo, las herramientas comunes y los créditos con la dedicatoria.
+- **Encabezado.** El nombre vuelve a la portada; a su lado van las cuatro salas, las herramientas de todas las salas (Retos, Bitácora, Glosario), Ayuda y Ajustes.
+- **Segunda fila.** Solo dentro del ciclo del agua: sus tres modos y la gota trazadora.
+- **Teléfono.** Nombres cortos para que las cuatro salas y los tres modos quepan.
+- **Enlaces directos.** `#recorrido`, `#explorar`, `#experimentos`, `#medellin`, `#calidad` y `#canales`; el botón «atrás» del navegador vuelve entre la portada y las salas.
+- **Ayuda.** Reorganizada por salas; incluye la de hidráulica de canales, que faltaba.
+
+**Scripts de verificación.** Los guiones de `tools/verificacion/` abren ahora `#recorrido`, como antes de la portada. `superposiciones.py` revisa también la portada. `city5.py` entra a la sala del ciclo antes de pedir el recorrido.
+
+**Comprobado.** Portada en escritorio, tableta y teléfono; paso de la portada a una sala y regreso por el nombre; enlace directo, «atrás», «adelante» y recarga; pruebas 33 de 33 de canales y 26 de 26 de calidad. Superposiciones de toda la aplicación: 152 de 152 estados sin choques ni cortes en las cuatro pantallas, incluida la portada.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
