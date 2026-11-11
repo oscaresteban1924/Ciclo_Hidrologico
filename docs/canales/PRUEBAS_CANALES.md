@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**32 de 32 cumplen.**
+**33 de 33 cumplen.**
 
 ## H1. Geometría: área, perímetro, ancho de superficie y momento estático de las tres secciones — cumple
 
@@ -163,3 +163,8 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 - Tolerancia: cauce de 10 m, n = 0,035, S0 = 0,1 %, creciente de 5 a 60 m³/s con pico a las 6 h (onda difusiva, M > 15): a 5 y 10 km, el pico de Muskingum-Cunge a menos de 1 % del de Saint-Venant (segundo orden, celdas de 50 m) y el retraso del pico a menos de 10 %; el volumen de la creciente se conserva (< 1 %)
 - Medido: Muskingum-Cunge / Saint-Venant: 5 km: pico 59.26 / 59.30 m³/s, retraso 0.702 / 0.680 h, volumen -0.36 %, M = 34; 10 km: pico 58.55 / 58.62 m³/s, retraso 1.409 / 1.363 h, volumen -0.74 %, M = 34
+
+## H33. Norma colombiana: criterios de la Resolución 0330 de 2017 (RAS) con su artículo en las herramientas de diseño — cumple
+
+- Tolerancia: valores iguales a los leídos en el texto oficial (Arts. 135 y 138 con las Tablas 16 y 17; Arts. 148 a 152 y 159); un canal de concreto con más de 5 m/s no cumple el Art. 152 num. 4 y uno con menos de 0,75 m/s no cumple el num. 5; un canal en tierra no recibe esos dos (no es revestido); un tubo de 200 mm no cumple el Art. 148 y uno casi plano no cumple la autolimpieza del Art. 149; un tubo bien escogido cumple los Arts. 148 a 151; los pozos dejan el agua en régimen subcrítico (Art. 159)
+- Medido: concreto rápido 9,34 m/s; lento 0,21 m/s; tubo 200 mm no cumple; tubo casi plano 0,3 Pa; tubo de 600 mm al 1 %: cumple, cumple, cumple, cumple; pozos subcríticos

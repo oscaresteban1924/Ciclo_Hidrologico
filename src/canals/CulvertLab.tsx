@@ -9,6 +9,7 @@ import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
 import { CR_ROAD, CULVERT_RULES, DEFAULT_CULVERT, INLETS, KU, N_PIPE, ROAD_LEN, culvertModel, ratingCurve, type CulvertInput, type CulvertResult, type Inlet } from './culvert';
 import { CulvertWorld } from './three/culvertWorld';
 import { DesignTab } from './design';
+import { LiveHud, type LiveProfileData } from './live';
 
 interface Ctx {
   inp: CulvertInput;
@@ -94,8 +95,47 @@ export function CulvertLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   );
 
   const box = inp.shape === 'cajon';
+  const culvertProfile = useMemo<LiveProfileData>(() => {
+    const { L, S, D, road, tw } = r.inp;
+    const zo = -S * L;
+    // dentro del tubo, la superficie va recta entre la entrada y la salida, igual que en la escena (ilustrativa)
+    const yIn = Math.min(D, r.control === 'salida' ? D : Math.max(r.yc, r.yOut));
+    const pts = [
+      { x: -20, zb: 0, z: r.hw },
+      { x: -0.01, zb: 0, z: r.hw },
+      ...Array.from({ length: 11 }, (_, k) => {
+        const x = (L * k) / 10;
+        return { x, zb: -S * x, z: -S * x + yIn + ((r.yOut - yIn) * k) / 10 };
+      }),
+      { x: L + 0.01, zb: zo, z: zo + tw },
+      { x: L + 20, zb: zo, z: zo + tw },
+    ];
+    return {
+      pts,
+      top: [
+        { x: 0, z: D },
+        { x: L, z: zo + D },
+      ],
+      blocks: [{ pts: [[0, D], [L, zo + D], [L * 0.78, road], [L * 0.22, road]], fill: '#c9b48f' }],
+      levels: [{ z: road, x0: L * 0.22, x1: L * 0.78, label: 'vía', color: '#5b6670' }],
+      marks: [
+        { x: 0, label: 'entrada' },
+        { x: L, label: 'salida' },
+      ],
+    };
+  }, [r]);
+
   const dock = (
     <>
+      <LiveHud
+        head={[`Q = ${es(inp.Q, 1)} m³/s`, `HW = ${es(r.hw, 2)} m`, `control a la ${r.control}`, r.overtop ? 'el agua pasa sobre la vía' : 'la vía no se moja']}
+        profile={culvertProfile}
+        profileLabel="Perfil por la alcantarilla: agua a la entrada, dentro del tubo y a la salida, con el terraplén y la vía"
+        traces={[
+          { key: 'hw', label: 'Agua a la entrada (HW)', unit: 'm', value: r.hw, digits: 2, ref: { value: inp.road, label: 'vía' } },
+          { key: 'vout', label: 'Velocidad a la salida', unit: 'm/s', value: r.Vout, digits: 2, ref: { value: CULVERT_RULES.vout, label: 'máx. del juego' } },
+        ]}
+      />
       <DockRange label="Caudal de la creciente" value={inp.Q} min={0.5} max={40} step={0.5} show={`${es(inp.Q, 1)} m³/s`} onChange={(v) => set({ Q: v })} />
       <FloodPlayer q={inp.Q} qMax={40} onQ={(v) => set({ Q: v })} />
       <DockChoice<'circ' | 'cajon'> label="Conducto" value={inp.shape ?? 'circ'} options={[{ value: 'circ', label: 'Tubo' }, { value: 'cajon', label: 'Cajón' }]} onChange={(v) => set({ shape: v, inlet: v === 'cajon' ? 'aletas3075' : 'muro' })} />

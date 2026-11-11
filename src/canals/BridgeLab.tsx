@@ -10,6 +10,8 @@ import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
 import { BridgeDiagram } from './diagrams';
 import { CD_PRESSURE, CREEK, CW_DECK, DEBRIS, DEFAULT_BRIDGE, PIER_A, PIER_K, bridgeModel, type BridgeInput, type BridgeResult, type Debris } from './hydraulics';
 import { BridgeWorld } from './three/bridgeWorld';
+import { LiveHud, type LiveProfileData } from './live';
+import { bridgeSurface } from './profiles';
 
 interface Ctx {
   inp: BridgeInput;
@@ -122,8 +124,37 @@ export function BridgeLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     </>
   );
 
+  const bridgeProfile = useMemo<LiveProfileData>(() => {
+    const x0 = -Math.min(400, Math.max(80, r.backwater * 1.15)), x1 = 40;
+    const sf = bridgeSurface(r, x0, x1, 1);
+    const S = inp.S;
+    const bedAt = (x: number) => -S * x;
+    const dw = 1.2; // ancho del tablero en el dibujo (m)
+    return {
+      pts: sf.map((p) => {
+        const V = inp.Q / (CREEK.b * Math.max(0.02, p.y));
+        return { x: p.x, zb: p.bed, z: p.bed + p.y, E: p.bed + p.y + (V * V) / (2 * 9.81) };
+      }),
+      normal: [x0, x1].map((x) => ({ x, z: bedAt(x) + r.yn })),
+      crit: [x0, x1].map((x) => ({ x, z: bedAt(x) + r.yc })),
+      top: [x0, x1].map((x) => ({ x, z: bedAt(x) + CREEK.H })),
+      blocks: [{ pts: [[-dw / 2, inp.soffit], [dw / 2, inp.soffit], [dw / 2, inp.soffit + CREEK.deck], [-dw / 2, inp.soffit + CREEK.deck]], fill: '#8f969c' }],
+      marks: [{ x: 0, label: 'puente' }],
+    };
+  }, [r, inp]);
+  const flowName: Record<BridgeResult['flow'], string> = { libre: 'paso libre', estrangulado: 'estrangulado', presion: 'a presión', encima: 'pasa por encima' };
+
   const dock = (
     <>
+      <LiveHud
+        head={[`Q = ${es(inp.Q, 0)} m³/s`, flowName[r.flow], `sube ${es(r.rise, 2)} m`, `remanso ${es(r.backwater, 0)} m`]}
+        profile={bridgeProfile}
+        profileLabel="Perfil de la quebrada hacia aguas arriba del puente: agua, energía, profundidad normal y crítica, borde del cauce y tablero"
+        traces={[
+          { key: 'yu', label: 'Agua justo arriba del puente', unit: 'm', value: r.yU, digits: 2, ref: { value: inp.soffit, label: 'bajo del puente' } },
+          { key: 'rise', label: 'Cuánto sube sobre la normal', unit: 'm', value: r.rise, digits: 2 },
+        ]}
+      />
       <DockRange label="Caudal de la creciente" value={inp.Q} min={5} max={90} step={1} show={`${es(inp.Q, 0)} m³/s`} onChange={(v) => set({ Q: v })} />
       <FloodPlayer q={inp.Q} qMax={90} digits={0} onQ={(v) => set({ Q: v })} />
       <SlopeRange value={inp.S} lo={0.001} hi={0.02} onChange={(S) => set({ S })} label="Pendiente de la quebrada" />

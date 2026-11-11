@@ -213,7 +213,20 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 
 **Memoria de cálculo.** Cada herramienta arma una memoria en HTML imprimible (se abre en el navegador y se imprime o se guarda en PDF): proyecto y autor opcionales, fecha, nivel, datos, plano, gráfica, cálculo paso a paso, resultados, verificaciones y la advertencia de prediseño académico. Se arma en el navegador: no se envía a ningún servidor, no se guarda y no pide cuenta.
 
-**Simular una creciente.** En el resalto, el puente, la alcantarilla y los sedimentos, el caudal sube a un pico y vuelve con la forma del hidrograma adimensional gamma (Haan, 1970): q/qp = (t/tp·e^(1 − t/tp))^3,7, en tiempo comprimido (unos 30 s); la escena se recalcula en cada paso.
+**Norma colombiana.** Las herramientas revisan, además de sus criterios para aprender, los de la Resolución 0330 de 2017 del Ministerio de Vivienda, Ciudad y Territorio (RAS), con su artículo en el nombre de cada verificación y en la memoria de cálculo (`norms.ts`). Los valores se leyeron en el texto oficial: el compilado del Ministerio con la Resolución 0799 de 2021 y, para los Arts. 148 a 152, también el original publicado en el Diario Oficial 50.267; el Anexo 1 del compilado confirma que la Resolución 0799 de 2021 no cambió los artículos usados (al 138 solo le agregó un numeral sin relación).
+
+| Herramienta | Criterio | Artículo |
+|---|---|---|
+| Calculadora de flujo uniforme, tubo (alcantarillado pluvial o combinado) | diámetro interno ≥ 260 mm; esfuerzo en la pared ≥ 2,0 Pa (autolimpieza); velocidad ≤ 5,0 m/s (hasta 10 m/s solo en los casos del parágrafo); profundidad ≤ 93 % del diámetro | Arts. 148, 149, 150 y 151 |
+| Calculadora de flujo uniforme y prediseño del canal (canal abierto de aguas lluvias) | revestido en concreto: velocidad ≤ 5,0 m/s; revestido (concreto o piedra pegada): velocidad ≥ 0,75 m/s; evitar el flujo crítico (la norma no fija un margen: la herramienta avisa con Fr entre 0,9 y 1,1) | Art. 152, nums. 4, 5 y 1 |
+| Pozos amortiguadores (liso y USBR) | el agua sale de la disipación en régimen subcrítico | Art. 159 |
+| Nota de la pestaña Diseño | período de retorno mínimo de la lluvia de diseño: 50 años para canales abiertos que drenan menos de 1 000 ha y 100 años si drenan más | Art. 135, Tabla 16 |
+
+La resolución trata el alcantarillado y el drenaje urbano. Las alcantarillas bajo una vía y los puentes se rigen por el Manual de Drenaje para Carreteras del INVÍAS (Resolución 0024 de 2011), que todavía no está incluido: su archivo oficial no se pudo leer desde este entorno. La prueba H33 revisa los valores y que cada herramienta los aplique.
+
+**Instrumentos en vivo en todas las partes** (`live.tsx`). Cada parte muestra en su panel un perfil longitudinal con el fondo, el agua, la línea de energía y, donde aplica, la profundidad crítica y la normal, el borde del cauce y las estructuras (vertedero del pozo, tablero del puente, terraplén y vía de la alcantarilla, placa o compuerta del aforo), con la escala vertical aumentada (lo dice el rótulo). Además, dos registros de los últimos 40 s con su referencia: en el canal, la profundidad frente al borde de la pared y la velocidad frente a 5,0 m/s del RAS (concreto) o a la de erosión del material; en el resalto, dónde empieza frente al fin del pozo y el agua del pozo frente a la conjugada; en el puente, el agua justo arriba frente al bajo del puente y cuánto sube sobre la normal; en la alcantarilla, el agua a la entrada frente a la vía y la velocidad a la salida; en los sedimentos (sin perfil: el cauce es uniforme), θ/θcr frente al umbral y el arrastre de fondo; en el aforo, la carga frente a la mínima para que valga la ecuación (3 cm el rectangular, 6 cm el triangular) y el caudal. Los datos son los del cálculo de cada parte. Dentro de la alcantarilla, la superficie se dibuja recta entre la profundidad de la entrada y la de la salida, como en la escena.
+
+**Simular una creciente.** En el canal, el resalto, el puente, la alcantarilla y los sedimentos, el caudal sube a un pico y vuelve con la forma del hidrograma adimensional gamma (Haan, 1970): q/qp = (t/tp·e^(1 − t/tp))^3,7, en tiempo comprimido (unos 30 s); la escena se recalcula en cada paso.
 
 **Entradas siempre válidas.** Las escenas sanean sus entradas (`sanitizeUniform`, `sanitizeJump`, `sanitizeBridge`, `sanitizeGauge`, `sanitizeCulvert`, `sanitizeSediment`, `sanitizeWave`): un número que no es finito toma el valor por defecto y uno fuera de rango se lleva al borde. Las herramientas revisan los datos y responden con un aviso cuando no sirven. La prueba H15 llama 10 000 veces las veinticinco herramientas con datos al azar y exige que no haya excepciones ni valores no numéricos; la H23 hace lo mismo con los planos, las gráficas y la memoria.
 
@@ -223,10 +236,12 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 - Los coeficientes del puente (paso a presión y tablero) son del orden de magnitud de HDS-7, no los de un caso particular.
 - El transporte de sedimentos supone un lecho uniforme de un solo tamaño, sin acorazamiento ni formas de fondo.
 - Las reglas del juego (borde libre, llenado del tubo, criterios de la alcantarilla, factor de seguridad del enrocado) son didácticas; un diseño real sigue la norma vigente del lugar.
-- No se incluyeron criterios de normas colombianas (Manual de Drenaje para Carreteras del INVÍAS, Resolución 0330 de 2017) porque no se pudieron verificar contra sus textos oficiales; se pueden agregar con esos documentos a la mano.
+- De las normas colombianas se incluyen los criterios de la Resolución 0330 de 2017 (RAS) que aplican a las herramientas (ver la sección 8). No se incluye el Manual de Drenaje para Carreteras del INVÍAS (alcantarillas bajo vías, puentes, cunetas): su archivo oficial no se pudo leer desde este entorno; se puede agregar con el documento a la mano. Las demás reglas (borde libre del juego, criterios de la alcantarilla, factor del enrocado) siguen siendo didácticas.
 - Las proporciones de los pozos del USBR, los coeficientes de Yarnell y de HEC-18 y las tablas de Parshall son los publicados; los largos de los pozos son aproximaciones de curvas.
 
 ## Fuentes
+
+- Ministerio de Vivienda, Ciudad y Territorio (2017). Resolución 0330 de 2017, Reglamento Técnico para el Sector de Agua Potable y Saneamiento Básico (RAS). *Diario Oficial* 50.267; modificada por la Resolución 0799 de 2021. Texto compilado: Anexo 2 del documento compilatorio del Ministerio.
 
 - Chow, V. T. (1959). *Open-Channel Hydraulics*. McGraw-Hill.
 - Henderson, F. M. (1966). *Open Channel Flow*. Macmillan.

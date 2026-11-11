@@ -7,7 +7,9 @@ import { useStore } from '../state/store';
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
 import { useTime } from '../quality/lensKit';
 import { DesignTab } from './design';
-import { FlatStage, Row, SlopeRange, es } from './common';
+import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
+import { LiveHud, type LiveProfileData } from './live';
+import { RAS } from './norms';
 import { SectionDiagram } from './diagrams';
 import { DEFAULT_UNIFORM, FREEBOARD_FRAC, G, MATERIALS, NEAR_CRITICAL, PIPE_FILL, SHAPES, VMIN, geom, manningQ, uniformModel, type Material, type Shape, type UniformInput, type UniformResult } from './hydraulics';
 import { UniformWorld } from './three/uniformWorld';
@@ -122,8 +124,30 @@ export function UniformLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     </>
   );
 
+  const uniProfile = useMemo<LiveProfileData | null>(() => {
+    if (!Number.isFinite(r.yn)) return null;
+    const S = inp.S, X = 100;
+    const wall = r.sec.shape === 'circ' ? r.sec.D : r.sec.H;
+    const E = r.yn + (r.V * r.V) / (2 * G);
+    return {
+      pts: [0, X].map((x) => ({ x, zb: -S * x, z: -S * x + r.yn, E: -S * x + E })),
+      crit: [0, X].map((x) => ({ x, z: -S * x + r.yc })),
+      top: [0, X].map((x) => ({ x, z: -S * x + wall })),
+    };
+  }, [r, inp.S]);
+  const velRef = inp.material === 'concreto' ? { value: RAS.concreteVmax, label: 'RAS: máx. 5,0 m/s (concreto)' } : MATERIALS[inp.material].vmax ? { value: MATERIALS[inp.material].vmax as number, label: 'erosiona' } : undefined;
+
   const dock = (
     <>
+      <LiveHud
+        head={[`Q = ${es(inp.Q, 1)} m³/s`, Number.isFinite(r.yn) ? `y = ${es(r.yn, 2)} m` : 'a presión', `V = ${es(r.V, 2)} m/s`, `Fr = ${es(r.F, 2)}`]}
+        profile={uniProfile}
+        profileLabel="Perfil de 100 m del canal: fondo, agua a la profundidad normal, línea de energía, profundidad crítica y borde de las paredes"
+        traces={[
+          { key: 'y', label: 'Profundidad', unit: 'm', value: Number.isFinite(r.yn) ? r.yn : NaN, digits: 2, ref: { value: r.sec.shape === 'circ' ? r.sec.D : r.sec.H, label: r.sec.shape === 'circ' ? 'tubo lleno' : 'borde de la pared' } },
+          { key: 'v', label: 'Velocidad', unit: 'm/s', value: r.V, digits: 2, ref: velRef },
+        ]}
+      />
       <DockChoice<Shape>
         label="Forma"
         value={inp.shape}
@@ -144,6 +168,7 @@ export function UniformLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       )}
       <SlopeRange value={inp.S} lo={LO} hi={HI} onChange={(S) => set({ S })} />
       <DockRange label="Caudal" value={inp.Q} min={0.1} max={20} step={0.1} show={`${es(inp.Q, 1)} m³/s`} onChange={(v) => set({ Q: Math.round(v * 10) / 10 })} />
+      <FloodPlayer q={inp.Q} qMax={20} onQ={(v) => set({ Q: v })} />
     </>
   );
 

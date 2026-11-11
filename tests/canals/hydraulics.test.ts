@@ -42,6 +42,7 @@ import { chartSVG, planSVG } from '../../src/canals/plan';
 import { memoriaHTML } from '../../src/canals/memoria';
 import { calcCeleridad, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRotura, calcRugosidad, calcTransito, muskingumCunge, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from '../../src/canals/designAdvanced';
 import { WaveSim, steadyDepth } from '../../src/canals/waves';
+import { RAS, RAS_SHORT, RAS_TABLA16, RAS_TABLA17, canalReturnPeriod } from '../../src/canals/norms';
 import { gammaHydrograph } from '../../src/canals/common';
 import { calcAforo, calcAlcantarilla, calcCanal, calcPuente, calcResalto, calcSedimento, preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente } from '../../src/canals/designCalc';
 import { CR_ROAD, INLETS, ROAD_LEN, culvertModel, inletHW, outletHW, type Inlet } from '../../src/canals/culvert';
@@ -959,6 +960,38 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     name: 'Tránsito de una creciente: Muskingum-Cunge de parámetros variables igual al modelo completo de Saint-Venant',
     tolerance: 'cauce de 10 m, n = 0,035, S0 = 0,1 %, creciente de 5 a 60 m³/s con pico a las 6 h (onda difusiva, M > 15): a 5 y 10 km, el pico de Muskingum-Cunge a menos de 1 % del de Saint-Venant (segundo orden, celdas de 50 m) y el retraso del pico a menos de 10 %; el volumen de la creciente se conserva (< 1 %)',
     measured: `Muskingum-Cunge / Saint-Venant: ${rows.join('; ')}`,
+    pass: ok,
+  });
+}
+
+// H33) Norma colombiana (Res. 0330 de 2017, RAS): valores leídos y verificaciones en las herramientas
+{
+  const ras = (r: { checks?: { name: string; ok: boolean }[] }, art: string) => r.checks?.find((c) => c.name.startsWith(RAS_SHORT) && c.name.includes(art));
+  const values = RAS.pluvialDmin === 0.26 && RAS.pluvialTauMin === 2 && RAS.vmax === 5 && RAS.vmaxSpecial === 10 && RAS.fillMax === 0.93 && RAS.closedFill === 0.9 && RAS.concreteVmax === 5 && RAS.linedVmin === 0.75;
+  const tables = RAS_TABLA16.map((r) => r.T).join(',') === '3,5,5,10,50,100,100' && RAS_TABLA17.map((r) => r.T).join(',') === '25,50,100' && canalReturnPeriod(500) === 50 && canalReturnPeriod(1500) === 100;
+  // canal de concreto: muy pendiente (V > 5 m/s), normal y casi plano (V < 0,75 m/s)
+  const fast = calcCanal({ forma: 'rect', b: 1, material: 'concreto', S: 8, Q: 6 });
+  const mid = calcCanal({ forma: 'rect', b: 2, material: 'concreto', S: 0.2, Q: 3 });
+  const slow = calcCanal({ forma: 'rect', b: 4, material: 'concreto', S: 0.002, Q: 0.5 });
+  const earth = calcCanal({ forma: 'trap', b: 2, z: 1.5, material: 'tierra', S: 0.1, Q: 2 });
+  // tubo pluvial: 200 mm (no cumple el Art. 148) y 600 mm casi plano (no cumple autolimpieza del Art. 149)
+  const small = calcCanal({ forma: 'circ', D: 0.2, material: 'concreto', S: 1, Q: 0.01 });
+  const flat = calcCanal({ forma: 'circ', D: 0.6, material: 'concreto', S: 0.02, Q: 0.05 });
+  const good = calcCanal({ forma: 'circ', D: 0.6, material: 'concreto', S: 1, Q: 0.2 });
+  const pc = preCanal({ Q: 4, material: 'concreto', S: 0.1, forma: 'trap', z: 1.5, fb: 20 });
+  const pz = prePozo({ Q: 12, b: 4, H: 6, loss: 10, fs: 1.1 });
+  const pu = prePozoUSBR({});
+  const ok =
+    values && tables &&
+    ras(fast, 'num. 4')?.ok === false && ras(mid, 'num. 4')?.ok === true && ras(mid, 'num. 5')?.ok === true && ras(slow, 'num. 5')?.ok === false &&
+    !ras(earth, 'num. 4') && !ras(earth, 'num. 5') && !!ras(earth, 'num. 1') &&
+    ras(small, 'Art. 148')?.ok === false && ras(flat, 'Art. 149')?.ok === false && [148, 149, 150, 151].every((a) => ras(good, `Art. ${a}`)?.ok === true) &&
+    !!ras(pc, 'num. 4') && ras(pz, 'Art. 159')?.ok === true && ras(pu, 'Art. 159')?.ok === true;
+  record({
+    id: 'H33',
+    name: 'Norma colombiana: criterios de la Resolución 0330 de 2017 (RAS) con su artículo en las herramientas de diseño',
+    tolerance: 'valores iguales a los leídos en el texto oficial (Arts. 135 y 138 con las Tablas 16 y 17; Arts. 148 a 152 y 159); un canal de concreto con más de 5 m/s no cumple el Art. 152 num. 4 y uno con menos de 0,75 m/s no cumple el num. 5; un canal en tierra no recibe esos dos (no es revestido); un tubo de 200 mm no cumple el Art. 148 y uno casi plano no cumple la autolimpieza del Art. 149; un tubo bien escogido cumple los Arts. 148 a 151; los pozos dejan el agua en régimen subcrítico (Art. 159)',
+    measured: `concreto rápido ${(fast.checks?.find((c) => c.name.includes('num. 4'))?.value) ?? '—'}; lento ${(slow.checks?.find((c) => c.name.includes('num. 5'))?.value) ?? '—'}; tubo 200 mm ${ras(small, 'Art. 148')?.ok ? 'cumple' : 'no cumple'}; tubo casi plano ${(flat.checks?.find((c) => c.name.includes('Art. 149')) as { value?: string } | undefined)?.value ?? '—'}; tubo de 600 mm al 1 %: ${[148, 149, 150, 151].map((a) => (ras(good, `Art. ${a}`)?.ok ? 'cumple' : 'no')).join(', ')}; pozos ${ras(pz, 'Art. 159')?.ok && ras(pu, 'Art. 159')?.ok ? 'subcríticos' : 'NO'}`,
     pass: ok,
   });
 }

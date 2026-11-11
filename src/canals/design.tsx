@@ -3,6 +3,7 @@
 // (pocos datos y una frase) y Universitarios (todos los datos, pasos y verificaciones). Prediseños académicos.
 
 import { useEffect, useMemo, useState } from 'react';
+import { RAS_REF, RAS_SHORT, RAS_TABLA16 } from './norms';
 import { MATERIALS, type Material } from './hydraulics';
 import { INLETS, type Inlet } from './culvert';
 import {
@@ -573,6 +574,14 @@ function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind:
             </li>
           ))}
         </ul>
+      )}
+      {res.checks?.some((c) => c.name.startsWith(RAS_SHORT)) && (
+        <details className="hc-details">
+          <summary>Norma colombiana citada</summary>
+          <p className="q3-small">
+            {RAS_REF}. Para canales abiertos de aguas lluvias, la lluvia de diseño debe tener un período de retorno de al menos {RAS_TABLA16[4].T} años si el canal drena menos de 1 000 ha, y de {RAS_TABLA16[5].T} años si drena más (Art. 135, Tabla 16). Las demás verificaciones son criterios de la herramienta para aprender. El Manual de Drenaje para Carreteras del INVÍAS (alcantarillas bajo vías y puentes) todavía no está incluido.
+          </p>
+        </details>
       )}
       {!kid && res.steps.length > 0 && (
         <details className="hc-details">

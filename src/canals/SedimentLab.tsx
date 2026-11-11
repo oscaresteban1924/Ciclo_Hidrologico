@@ -7,6 +7,7 @@ import { DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos
 import { INK, Lens, Tag, useLensUid, type Chip } from '../quality/lensKit';
 import { FlatStage, FloodPlayer, Row, SlopeRange, es } from './common';
 import { DesignTab } from './design';
+import { LiveHud } from './live';
 import { BED_W, DEFAULT_SEDIMENT, GRAINS, MODE_NAME, RIPRAP, dStar, sedimentModel, shieldsCrit, type SedimentInput, type SedimentResult } from './sediment';
 import { SedimentWorld } from './three/sedimentWorld';
 
@@ -100,6 +101,13 @@ export function SedimentLab({ head, gl }: { head: ReactNode; gl: boolean }) {
 
   const dock = (
     <>
+      <LiveHud
+        head={[`Q = ${es(inp.Q, 1)} m³/s`, `h = ${es(r.h, 2)} m`, `V = ${es(r.V, 2)} m/s`, `el grano ${MODE_NAME[r.mode]}`]}
+        traces={[
+          { key: 'mob', label: 'Fuerza sobre el grano θ/θcr', unit: '', value: r.mobility, digits: 2, ref: { value: 1, label: 'umbral de movimiento' } },
+          { key: 'qb', label: 'Arrastre de fondo', unit: 't/día', value: r.tDay, digits: 0 },
+        ]}
+      />
       <DockRange label="Caudal" value={inp.Q} min={0.5} max={200} step={0.5} show={`${es(inp.Q, 1)} m³/s`} onChange={(v) => set({ Q: v })} />
       <FloodPlayer q={inp.Q} qMax={200} onQ={(v) => set({ Q: v })} />
       <SlopeRange value={inp.S} lo={0.0002} hi={0.05} onChange={(S) => set({ S })} label="Pendiente del cauce" />

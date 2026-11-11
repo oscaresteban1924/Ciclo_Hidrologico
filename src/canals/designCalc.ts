@@ -3,6 +3,7 @@
 // verificaciones y la memoria de cálculo. Son prediseños académicos: no son diseños de ingeniería.
 
 import { CULVERT_RULES, INLETS, culvertModel, inletHW, outletHW, type Inlet } from './culvert';
+import { rasChannelChecks, rasOutletCheck, rasPipeChecks } from './norms';
 import { BROAD_C, FLUME, G, MATERIALS, VMIN, alternateDepths, belanger, criticalDepth, froude, geom, jumpKind, JUMP_NAME, manningQ, normalDepth, rectWeirQ, specificEnergy, triWeirQ, gateUpstream, type Material, type Section, type Shape } from './hydraulics';
 import { RHO, RHO_S, RIPRAP, dStar, fallVelocity, shieldsCrit, bedloadStar, KAPPA, SG, MODE_NAME, type Mode } from './sediment';
 
@@ -78,6 +79,10 @@ export function calcCanal(v: Vals): Result {
       `V = Q/A = ${f(V, 3)} m/s; D = A/T = ${f(g.Dh, 4)} m; F = V/√(g·D) = ${f(F, 3)}.`,
       `Crítica: Q²·T/(g·A³) = 1 → yc = ${f(yc, 4)} m. Energía E = y + V²/2g = ${f(E, 4)} m.`,
     ],
+    checks:
+      s.shape === 'circ'
+        ? rasPipeChecks({ D: s.D, V, tau: 1000 * G * g.R * S, yD: y / s.D })
+        : rasChannelChecks({ V, Fr: F, lined: v.material === 'concreto' || v.material === 'piedra', concrete: v.material === 'concreto' }),
     kid: `El agua va a ${f(y, 2)} m de profundidad y ${f(V, 1)} m/s: ${F < 1 ? 'lenta (las ondas pueden subir)' : 'rápida (las ondas no pueden subir)'}.`,
   };
 }
@@ -113,6 +118,7 @@ export function preCanal(v: Vals): Result {
     { name: vmax ? `No erosiona (V ≤ ${f(vmax)} m/s)` : 'Revestimiento resistente (sin límite de erosión en el juego)', ok: !vmax || V <= vmax, value: `${f(V)} m/s` },
     { name: 'Flujo estable (Froude fuera de 0,8 a 1,2)', ok: F < 0.8 || F > 1.2, value: f(F) },
     { name: `Borde libre de ${Math.round(fb * 100)} % (y al menos 0,10 m)`, ok: true, value: `${f(H - y)} m` },
+    ...rasChannelChecks({ V, Fr: F, lined: mat === 'concreto' || mat === 'piedra', concrete: mat === 'concreto' }),
   ];
   return {
     outs: [
@@ -180,6 +186,7 @@ export function prePozo(v: Vals): Result {
     { name: 'Resalto estable (F1 de 4,5 a 9)', ok: F1 >= 4.5 && F1 <= 9, value: f(F1, 1) },
     { name: 'Evita el oscilante (F1 de 2,5 a 4,5)', ok: F1 < 2.5 || F1 >= 4.5, value: JUMP_NAME[kind] },
     { name: 'El vertedero de salida tiene altura positiva', ok: ytw > Hw, value: `${f(P)} m` },
+    rasOutletCheck(q / Math.sqrt(G * ytw * ytw * ytw)),
   ];
   return {
     outs: [

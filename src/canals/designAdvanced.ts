@@ -7,6 +7,7 @@ import { G, alternateDepths, belanger, geom, manningQ, normalDepth, type Section
 import { bedN } from './sediment';
 import { favreSurge, stoker } from './unsteady';
 import { f, type Check, type Result, type Vals } from './designCalc';
+import { rasOutletCheck } from './norms';
 
 const GAMMA = 9810;
 const num = (v: number | string | undefined, def = 0) => {
@@ -139,6 +140,7 @@ export function prePozoUSBR(v: Vals): Result {
     { name: 'El agua de abajo alcanza la que pide el pozo', ok: tw + floorDrop >= des.twMin - 1e-6, value: `${f(tw + floorDrop, 2)} m de ${f(des.twMin, 2)} m` },
     { name: 'El pozo con accesorios es más corto que el resalto libre', ok: des.type === 'I' || des.L < des.Lfree, value: `${f(des.L, 1)} m frente a ${f(des.Lfree, 1)} m` },
     { name: 'Fuera del resalto oscilante (F1 de 2,5 a 4,5) o con pozo tipo IV', ok: !(F1 > 2.5 && F1 < 4.5) || des.type === 'IV', value: `F1 = ${f(F1, 2)}` },
+    rasOutletCheck(q / Math.sqrt(G * Math.pow(tw + floorDrop, 3))),
   ];
   return {
     outs,

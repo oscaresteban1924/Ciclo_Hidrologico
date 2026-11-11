@@ -7,6 +7,7 @@ import { useStore } from '../state/store';
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
 import { DesignTab } from './design';
 import { FlatStage, Row, es } from './common';
+import { LiveHud, type LiveProfileData } from './live';
 import { GaugeDiagram } from './diagrams';
 import { DEFAULT_GAUGE, FLOAT_K, FLUME, G, gaugeModel, powerFit, rectWeirQ, triWeirQ, type Device, type GaugeInput, type GaugeResult } from './hydraulics';
 import { GaugeWorld } from './three/gaugeWorld';
@@ -109,8 +110,46 @@ export function GaugeLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     </>
   );
 
+  const gaugeProfile = useMemo<LiveProfileData>(() => {
+    const dev = inp.device;
+    const pts = [
+      { x: -1.5, zb: 0, z: r.yUp },
+      { x: -0.005, zb: 0, z: r.yUp },
+    ];
+    const blocks: LiveProfileData['blocks'] = [];
+    if (dev === 'gate') {
+      const yv = r.yVena ?? inp.gate * FLUME.Cc;
+      pts.push({ x: 0.005, zb: 0, z: yv }, { x: 0.6, zb: 0, z: yv });
+      blocks.push({ pts: [[-0.01, inp.gate], [0.01, inp.gate], [0.01, FLUME.H], [-0.01, FLUME.H]], fill: '#7d8a94' });
+    } else {
+      const P = dev === 'tri' ? FLUME.Ptri : FLUME.P;
+      blocks.push({ pts: [[-0.006, 0], [0.006, 0], [0.006, P], [-0.006, P]], fill: '#7d8a94' });
+    }
+    return {
+      pts,
+      blocks,
+      top: [
+        { x: -1.5, z: FLUME.H },
+        { x: dev === 'gate' ? 0.6 : 0, z: FLUME.H },
+      ],
+      marks: [{ x: -0.6, label: 'regla' }],
+    };
+  }, [r, inp]);
+  const thinLimit = inp.device === 'tri' ? 0.06 : 0.03;
+
   const dock = (
     <>
+      <LiveHud
+        head={[`Q = ${es(inp.Qls, 1)} L/s`, inp.device === 'gate' ? `agua arriba ${es(r.yUp * 100, 1)} cm` : `carga H = ${es(r.H * 100, 1)} cm`, `V = ${es(r.Vup, 2)} m/s`]}
+        profile={gaugeProfile}
+        profileLabel="Perfil del canal de laboratorio junto a la estructura de aforo: agua aguas arriba, estructura y paredes"
+        traces={[
+          inp.device === 'gate'
+            ? { key: 'h', label: 'Agua aguas arriba', unit: 'cm', value: r.yUp * 100, digits: 1, ref: { value: FLUME.H * 100, label: 'borde del canal' } }
+            : { key: 'h', label: 'Carga sobre la estructura H', unit: 'cm', value: r.H * 100, digits: 1, ref: { value: thinLimit * 100, label: 'mínima para la ecuación' } },
+          { key: 'q', label: 'Caudal de la bomba', unit: 'L/s', value: inp.Qls, digits: 1 },
+        ]}
+      />
       <DockChoice<Device>
         label="Estructura"
         value={inp.device}

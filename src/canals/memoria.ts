@@ -3,6 +3,7 @@
 // Se arma en el navegador; no se envía a ningún servidor.
 
 import type { Result } from './designCalc';
+import { RAS_REF, RAS_SHORT } from './norms';
 
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -23,7 +24,9 @@ export function memoriaHTML(m: MemoriaInput): string {
   const date = now.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
   const rows = (r: { label: string; value: string }[]) => r.map((x) => `<tr><th>${esc(x.label)}</th><td>${esc(x.value)}</td></tr>`).join('');
   const checks = m.res.checks?.length
-    ? `<h2>§ Verificaciones</h2><table class="chk">${m.res.checks.map((c) => `<tr class="${c.ok ? 'ok' : 'no'}"><th>${esc(c.name)}</th><td>${c.ok ? 'Cumple' : 'No cumple'}</td><td>${esc(c.value)}</td></tr>`).join('')}</table>`
+    ? `<h2>§ Verificaciones</h2><table class="chk">${m.res.checks.map((c) => `<tr class="${c.ok ? 'ok' : 'no'}"><th>${esc(c.name)}</th><td>${c.ok ? 'Cumple' : 'No cumple'}</td><td>${esc(c.value)}</td></tr>`).join('')}</table>${
+        m.res.checks.some((c) => c.name.startsWith(RAS_SHORT)) ? `<p class="note">Norma citada: ${esc(RAS_REF)}. Las demás verificaciones son criterios de la herramienta para aprender.</p>` : ''
+      }`
     : '';
   const sections = [
     `<h2>§ Datos</h2><table>${rows(m.data)}</table>`,

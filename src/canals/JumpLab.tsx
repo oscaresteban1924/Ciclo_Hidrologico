@@ -10,6 +10,8 @@ import { FlatStage, FloodPlayer, Row, es } from './common';
 import { JumpDiagram } from './diagrams';
 import { CHUTE, DEFAULT_JUMP, G, JUMP_NAME, jumpModel, type JumpInput, type JumpKind, type JumpResult } from './hydraulics';
 import { JumpWorld } from './three/jumpWorld';
+import { LiveHud, type LiveProfileData } from './live';
+import { jumpSurface } from './profiles';
 
 interface Ctx {
   inp: JumpInput;
@@ -134,8 +136,35 @@ export function JumpLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     </>
   );
 
+  const jumpProfile = useMemo<LiveProfileData>(() => {
+    const sf = jumpSurface(r);
+    const e = new Map(sf.egl.map((p) => [p.x, p.e]));
+    const { basin, weir } = r.inp;
+    return {
+      pts: sf.pts.map((p) => ({ x: p.x, zb: p.bed, z: p.bed + p.y, E: e.get(p.x) })),
+      crit: sf.pts.map((p) => ({ x: p.x, z: p.bed + r.yc })),
+      blocks: weir > 0.01 ? [{ pts: [[basin, 0], [basin + 1, 0], [basin + 1, weir], [basin, weir]] }] : [],
+      marks: [
+        { x: 0, label: 'pie de la rápida' },
+        { x: basin, label: 'fin del pozo' },
+      ],
+    };
+  }, [r]);
+  const placeName: Record<JumpResult['place'], string> = { pie: 'al pie', pozo: 'dentro del pozo', barrido: 'barrido', ahogado: 'ahogado' };
+
   const dock = (
     <>
+      {!live && (
+        <LiveHud
+          head={[`Q = ${es(inp.Q, 1)} m³/s`, `F1 = ${es(r.F1, 1)}`, `resalto ${placeName[r.place]}`]}
+          profile={jumpProfile}
+          profileLabel="Perfil del agua por la rápida, el pozo y el vertedero, con la línea de energía y la profundidad crítica"
+          traces={[
+            { key: 'xj', label: 'Inicio del resalto desde el pie', unit: 'm', value: r.xJump, digits: 1, ref: { value: inp.basin, label: 'fin del pozo' } },
+            { key: 'tw', label: 'Agua en el pozo', unit: 'm', value: r.ytw, digits: 2, ref: { value: r.y2, label: 'conjugada y2' } },
+          ]}
+        />
+      )}
       <DockRange label="Caudal" value={inp.Q} min={2} max={30} step={1} show={`${es(inp.Q, 0)} m³/s`} onChange={(v) => set({ Q: v })} />
       <FloodPlayer q={inp.Q} qMax={30} digits={1} onQ={(v) => set({ Q: v })} />
       {gl && (

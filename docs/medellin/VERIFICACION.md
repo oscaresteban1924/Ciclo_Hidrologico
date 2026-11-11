@@ -620,6 +620,28 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Pruebas: 32 de 32 de «Hidráulica de canales» (H15 con veinticinco herramientas y 10 000 llamadas) y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 44 de 44 estados sin choques ni cortes en las cuatro pantallas, con la presa rota y la creciente. Se revisaron en capturas de escritorio y teléfono las cáusticas de cerca y de lejos (de lejos se apagan para no granular), la huella, las salpicaduras, la curva en lazo y la herramienta de tránsito. Archivo único: 4 504 kB (1 786 kB comprimido con gzip).
 
+## 4 septvicies. Norma colombiana (RAS) e instrumentos en vivo en todas las partes (ejecutada)
+
+**Pedido.** «Procede con esos pendientes»: los criterios de las normas colombianas y los instrumentos en vivo en las partes que no los tenían.
+
+**Resolución 0330 de 2017 (RAS).** Se leyó en dos textos oficiales: el compilado del Ministerio de Vivienda con la Resolución 0799 de 2021 (Anexo 2), leído dos veces, y el original del Diario Oficial 50.267 para los Arts. 148 a 152. El Anexo 1 del compilado confirma que la Resolución 0799 no cambió los artículos usados. En la segunda lectura se corrigió una cita: la Tabla 17 de cruces de cauces está en el Art. 138, numeral 8, no en el 137. Se incorporaron, con su artículo en el nombre de cada verificación y en la memoria:
+- tubo pluvial o combinado: Arts. 148 a 151;
+- canal abierto de aguas lluvias: Art. 152, nums. 1, 4 y 5;
+- salida subcrítica de los pozos: Art. 159;
+- período de retorno de los canales abiertos: Art. 135, Tabla 16.
+
+Lo prueba H33 (33 de 33 pruebas de canales).
+
+**Manual de Drenaje para Carreteras del INVÍAS.** No se incluyó. El enlace de descarga del portal del INVÍAS devuelve la página de inicio, no el PDF. El enlace directo al archivo necesitaba una aprobación que no se respondió. Con el PDF adjunto o con esa aprobación, sus criterios (alcantarillas, puentes, cunetas) se pueden incorporar de la misma forma.
+
+**Instrumentos en vivo.** Las seis partes de flujo permanente tienen ahora instrumentos como los de «Ondas y crecientes»:
+- un perfil longitudinal con el agua, la energía, la crítica, la normal, el borde y las estructuras;
+- dos registros de los últimos 40 s con su referencia: el borde, la vía, el bajo del puente, el fin del pozo, el umbral de movimiento o la carga mínima.
+
+El canal también tiene ahora «Simular una creciente». Se revisaron en capturas de escritorio y teléfono, también durante una creciente en el puente. En los sedimentos los dos registros se dejaron lado a lado en pantallas anchas.
+
+**Resultado.** Pruebas: 33 de 33 de «Hidráulica de canales» y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 44 de 44 estados sin choques ni cortes en las cuatro pantallas, con los instrumentos nuevos en todas las partes. Archivo único: 4 518 kB (1 791 kB comprimido con gzip).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
@@ -707,3 +729,4 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
   - Las casas son sólidas en el cálculo (el agua no entra) y no hay modelo estructural: «expuesta a daño estructural» es la lectura de la clase H5 o H6, no un cálculo de la estructura.
   - La trayectoria de los vehículos y el material flotante son ilustrativos; el criterio que mueve un vehículo (H2) sí es calculado.
 - **Calibración** de los parámetros de cobertura con datos locales.
+- **Manual de Drenaje para Carreteras del INVÍAS** (alcantarillas bajo vías, puentes, cunetas): no incluido en «Hidráulica de canales» porque su PDF oficial no se pudo leer desde el entorno de trabajo.
