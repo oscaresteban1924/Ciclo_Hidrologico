@@ -3812,6 +3812,9 @@ button.scene-label:hover {
   left: 50%;
   bottom: 18px;
   transform: translateX(-50%);
+  /* sin esto, en pantallas angostas el aviso solo podía usar la mitad del ancho (desde el centro) y salía muy alto */
+  width: max-content;
+  max-width: calc(100vw - 24px);
   z-index: 60;
   pointer-events: none;
 }

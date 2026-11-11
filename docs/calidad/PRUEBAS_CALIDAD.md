@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**18 de 18 cumplen.**
+**26 de 26 cumplen.**
 
 ## Q1. Oxígeno disuelto de saturación y altitud de Medellín — cumple
 
@@ -93,3 +93,43 @@ Se ejecutan con `npm run test:quality`. Cada prueba declara su tolerancia antes 
 
 - Tolerancia: en 3 temporadas × 2 cauces × 60, 600 y 3000 casas y a 20, 60, 200, 600 y 2000 m: la media a lo ancho del exceso relativo es 1 (error < 0,5 %); en Lm = 0,4·U·W²/εt las dos orillas están dentro del 5 % de la media; aguas abajo, en la línea donde cae el chorro la pluma nunca sube y en la orilla opuesta nunca baja; nunca más que el agua del tubo sin mezclar; sin casas, sin pluma
 - Medido: 18 casos; error máximo de la media 0.000 %; desvío máximo en Lm 3.59 %; violaciones de orden 0; sobre el tope 0; sin casas F = 1; Lm con 600 casas: verano/montana 1185 m, verano/plana 1203 m, normal/montana 697 m, normal/plana 708 m, lluvioso/montana 429 m, lluvioso/plana 436 m
+
+## Q19. Lodos activados: Monod con edad del lodo, lavado sin recirculación y balances de biomasa y oxígeno — cumple
+
+- Tolerancia: S del reactor igual a Ks(1 + kd·θc)/(θc(Y·k − kd) − 1) (error < 0,01 mg/L) e igual con lluvia; sin recirculación y sin aire hay lavado (DBO de salida > 100 mg/L); lodo purgado = lodo que crece (error < 0,1 %); oxígeno según Metcalf y Eddy (error < 0,1 %); primario de 2 h: 34,5 ± 0,1 % de DBO y 56,3 ± 0,1 % de sólidos
+- Medido: S = 3.885 mg/L (fórmula 3.885; con lluvia difiere 0.0000); sin recirculación lavado true y DBO 197 mg/L; sin aire lavado true; Px 388.1 kg/día vs purga 388.1; O₂ 1255 kg/día (fórmula 1255); primario 34.48 % y 56.34 %
+
+## Q20. Resolución 0631 de 2015 (art. 8): categoría por carga de DBO5, límites y cumplimiento — cumple
+
+- Tolerancia: carga de 625 kg/día con unos 20 400 habitantes y de 3 000 kg/día con unos 98 000; límites DQO 180/180/150, DBO5 90/90/70, SST 90/90/70, grasas 20/20/10 mg/L y SSED 5 mL/L; cada análisis se compara con su límite; la planta del juego cumple en su operación normal; con 100 000 habitantes una línea no cumple y dos sí; sin recirculación no cumple
+- Medido: 625 kg/día ↔ 20425 hab; 3 000 ↔ 98039 hab; categorías 20 000 → 1, 21 000 → 2, 95 000 → 2, 100 000 → 3; límites con error 0; comparaciones erradas 0; normal true; 100 000 con 1 línea false (falla sst), con 2 true; sin recirculación false
+
+## Q21. Caudales: llegada = tratado + aliviadero; el aliviadero rebosa solo cuando no cabe — cumple
+
+- Tolerancia: en 3456 casos de la malla: llegada = tratado + aliviado (error < 10⁻⁶ m³/día); rebosa si y solo si llega más que 2.5 veces el caudal de diseño de las líneas en servicio; con 50 000 habitantes y aguacero, una línea alivia 37,5 % y dos no alivian
+- Medido: 3456 casos; violaciones 0; aguacero con 1 línea 37.5 % y con 2 0.0 %
+
+## Q22. Robustez de la planta de aguas residuales: entradas al azar e inválidas — cumple
+
+- Tolerancia: 4 000 entradas al azar: todos los valores finitos y no negativos; el agua tratada nunca más sucia que la cruda (DBO, sólidos, coliformes); oxígeno del río por debajo de la saturación; el biogás nunca da más del 100 % de la energía; 7 entradas inválidas se llevan a valores válidos
+- Medido: 4000 casos, violaciones 0; entradas inválidas mal saneadas 0
+
+## Q23. Coherencia de la planta de aguas residuales: cada decisión empuja hacia donde debe — cumple
+
+- Tolerancia: en 4 poblaciones × 1 o 2 líneas × 3 climas × 3 purgas × con o sin primario: más aire nunca gasta menos ni deja más amonio; la luz UV nunca deja más coliformes; la recirculación nunca empeora la DBO; purga «mucha» deja salir más de 5 mg/L de amonio y la normal menos de 2; sin primario se gasta más aire y sale menos biogás; con una línea, más habitantes nunca aclaran la salida; el aliviadero baja el oxígeno del río; 0 violaciones
+- Medido: 1818 comprobaciones; violaciones 0
+
+## Q24. Energía, biogás y lodos: cuentas cerradas, rangos típicos y retos alcanzables — cumple
+
+- Tolerancia: electricidad del biogás = m³ × 0,65 × 35,8 MJ/m³ × 35 % (error < 10⁻⁹); energía total = aireación + base + UV; neta = (total − biogás)/m³; en operación normal entre 0,3 y 0,6 kWh/m³ con aireación > 50 % y biogás que cubre del 30 al 70 %; biosólido > 0; el reto de energía no se cumple en la operación normal y sí con 1 mg/L de oxígeno; 100 000 habitantes con dos líneas cumplen; aguacero con dos líneas sin aliviadero y con peces; amonio < 2 mg/L con la purga normal; el resumen de «Del río a la llave» baja de etapa en etapa
+- Medido: 0.374 kWh/m³ (aireación 60 %, biogás 48 %); errores 1.1e-13, 0.0e+0, 0.0e+0; biosólido 4.08 t/día; reto de energía true; crece true; aguacero true; amonio 0.37 mg/L; resumen 100 → 66 → 3 %
+
+## Q25. Río aguas abajo (Streeter y Phelps): oxígeno físico, recuperación y criterio de los peces — cumple
+
+- Tolerancia: en la malla (con primario y UV): oxígeno entre 0 y la saturación de 0 a 40 km; el mínimo nunca está por encima del de la descarga; a 40 km el oxígeno ya no está por debajo del mínimo; peces = oxígeno ≥ 4 mg/L y amoníaco libre ≤ 0,025 mg/L; con la planta normal el río conserva los peces y con las bacterias lavadas los pierde
+- Medido: 864 casos; violaciones 0; recuperación a 40 km en 864 de 864; mínimo normal 6.24 mg/L, con lavado 0.00 mg/L a 3.1 km
+
+## Q26. Las once partes de la planta de aguas residuales: completas, en orden, dibujadas y con valores del modelo — cumple
+
+- Tolerancia: once partes numeradas del 1 al 11, cada una con nombre, etiqueta, descripción, al menos dos pasos de «cómo lo hace», rangos de diseño, fuente, qué sale mal, qué se mide y un lugar en la escena; en la malla de casos, ningún valor mostrado vacío, NaN, indefinido o infinito
+- Medido: 11 partes; 68184 valores revisados; fallas 0

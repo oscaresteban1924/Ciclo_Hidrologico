@@ -46,6 +46,9 @@ import { rodsFor } from '../../src/quality/three/kit';
 import { PROCESSES, processComplete } from '../../src/quality/processes';
 import { UNIT_X, bugsFor, partsFor } from '../../src/quality/three/plantWorld';
 import { wrongSet } from '../../src/quality/three/streetWorld';
+import { DEFAULT_PTAR, ENERGY_GOAL, KIN, PTAR_DESIGN, PTAR_LIMITS, Q_LINE, RES_0631, RIVER_FISH_DO, SEWAGE, WEATHER, primaryRemoval, ptarModel, ptarStages, sanitizePtar, type PtarInput } from '../../src/quality/ptar';
+import { PTAR_UNITS } from '../../src/quality/ptarUnits';
+import { PT } from '../../src/quality/three/ptarWorld';
 
 interface Result { id: string; name: string; tolerance: string; measured: string; pass: boolean }
 const results: Result[] = [];
@@ -574,6 +577,266 @@ const f = (v: number, d = 2) => v.toFixed(d);
     tolerance: 'en 3 temporadas × 2 cauces × 60, 600 y 3000 casas y a 20, 60, 200, 600 y 2000 m: la media a lo ancho del exceso relativo es 1 (error < 0,5 %); en Lm = 0,4·U·W²/εt las dos orillas están dentro del 5 % de la media; aguas abajo, en la línea donde cae el chorro la pluma nunca sube y en la orilla opuesta nunca baja; nunca más que el agua del tubo sin mezclar; sin casas, sin pluma',
     measured: `${cases} casos; error máximo de la media ${(worstMean * 100).toFixed(3)} %; desvío máximo en Lm ${(worstLm * 100).toFixed(2)} %; violaciones de orden ${monot}; sobre el tope ${overCap}; sin casas F = ${none}; Lm con 600 casas: ${lms.join(', ')}`,
     pass: worstMean < 0.005 && worstLm <= 0.05 && monot === 0 && overCap === 0 && none === 1,
+  });
+}
+
+// ------------------------------------------------------------------ «De la casa al río»: planta de aguas residuales
+const PT_WEATHERS = ['seco', 'lluvia', 'aguacero'] as const;
+const PT_PURGAS = ['poca', 'normal', 'mucha'] as const;
+/** Malla de casos de la planta: habitantes × líneas × clima × primario × aire × recirculación × purga × UV. */
+function* ptarGrid(): Generator<PtarInput> {
+  for (const pop of [10000, 50000, 100000, 150000])
+    for (const lines of [1, 2] as const)
+      for (const weather of PT_WEATHERS)
+        for (const primary of [true, false])
+          for (const air of [0, 0.25, 0.5, 1, 2, 4])
+            for (const recirc of [true, false])
+              for (const purga of PT_PURGAS)
+                for (const uv of [true, false]) yield { pop, lines, weather, primary, air, recirc, purga, uv };
+}
+
+// Q19) Lodos activados: Monod con edad del lodo, lavado sin recirculación, balance de la biomasa y del oxígeno
+{
+  const T = PTAR_DESIGN.T;
+  const k = KIN.k * Math.pow(KIN.thK, T - 20) * (2 / (KIN.KOH + 2)), kd = KIN.kd * Math.pow(KIN.thKd, T - 20);
+  const r = ptarModel(DEFAULT_PTAR);
+  const Sx = (KIN.Ks * (1 + kd * 8)) / (8 * (KIN.Y * k - kd) - 1);
+  const errS = Math.abs(r.reactor.S - Sx);
+  // la DBO soluble que queda no depende del tiempo de retención sino de la edad del lodo (mezcla completa)
+  const rain = ptarModel({ ...DEFAULT_PTAR, weather: 'lluvia' });
+  const sameS = Math.abs(rain.reactor.S - r.reactor.S);
+  // sin recirculación (θc = 6 h) o sin aire, las bacterias se lavan
+  const noRec = ptarModel({ ...DEFAULT_PTAR, recirc: false }), noAir = ptarModel({ ...DEFAULT_PTAR, air: 0 });
+  // balance: el lodo que se purga cada día (SSV activos) es el que crece: X·V/θc = Y·Q·(S0 − S)/(1 + kd·θc)
+  const V = (PTAR_DESIGN.reactorHRTh / 24) * Q_LINE;
+  const purgedX = (r.reactor.X * V) / r.reactor.srtD / 1000;
+  const errPx = Math.abs(purgedX - r.reactor.pxKgD) / r.reactor.pxKgD;
+  // oxígeno (Metcalf y Eddy): DBO última removida − 1,42·Px + 4,57·N nitrificado
+  const o2 = (Q_LINE * (r.prim.dbo - r.reactor.S)) / KIN.f / 1000 - 1.42 * r.reactor.pxKgD + (4.57 * Q_LINE * r.sec.no3) / 1000;
+  const errO2 = Math.abs(o2 - r.reactor.o2KgD) / o2;
+  // primario con 2 h: 34,5 % de la DBO y 56 % de los sólidos (Crites y Tchobanoglous)
+  const pr = primaryRemoval(2);
+  record({
+    id: 'Q19',
+    name: 'Lodos activados: Monod con edad del lodo, lavado sin recirculación y balances de biomasa y oxígeno',
+    tolerance: 'S del reactor igual a Ks(1 + kd·θc)/(θc(Y·k − kd) − 1) (error < 0,01 mg/L) e igual con lluvia; sin recirculación y sin aire hay lavado (DBO de salida > 100 mg/L); lodo purgado = lodo que crece (error < 0,1 %); oxígeno según Metcalf y Eddy (error < 0,1 %); primario de 2 h: 34,5 ± 0,1 % de DBO y 56,3 ± 0,1 % de sólidos',
+    measured: `S = ${f(r.reactor.S, 3)} mg/L (fórmula ${f(Sx, 3)}; con lluvia difiere ${f(sameS, 4)}); sin recirculación lavado ${noRec.reactor.washout} y DBO ${f(noRec.eff.dbo, 0)} mg/L; sin aire lavado ${noAir.reactor.washout}; Px ${f(r.reactor.pxKgD, 1)} kg/día vs purga ${f(purgedX, 1)}; O₂ ${f(r.reactor.o2KgD, 0)} kg/día (fórmula ${f(o2, 0)}); primario ${f(pr.dbo, 2)} % y ${f(pr.sst, 2)} %`,
+    pass: errS < 0.01 && sameS < 1e-9 && noRec.reactor.washout && noAir.reactor.washout && noRec.eff.dbo > 100 && noAir.eff.dbo > 100 && errPx < 1e-3 && errO2 < 1e-3 && Math.abs(pr.dbo - 34.48) < 0.1 && Math.abs(pr.sst - 56.34) < 0.1,
+  });
+}
+
+// Q20) Resolución 0631 de 2015: categoría por carga, límites y casos que deben cumplir o fallar
+{
+  const popAt = (kg: number) => (kg * 1000 * 1000) / (SEWAGE.lpcd * SEWAGE.dbo);
+  const c1 = ptarModel({ ...DEFAULT_PTAR, pop: 20000 }).cat, c2 = ptarModel({ ...DEFAULT_PTAR, pop: 21000 }).cat;
+  const c3 = ptarModel({ ...DEFAULT_PTAR, pop: 95000 }).cat, c4 = ptarModel({ ...DEFAULT_PTAR, pop: 100000 }).cat;
+  let limBad = 0;
+  for (const cat of [1, 2, 3] as const) {
+    const L = RES_0631[cat];
+    if (L.ssed !== 5 || L.dqo !== (cat === 3 ? 150 : 180) || L.dbo !== (cat === 3 ? 70 : 90) || L.sst !== (cat === 3 ? 70 : 90) || L.gya !== (cat === 3 ? 10 : 20)) limBad++;
+  }
+  const def = ptarModel(DEFAULT_PTAR);
+  const one = ptarModel({ ...DEFAULT_PTAR, pop: 100000 }), two = ptarModel({ ...DEFAULT_PTAR, pop: 100000, lines: 2 });
+  const wash = ptarModel({ ...DEFAULT_PTAR, recirc: false });
+  // cada análisis se compara con su límite
+  let checkBad = 0;
+  for (const inp of [def, one, two, wash]) {
+    const L = RES_0631[inp.cat];
+    const want = { ph: inp.eff.pH >= 6 && inp.eff.pH <= 9, dqo: inp.eff.dqo <= L.dqo, dbo: inp.eff.dbo <= L.dbo, sst: inp.eff.sst <= L.sst, ssed: inp.eff.ssed <= L.ssed, gya: inp.eff.gya <= L.gya };
+    for (const c of inp.checks) if (c.ok !== want[c.id]) checkBad++;
+    if (inp.complies !== inp.checks.every((c) => c.ok)) checkBad++;
+  }
+  record({
+    id: 'Q20',
+    name: 'Resolución 0631 de 2015 (art. 8): categoría por carga de DBO5, límites y cumplimiento',
+    tolerance: 'carga de 625 kg/día con unos 20 400 habitantes y de 3 000 kg/día con unos 98 000; límites DQO 180/180/150, DBO5 90/90/70, SST 90/90/70, grasas 20/20/10 mg/L y SSED 5 mL/L; cada análisis se compara con su límite; la planta del juego cumple en su operación normal; con 100 000 habitantes una línea no cumple y dos sí; sin recirculación no cumple',
+    measured: `625 kg/día ↔ ${Math.round(popAt(625))} hab; 3 000 ↔ ${Math.round(popAt(3000))} hab; categorías 20 000 → ${c1}, 21 000 → ${c2}, 95 000 → ${c3}, 100 000 → ${c4}; límites con error ${limBad}; comparaciones erradas ${checkBad}; normal ${def.complies}; 100 000 con 1 línea ${one.complies} (falla ${one.checks.filter((c) => !c.ok).map((c) => c.id).join(', ')}), con 2 ${two.complies}; sin recirculación ${wash.complies}`,
+    pass: c1 === 1 && c2 === 2 && c3 === 2 && c4 === 3 && limBad === 0 && checkBad === 0 && def.complies && !one.complies && two.complies && !wash.complies,
+  });
+}
+
+// Q21) Caudales: lo que llega es lo tratado más lo aliviado; el aliviadero solo rebosa cuando no cabe
+{
+  let bad = 0, n = 0;
+  for (const inp of ptarGrid()) {
+    const r = ptarModel(inp);
+    n++;
+    if (Math.abs(r.Qin - r.Qtreat - r.Qbypass) > 1e-6) bad++;
+    if (r.Qbypass > 1e-9 !== r.Qin > r.Qcap + 1e-9) bad++;
+    if (Math.abs(r.Qcap - Q_LINE * inp.lines * PTAR_DESIGN.peak) > 1e-6) bad++;
+    if (Math.abs(r.Qin - (inp.pop * SEWAGE.lpcd * WEATHER[inp.weather].mult) / 1000) > 1e-6) bad++;
+  }
+  const a1 = ptarModel({ ...DEFAULT_PTAR, weather: 'aguacero' }), a2 = ptarModel({ ...DEFAULT_PTAR, weather: 'aguacero', lines: 2 });
+  record({
+    id: 'Q21',
+    name: 'Caudales: llegada = tratado + aliviadero; el aliviadero rebosa solo cuando no cabe',
+    tolerance: `en ${n} casos de la malla: llegada = tratado + aliviado (error < 10⁻⁶ m³/día); rebosa si y solo si llega más que ${PTAR_DESIGN.peak} veces el caudal de diseño de las líneas en servicio; con 50 000 habitantes y aguacero, una línea alivia 37,5 % y dos no alivian`,
+    measured: `${n} casos; violaciones ${bad}; aguacero con 1 línea ${f(a1.bypassPct, 1)} % y con 2 ${f(a2.bypassPct, 1)} %`,
+    pass: bad === 0 && Math.abs(a1.bypassPct - 37.5) < 0.01 && a2.Qbypass === 0,
+  });
+}
+
+// Q22) Robustez: miles de entradas al azar e inválidas, sin NaN y dentro de lo físico
+{
+  let bad = 0, n = 0;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const pickOf = <T,>(a: readonly T[]) => a[Math.floor(rnd() * a.length)];
+  const finite = (r: ReturnType<typeof ptarModel>) => {
+    const ws = [r.raw, r.pre, r.prim, r.sec, r.eff, r.bypass];
+    for (const w of ws) for (const v of Object.values(w)) if (!Number.isFinite(v) || v < 0) return false;
+    const nums = [r.reactor.S, r.reactor.mlss, r.reactor.svi, r.reactor.sv30, r.reactor.o2KgD, r.energy.totalKwhD, r.energy.netPerM3, r.energy.coverPct, r.sludge.biogasM3D, r.sludge.cakeTD, r.river.minDO, r.river.mix.nh3, r.logs.total];
+    return nums.every((v) => Number.isFinite(v) && v >= 0);
+  };
+  for (let i = 0; i < 4000; i++) {
+    const inp: PtarInput = { pop: 5000 + rnd() * 145000, lines: pickOf([1, 2] as const), weather: pickOf(PT_WEATHERS), primary: rnd() < 0.5, air: rnd() * 4, recirc: rnd() < 0.8, purga: pickOf(PT_PURGAS), uv: rnd() < 0.5 };
+    const r = ptarModel(inp);
+    n++;
+    if (!finite(r)) bad++;
+    // nunca sale más sucia de lo que llegó; el oxígeno del río entre 0 y la saturación
+    if (r.eff.dbo > r.raw.dbo + 1e-9 || r.eff.sst > r.raw.sst + 1e-9 || r.eff.coli > r.raw.coli + 1e-9) bad++;
+    if (r.river.minDO > r.river.sat + 1e-9) bad++;
+    if (r.energy.coverPct > 100 + 1e-9) bad++;
+  }
+  // entradas inválidas: se llevan a valores válidos
+  const weird = [null, undefined, {}, { pop: NaN, air: Infinity }, { pop: -5, air: -1, weather: 'tormenta' }, { pop: 1e9, air: 99, lines: 7 }, { purga: 'x', uv: 'sí' }] as unknown as Partial<PtarInput>[];
+  let badIn = 0;
+  for (const w of weird) {
+    const s = sanitizePtar(w);
+    if (s.pop < PTAR_LIMITS.pop[0] || s.pop > PTAR_LIMITS.pop[1] || s.air < 0 || s.air > 4 || (s.lines !== 1 && s.lines !== 2) || !finite(ptarModel(w))) badIn++;
+  }
+  record({
+    id: 'Q22',
+    name: 'Robustez de la planta de aguas residuales: entradas al azar e inválidas',
+    tolerance: '4 000 entradas al azar: todos los valores finitos y no negativos; el agua tratada nunca más sucia que la cruda (DBO, sólidos, coliformes); oxígeno del río por debajo de la saturación; el biogás nunca da más del 100 % de la energía; 7 entradas inválidas se llevan a valores válidos',
+    measured: `${n} casos, violaciones ${bad}; entradas inválidas mal saneadas ${badIn}`,
+    pass: bad === 0 && badIn === 0,
+  });
+}
+
+// Q23) Coherencia: cada decisión empuja el resultado hacia donde debe
+{
+  let checks = 0, viol = 0;
+  const v = (cond: boolean) => {
+    checks++;
+    if (!cond) viol++;
+  };
+  for (const pop of [20000, 50000, 100000, 150000])
+    for (const lines of [1, 2] as const)
+      for (const weather of PT_WEATHERS)
+        for (const purga of PT_PURGAS)
+          for (const primary of [true, false]) {
+            const base: PtarInput = { ...DEFAULT_PTAR, pop, lines, weather, purga, primary };
+            // más aire: más energía de los sopladores y nunca más amonio a la salida
+            let prevE = -1, prevN = Infinity;
+            for (const air of [0.5, 1, 2, 3, 4]) {
+              const r = ptarModel({ ...base, air });
+              v(r.reactor.airKwhD >= prevE - 1e-9);
+              v(r.eff.nh4 <= prevN + 1e-9);
+              prevE = r.reactor.airKwhD;
+              prevN = r.eff.nh4;
+            }
+            // la luz UV nunca deja más coliformes
+            v(ptarModel({ ...base, uv: true }).eff.coli <= ptarModel({ ...base, uv: false }).eff.coli);
+            // la recirculación nunca empeora la DBO de salida
+            v(ptarModel({ ...base, recirc: true }).eff.dbo <= ptarModel({ ...base, recirc: false }).eff.dbo + 1e-9);
+          }
+  // purgar mucho deja escapar el amonio; el primario ahorra aire y da más biogás; más gente con una línea nunca deja la salida más clara
+  const normal = ptarModel(DEFAULT_PTAR), mucha = ptarModel({ ...DEFAULT_PTAR, purga: 'mucha' });
+  v(mucha.eff.nh4 > 5 && normal.eff.nh4 < 2);
+  const noPrim = ptarModel({ ...DEFAULT_PTAR, primary: false });
+  v(noPrim.reactor.airKwhD > normal.reactor.airKwhD && noPrim.sludge.biogasM3D < normal.sludge.biogasM3D);
+  for (const weather of PT_WEATHERS) {
+    let prev = -1;
+    for (let pop = 10000; pop <= 150000; pop += 5000) {
+      const r = ptarModel({ ...DEFAULT_PTAR, weather, pop });
+      v(r.sec.sst >= prev - 1e-9);
+      prev = r.sec.sst;
+    }
+  }
+  // con aguacero, el aliviadero le quita oxígeno al río; con dos líneas, no
+  v(ptarModel({ ...DEFAULT_PTAR, weather: 'aguacero' }).river.minDO < ptarModel({ ...DEFAULT_PTAR, weather: 'aguacero', lines: 2 }).river.minDO);
+  record({
+    id: 'Q23',
+    name: 'Coherencia de la planta de aguas residuales: cada decisión empuja hacia donde debe',
+    tolerance: 'en 4 poblaciones × 1 o 2 líneas × 3 climas × 3 purgas × con o sin primario: más aire nunca gasta menos ni deja más amonio; la luz UV nunca deja más coliformes; la recirculación nunca empeora la DBO; purga «mucha» deja salir más de 5 mg/L de amonio y la normal menos de 2; sin primario se gasta más aire y sale menos biogás; con una línea, más habitantes nunca aclaran la salida; el aliviadero baja el oxígeno del río; 0 violaciones',
+    measured: `${checks} comprobaciones; violaciones ${viol}`,
+    pass: viol === 0 && checks > 1000,
+  });
+}
+
+// Q24) Energía y lodos: cuentas cerradas y valores en rangos típicos; los retos se pueden cumplir
+{
+  const r = ptarModel(DEFAULT_PTAR);
+  const kwhPerM3gas = (0.65 * 35.8 * 0.35) / 3.6;
+  const errGas = Math.abs(r.energy.biogasKwhD - r.sludge.biogasM3D * kwhPerM3gas);
+  const errTot = Math.abs(r.energy.totalKwhD - r.energy.airKwhD - r.energy.baseKwhD - r.energy.uvKwhD);
+  const errNet = Math.abs(r.energy.netPerM3 - (r.energy.totalKwhD - r.energy.biogasKwhD) / r.Qtreat);
+  // reto «Cumplir gastando poco»: la operación normal no lo cumple; con 1 mg/L de oxígeno sí
+  const goal = (x: ReturnType<typeof ptarModel>) => x.complies && x.eff.nh4 < 2 && x.reactor.svi <= 150 && x.energy.netPerM3 <= ENERGY_GOAL;
+  const energyOk = !goal(r) && goal(ptarModel({ ...DEFAULT_PTAR, air: 1 }));
+  // los otros retos de condición: la ciudad que crece, el aguacero y el amonio
+  const crece = ptarModel({ ...DEFAULT_PTAR, pop: 100000, lines: 2 }).complies;
+  const ag = ptarModel({ ...DEFAULT_PTAR, weather: 'aguacero', lines: 2 });
+  const amonio = ptarModel(DEFAULT_PTAR);
+  const stages = ptarStages();
+  record({
+    id: 'Q24',
+    name: 'Energía, biogás y lodos: cuentas cerradas, rangos típicos y retos alcanzables',
+    tolerance: 'electricidad del biogás = m³ × 0,65 × 35,8 MJ/m³ × 35 % (error < 10⁻⁹); energía total = aireación + base + UV; neta = (total − biogás)/m³; en operación normal entre 0,3 y 0,6 kWh/m³ con aireación > 50 % y biogás que cubre del 30 al 70 %; biosólido > 0; el reto de energía no se cumple en la operación normal y sí con 1 mg/L de oxígeno; 100 000 habitantes con dos líneas cumplen; aguacero con dos líneas sin aliviadero y con peces; amonio < 2 mg/L con la purga normal; el resumen de «Del río a la llave» baja de etapa en etapa',
+    measured: `${f(r.energy.perM3, 3)} kWh/m³ (aireación ${f((r.energy.airKwhD / r.energy.totalKwhD) * 100, 0)} %, biogás ${f(r.energy.coverPct, 0)} %); errores ${errGas.toExponential(1)}, ${errTot.toExponential(1)}, ${errNet.toExponential(1)}; biosólido ${f(r.sludge.cakeTD, 2)} t/día; reto de energía ${energyOk}; crece ${crece}; aguacero ${ag.Qbypass === 0 && ag.river.fishOk}; amonio ${f(amonio.eff.nh4, 2)} mg/L; resumen ${stages.map((s) => Math.round(s.remain * 100)).join(' → ')} %`,
+    pass:
+      errGas < 1e-9 && errTot < 1e-9 && errNet < 1e-9 && r.energy.perM3 > 0.3 && r.energy.perM3 < 0.6 && r.energy.airKwhD / r.energy.totalKwhD > 0.5 && r.energy.coverPct > 30 && r.energy.coverPct < 70 && r.sludge.cakeTD > 0 && energyOk && crece && ag.Qbypass === 0 && ag.river.fishOk && amonio.eff.nh4 < 2 && stages.every((s, i) => i === 0 || s.remain < stages[i - 1].remain + 1e-12),
+  });
+}
+
+// Q25) Río aguas abajo: oxígeno entre 0 y la saturación, se recupera y el criterio de los peces es coherente
+{
+  let bad = 0, n = 0, recov = 0;
+  for (const inp of ptarGrid()) {
+    if (inp.uv === false || inp.primary === false) continue;
+    const r = ptarModel(inp);
+    n++;
+    for (const x of [0, 1, 5, 10, 20, 40]) {
+      const p = r.river.at(x);
+      if (p.dO < 0 || p.dO > r.river.sat + 1e-9) bad++;
+    }
+    if (r.river.minDO > r.river.at(0).dO + 1e-9) bad++;
+    if (r.river.at(40).dO + 1e-9 >= r.river.minDO) recov++;
+    if (r.river.fishOk !== (r.river.minDO >= RIVER_FISH_DO && r.river.mix.nh3 <= FISH.maxNH3)) bad++;
+  }
+  const clean = ptarModel(DEFAULT_PTAR), raw = ptarModel({ ...DEFAULT_PTAR, recirc: false });
+  record({
+    id: 'Q25',
+    name: 'Río aguas abajo (Streeter y Phelps): oxígeno físico, recuperación y criterio de los peces',
+    tolerance: 'en la malla (con primario y UV): oxígeno entre 0 y la saturación de 0 a 40 km; el mínimo nunca está por encima del de la descarga; a 40 km el oxígeno ya no está por debajo del mínimo; peces = oxígeno ≥ 4 mg/L y amoníaco libre ≤ 0,025 mg/L; con la planta normal el río conserva los peces y con las bacterias lavadas los pierde',
+    measured: `${n} casos; violaciones ${bad}; recuperación a 40 km en ${recov} de ${n}; mínimo normal ${f(clean.river.minDO, 2)} mg/L, con lavado ${f(raw.river.minDO, 2)} mg/L a ${f(raw.river.xMinKm, 1)} km`,
+    pass: bad === 0 && recov === n && clean.river.fishOk && !raw.river.fishOk,
+  });
+}
+
+// Q26) Las once partes de la planta: completas, en orden, dibujadas y con valores del modelo
+{
+  let bad = 0, n = 0;
+  PTAR_UNITS.forEach((u, i) => {
+    if (u.n !== i + 1 || !u.name || !u.tag || !u.short || u.how.length < 2 || u.design.length < 1 || !u.source || !u.wrong || !u.measure) bad++;
+    if (!PT[u.id] || !Number.isFinite(PT[u.id].x) || !Number.isFinite(PT[u.id].z)) bad++;
+  });
+  for (const inp of ptarGrid()) {
+    if (inp.pop === 100000 || inp.air === 0.25) continue;
+    const r = ptarModel(inp);
+    for (const u of PTAR_UNITS)
+      for (const x of u.inOut(r, inp)) {
+        n++;
+        if (!x.label || !x.value || /NaN|undefined|Infinity/.test(x.value)) bad++;
+      }
+  }
+  record({
+    id: 'Q26',
+    name: 'Las once partes de la planta de aguas residuales: completas, en orden, dibujadas y con valores del modelo',
+    tolerance: 'once partes numeradas del 1 al 11, cada una con nombre, etiqueta, descripción, al menos dos pasos de «cómo lo hace», rangos de diseño, fuente, qué sale mal, qué se mide y un lugar en la escena; en la malla de casos, ningún valor mostrado vacío, NaN, indefinido o infinito',
+    measured: `${PTAR_UNITS.length} partes; ${n} valores revisados; fallas ${bad}`,
+    pass: PTAR_UNITS.length === 11 && bad === 0,
   });
 }
 

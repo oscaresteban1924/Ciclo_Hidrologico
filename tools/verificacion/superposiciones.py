@@ -94,6 +94,10 @@ def check(pg, screen, state, shots, report):
         pg.evaluate("() => document.getElementById('__ov')?.remove()")
 
 
+def top(pg):
+    pg.evaluate('() => window.scrollTo(0, 0)'); pg.wait_for_timeout(300)
+
+
 def mode(pg, name):
     pg.locator(f'.mode-tab[aria-label="{name}"]').first.click()
     pg.wait_for_timeout(2500)
@@ -139,17 +143,25 @@ def run(screens, shots):
                     check(pg, screen, 'ladera-cine', shots, report)
                     pg.evaluate("() => { const c = window.__cityDebug.controller; c.setCinema(false); c.setAmplify(1); c.reset(); }")
                 pg.evaluate("() => window.__cityDebug.controller.showValley()"); pg.wait_for_timeout(3500)
-            # Calidad del agua: las tres partes
+            # Calidad del agua: las cuatro partes (en el teléfono la escena queda arriba del panel: se vuelve arriba
+            # antes de medir, para que se midan sus rótulos y tarjetas)
             mode(pg, 'Calidad del agua'); pg.wait_for_timeout(6000)
-            check(pg, screen, 'calidad-quebrada', shots, report)
+            top(pg); check(pg, screen, 'calidad-quebrada', shots, report)
             # datos reales: la pestaña Medellín y la medalla que gana elegir una quebrada
             pg.get_by_role('tab', name='Medellín', exact=True).last.click(); pg.wait_for_timeout(800)
             pg.locator('.q3-field select').first.select_option('Cabuyala'); pg.wait_for_timeout(1200)
-            check(pg, screen, 'calidad-medellin', shots, report)
+            top(pg); check(pg, screen, 'calidad-medellin', shots, report)
             pg.get_by_role('tab', name='Del río a la llave').click(); pg.wait_for_timeout(3500)
-            check(pg, screen, 'calidad-planta', shots, report)
+            top(pg); check(pg, screen, 'calidad-planta', shots, report)
+            # de la casa al río: vista general, el reactor de cerca (desde el panel) y el aguacero con el río
+            pg.get_by_role('tab', name='De la casa al río').click(); pg.wait_for_timeout(4500)
+            top(pg); check(pg, screen, 'calidad-ptar', shots, report)
+            pg.evaluate("() => { const b = [...document.querySelectorAll('.q3-steps button')][4]; if (b) b.click(); }"); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'calidad-ptar-reactor', shots, report)
+            pg.evaluate("() => { for (const t of ['Aguacero', 'Salida y río']) { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === t); if (b) b.click(); } }"); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'calidad-ptar-aguacero', shots, report)
             pg.get_by_role('tab', name='La ciudad y la lluvia').click(); pg.wait_for_timeout(3500)
-            check(pg, screen, 'calidad-ciudad', shots, report)
+            top(pg); check(pg, screen, 'calidad-ciudad', shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

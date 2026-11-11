@@ -560,14 +560,6 @@ export function treatPlant(input: PlantInput): PlantResult {
   return { raw, optimum: optimumDose(raw.turbidity), settled, filtered, clogged, pH, demand, clExit, clTap, logKill, coliTotalTap, eColiTap, checks, irca, risk: irvaRisk(irca) };
 }
 
-/** Planta de tratamiento de aguas residuales: lo que queda de la materia orgánica (DBO5) después de cada etapa. */
-export const PTAR_STAGES = [
-  { id: 'cribado', name: 'Rejas y desarenador', remain: 0.95, what: 'Atrapan basura, plásticos y arena que llegan por el alcantarillado.' },
-  { id: 'primario', name: 'Sedimentación primaria', remain: 0.65, what: 'El agua se queda quieta y lo pesado se va al fondo como lodo.' },
-  { id: 'biologico', name: 'Tratamiento biológico', remain: 0.15, what: 'Bacterias, con aire que se les inyecta, se comen la materia orgánica disuelta.' },
-  { id: 'secundario', name: 'Sedimentación secundaria', remain: 0.08, what: 'Las bacterias se asientan y el agua clara sale hacia el río.' },
-] as const;
-
 // ------------------------------------------------------------------ la calle cuando llueve
 
 export interface StreetInput {

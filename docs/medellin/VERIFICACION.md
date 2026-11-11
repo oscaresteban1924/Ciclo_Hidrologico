@@ -527,6 +527,20 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Pruebas: 64 de 64 del laboratorio de Medellín y 18 de 18 de «Calidad del agua». Superposiciones: 88 de 88 estados sin choques ni cortes en las cuatro pantallas.
 
+## 4 unvicies. «De la casa al río»: planta de tratamiento de aguas residuales (ejecutada)
+
+**Pedido.** «Diseña también dentro de calidad un tren de tratamiento de aguas residuales».
+
+**Qué se hizo.** Cuarta parte del módulo, con la misma estructura que «Del río a la llave»: modelo calculado (`src/quality/ptar.ts`), escena 3D (`three/ptarWorld.ts`), pestaña Procesos con once partes, animación «con lupa» de cada una y recorrido guiado (`ptarUnits.ts`, `PtarLens.tsx`, `PtarPanel.tsx`), ocho retos, experimentos (probeta de 30 minutos, cono Imhoff y microscopio), datos, notas para el docente y versión en dibujos planos sin WebGL (`classic/PtarPart.tsx`). El resumen «¿Y después de usarla?» de la planta de potabilización ahora sale de este modelo (antes eran fracciones fijas) y tiene un botón que lleva a la nueva parte.
+
+**Modelo.** Lodos activados de mezcla completa con cinética de Monod y edad del lodo (Metcalf y Eddy), nitrificación, demanda de oxígeno y energía de aireación; primario de Crites y Tchobanoglous; digestión anaerobia con biogás y electricidad; aliviadero por capacidad hidráulica; río con Streeter y Phelps y reaireación de O'Connor y Dobbins; cumplimiento de la Resolución 0631 de 2015, art. 8, según la carga de DBO5 (verificados los límites contra el texto de la resolución). Reglas didácticas señaladas: sedimentador secundario, índice volumétrico del lodo, luz UV y sólidos sedimentables. Fórmulas y fuentes: MODELO_CALIDAD.md §2 bis.
+
+**Escena.** Colector desde los barrios, cámara de llegada con aliviadero y canal al río, rejas con rastrillo y contenedor, desarenador y desengrasador de vidrio, primario y secundario redondos con puente giratorio y un tramo de vidrio donde se ve el lodo, reactor con burbujas, canal UV con lámparas encendidas o apagadas, gradas de la descarga, río con las plumas de la descarga y del aliviadero, peces y basura flotante; detrás, espesador, digestores, gasómetro que se infla con el biogás, tea, motor-generador y centrífuga. La segunda línea aparece al ponerla en servicio. Losas, vías, postes, cerca, laboratorio y un letrero que dice que es una escena ilustrativa.
+
+**Lo que se corrigió en el camino.** Un secundario sobrecargado (150 000 habitantes, una línea, sin primario) podía dar un agua de salida más sucia que la cruda; ahora no sale más sucia que como llegó (Q22). Sin bacterias, la DBO pasaba al 85 %, lo que hacía que apagar la recirculación pareciera mejor que tenerla con un aguacero; ahora pasa entera (Q23). El aviso de la bitácora, en el teléfono, solo podía usar la mitad del ancho y salía muy alto; ahora usa el ancho de la pantalla y, en el módulo de calidad, va arriba para no tapar la pregunta. El verificador de superposiciones vuelve arriba de la página antes de medir las partes de calidad en el teléfono: antes medía con la escena fuera de la pantalla (0 elementos) y no veía ese choque.
+
+**Resultado.** Pruebas: 26 de 26 de «Calidad del agua» (Q19 a Q26 nuevas: cinética y balances, norma, caudales, robustez con 4 000 entradas al azar, coherencia en 1 818 comprobaciones, energía y lodos con retos alcanzables, río y las once partes con 68 184 valores revisados) y 64 de 64 del laboratorio de Medellín. Superposiciones: 100 de 100 estados sin choques ni cortes en las cuatro pantallas (25 por pantalla; tres nuevos de «De la casa al río»: vista general, el reactor de cerca y el aguacero con el río). Archivo único: 4,11 MB (antes 3,99 MB).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
@@ -599,6 +613,7 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
 
 - **Datos reales de Medellín.** Los tres sectores reales se construyeron con descargas hechas desde el navegador del usuario (el entorno de trabajo no llega al servicio). Falta comparar la sección de control y la cuenca delineada con estudios hidrológicos de cada quebrada, y conocer la red de alcantarillado real de esos barrios.
 - **Calidad del agua.** Valores típicos y reglas didácticas; no se compararon con monitoreos de quebradas de Medellín (por ejemplo, la red de calidad del Área Metropolitana).
+- **Planta de aguas residuales.** Es ilustrativa: no se comparó con datos de operación de San Fernando ni de Aguas Claras, el río es inventado y los rangos de diseño son de la literatura técnica, no de la Resolución 0330 de 2017.
 - **Rendimiento con GPU real** y en tabletas o teléfonos físicos.
 - **Lectores de pantalla reales** (NVDA, VoiceOver). Solo se verificaron los roles, los nombres accesibles y el texto equivalente.
 - **Firefox y Safari.** Se probó solo en Chrome.

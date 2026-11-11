@@ -3,7 +3,10 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { Disclosure, Segmented } from '../../components/ui';
-import { PTAR_STAGES, RAW_WATER, settledTurbidity, treatPlant, type RawCase } from '../model';
+import { RAW_WATER, settledTurbidity, treatPlant, type RawCase } from '../model';
+import { ptarStages } from '../ptar';
+
+const PTAR_STAGES = ptarStages();
 import { QLayout, QRange, fmt } from '../ui';
 
 const JARS = [0, 10, 20, 30, 45, 65];
@@ -15,7 +18,7 @@ function turbColor(t: number): string {
   return `rgb(${clear.map((c, i) => Math.round(c + (brown[i] - c) * f)).join(',')})`;
 }
 
-export function PlantPart({ head }: { head: ReactNode }) {
+export function PlantPart({ head, goPtar }: { head: ReactNode; goPtar?: () => void }) {
   const [raw, setRaw] = useState<RawCase>('lluvia');
   const [dose, setDose] = useState(10);
   const [chlorine, setChlorine] = useState(1);
@@ -35,7 +38,6 @@ export function PlantPart({ head }: { head: ReactNode }) {
     { id: 'red', name: 'Red y tanques', t: res.filtered, x: 790 },
   ];
   const bad = (id: string) => (id === 'filtro' && res.clogged) || (id === 'cloro' && (res.clExit > 2 || res.clExit < 0.3));
-  const dboIn = 300;
   return (
     <QLayout
       head={head}
@@ -236,12 +238,21 @@ export function PlantPart({ head }: { head: ReactNode }) {
                     <span className="q-ptar-bar" aria-hidden="true">
                       <i style={{ width: `${s.remain * 100}%` }} />
                     </span>
-                    <em>{`queda ${fmt(dboIn * s.remain, 0)} mg/L (${Math.round(s.remain * 100)} %)`}</em>
+                    <em>{`queda ${fmt(s.dbo, 0)} mg/L (${Math.round(s.remain * 100)} %)`}</em>
                   </span>
                 </li>
               ))}
             </ol>
-            <p className="q-help">Entra con unos {dboIn} mg/L de DBO5 y sale con cerca de {fmt(dboIn * PTAR_STAGES[PTAR_STAGES.length - 1].remain, 0)} mg/L (valores típicos de un tratamiento secundario; cada planta es distinta).</p>
+            <p className="q-help">
+              Entra con unos {fmt(PTAR_STAGES[0].dbo, 0)} mg/L de DBO5 y sale con cerca de {fmt(PTAR_STAGES[PTAR_STAGES.length - 1].dbo, 0)} mg/L (la planta de «De la casa al río» en su operación normal; cada planta es distinta).
+            </p>
+            {goPtar && (
+              <p>
+                <button type="button" className="btn small" onClick={goPtar}>
+                  Ver la planta de aguas residuales
+                </button>
+              </p>
+            )}
             <p>
               En el valle de Aburrá, EPM opera dos plantas grandes: <strong>San Fernando</strong> (Itagüí, desde el año 2000, con capacidad de 1,8 m³/s) y <strong>Aguas Claras</strong> (Bello, desde 2018, con capacidad de unos 5 m³/s). Según EPM, en 2025 trataban cerca del 93 % de las aguas residuales del valle.
             </p>

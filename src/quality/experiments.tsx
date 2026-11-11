@@ -2,7 +2,7 @@
 // microscopio y la prueba de jarras en tiempo real. Los resultados salen del modelo (model.ts); las animaciones
 // solo los muestran.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../state/store';
 import { CritterGlyph } from './Glyphs';
 import { bmwp, settledTurbidity, type SampleFamily } from './model';
@@ -328,6 +328,138 @@ export function JarTest({ raw, onResult }: { raw: number; onResult: (dose: numbe
           Con poco coagulante no se forman grumos; con la dosis justa se forman y caen; con demasiado, las partículas se vuelven a dispersar. Por eso las plantas hacen esta prueba cada vez que cambia el río.
         </p>
       )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ prueba de sedimentación (aguas residuales)
+
+/** Muestra para la prueba de sedimentación: cono Imhoff (sólidos sedimentables) o probeta de 1 L (licor mixto). */
+export interface SettleSample {
+  id: string;
+  name: string;
+  kind: 'imhoff' | 'probeta';
+  /** Volumen asentado al final [mL/L]: sólidos sedimentables (Imhoff, 1 h) o V30 (probeta, 30 min). */
+  settled: number;
+  /** Sólidos suspendidos de la muestra [mg/L] (color del agua) y del agua de arriba al final. */
+  sst: number;
+  topSst: number;
+  /** El lodo casi no baja (abultamiento) o el agua de arriba queda turbia (lodo disperso). */
+  slow?: boolean;
+}
+
+const SETTLE_S = 7;
+
+function settleColor(sst: number): string {
+  const clear = [214, 232, 240], dirty = [126, 108, 82];
+  const f = Math.min(1, Math.sqrt(Math.max(0, sst) / 300));
+  return `rgb(${clear.map((c, i) => Math.round(c + (dirty[i] - c) * f)).join(',')})`;
+}
+
+/**
+ * Prueba de sedimentación: en el cono Imhoff se mide cuánto se asienta en una hora (mL/L, lo que pide la norma);
+ * en la probeta, cuánto ocupa el lodo del reactor a los 30 minutos (V30), que con los sólidos da el índice
+ * volumétrico del lodo (IVL). Los números salen de ptar.ts; la animación solo los muestra.
+ */
+export function SettleTest({ sample, mlss, onDone }: { sample: SettleSample; mlss?: number; onDone?: (s: SettleSample) => void }) {
+  const reduced = useReduced();
+  const [run, setRun] = useState(0);
+  const t = useClock(run > 0 && !reduced, run);
+  const tt = run === 0 ? 0 : reduced ? SETTLE_S : Math.min(SETTLE_S, t);
+  const k = tt / SETTLE_S;
+  const done = run > 0 && k >= 1;
+  useEffect(() => setRun(0), [sample.id, sample.settled]);
+  useEffect(() => {
+    if (done) onDone?.(sample);
+    // se avisa una vez por prueba terminada
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done, run]);
+  const parts = useMemo(() => {
+    const R = rng(Math.round(sample.settled * 13 + sample.sst));
+    return [...Array(40)].map(() => ({ x: R(), y: R(), r: R() }));
+  }, [sample.settled, sample.sst]);
+  const H = 160, top = 14;
+  const ease = 1 - Math.pow(1 - k, 2);
+  let body: ReactNode;
+  let reading: string;
+  if (sample.kind === 'imhoff') {
+    // cono: el volumen crece con el cubo de la altura medida desde la punta
+    const tip = top + H, hOf = (v: number) => H * Math.cbrt(Math.min(1000, Math.max(0, v)) / 1000);
+    const halfW = (y: number) => ((tip - y) / H) * 44;
+    const sH = hOf(sample.settled) * ease;
+    const col = settleColor(sample.sst + (sample.topSst - sample.sst) * ease);
+    body = (
+      <g>
+        <path d={`M${80 - 44} ${top} L${80 + 44} ${top} L80 ${tip} Z`} fill={col} stroke="#55636e" strokeWidth="2" />
+        <path d={`M${80 - halfW(tip - sH)} ${tip - sH} L${80 + halfW(tip - sH)} ${tip - sH} L80 ${tip} Z`} fill="#6b5134" />
+        {[1, 2, 5, 10, 40, 100, 400].map((v) => {
+          const y = tip - hOf(v);
+          return (
+            <g key={v}>
+              <path d={`M${80 + halfW(y) - 6} ${y} l6 0`} stroke="#55636e" strokeWidth="1" />
+              <text x={80 + halfW(y) + 3} y={y + 3} className="q3-lens-t" fontWeight="400">
+                {v}
+              </text>
+            </g>
+          );
+        })}
+        {parts.slice(0, Math.round(10 + 20 * Math.min(1, sample.sst / 250))).map((p, i) => {
+          const y0 = top + 8 + p.y * (H - 30);
+          const y = y0 + (tip - 6 - y0) * Math.min(1, ease * (1.2 + p.r));
+          return <circle key={i} cx={80 + (p.x - 0.5) * halfW(y) * 1.6} cy={y} r={1.6} fill="#6d5236" opacity={1 - ease * 0.6} />;
+        })}
+      </g>
+    );
+    reading = `${fmt(sample.settled, sample.settled < 10 ? 1 : 0)} mL/L de sólidos sedimentables`;
+  } else {
+    // probeta de 1 L: el manto de lodo baja desde arriba hasta V30
+    const level = top + H * (1 - Math.min(1000, sample.settled) / 1000);
+    const y = top + (level - top) * ease;
+    body = (
+      <g>
+        <rect x="44" y={top} width="72" height={H} fill={settleColor(sample.topSst + (1 - ease) * 400)} stroke="#55636e" strokeWidth="2" rx="3" />
+        <rect x="45" y={y} width="70" height={top + H - y} fill="#6b4a2b" />
+        {sample.slow && <path d={`M48 ${y + 4} q8 -6 16 0 t16 0 t16 0 t16 0`} stroke="#8a6a44" strokeWidth="2" fill="none" />}
+        {[200, 400, 600, 800].map((v) => {
+          const yy = top + H * (1 - v / 1000);
+          return (
+            <g key={v}>
+              <path d={`M116 ${yy} l6 0`} stroke="#55636e" strokeWidth="1" />
+              <text x="124" y={yy + 3} className="q3-lens-t" fontWeight="400">
+                {v}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    );
+    const svi = mlss && mlss > 0 ? sample.settled / (mlss / 1000) : 0;
+    reading = `V30 = ${Math.round(sample.settled)} mL/L${svi > 0 ? ` · IVL = ${Math.round(svi)} mL/g (${svi > 150 ? 'se asienta mal' : 'se asienta bien'})` : ''}`;
+  }
+  return (
+    <div className="q3-exp q3-settle">
+      <svg viewBox="0 0 170 190" role="img" aria-label={done ? `${sample.name}: ${reading}` : `${sample.name}, listo para la prueba`}>
+        {body}
+        <text x="85" y="186" textAnchor="middle" className="q3-lens-t">
+          {sample.kind === 'imhoff' ? 'cono Imhoff (1 h)' : 'probeta de 1 L (30 min)'}
+        </text>
+      </svg>
+      <div>
+        <p>
+          Muestra: <strong>{sample.name}</strong>
+        </p>
+        <p className="q3-big" aria-live="polite">
+          {run === 0 ? 'Lista para empezar' : done ? reading : `Asentando… ${Math.round(k * (sample.kind === 'imhoff' ? 60 : 30))} min`}
+        </p>
+        <button type="button" className="btn btn-primary" onClick={() => setRun((r) => r + 1)}>
+          {run ? 'Repetir la prueba' : 'Empezar la prueba'}
+        </button>
+        <p className="q3-small">
+          {sample.kind === 'imhoff'
+            ? 'Un litro de agua reposa una hora en el cono: lo que se acumula en la punta son los sólidos sedimentables. La norma pide 5 mL/L o menos en el agua tratada.'
+            : 'Un litro del reactor reposa 30 minutos. Un lodo sano baja y deja el agua clara arriba; si crecen bacterias en hilos, casi no baja. El IVL divide ese volumen por los sólidos: más de 150 mL/g es un lodo que se asienta mal.'}
+        </p>
+      </div>
     </div>
   );
 }

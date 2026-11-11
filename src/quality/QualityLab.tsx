@@ -1,4 +1,5 @@
-// Módulo «Calidad del agua»: tres partes (la quebrada, del río a la llave, la ciudad y la lluvia), cada una con
+// Módulo «Calidad del agua»: cuatro partes (la quebrada, del río a la llave, de la casa al río y la ciudad y la
+// lluvia), cada una con
 // una escena 3D, su pregunta, controles al pie, retos con medalla, experimentos animados, datos y notas para el
 // docente. Sin WebGL se muestra la versión en dibujos planos (carpeta classic), con el mismo modelo. Se carga
 // aparte del resto de la aplicación.
@@ -6,9 +7,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CreekPart } from './classic/CreekPart';
 import { PlantPart } from './classic/PlantPart';
+import { PtarPart } from './classic/PtarPart';
 import { StreetPart } from './classic/StreetPart';
 import { CreekLab } from './CreekLab';
 import { PlantLab } from './PlantLab';
+import { PtarLab } from './PtarLab';
 import { StreetLab } from './StreetLab';
 import { PartTab } from './shell';
 import { hasWebGL } from './three/stage';
@@ -16,11 +19,12 @@ import { ActiveTab } from './ui';
 import './quality.css';
 import './quality3d.css';
 
-type PartId = 'quebrada' | 'llave' | 'ciudad';
+type PartId = 'quebrada' | 'llave' | 'ptar' | 'ciudad';
 
 const PARTS: { id: PartId; name: string; short: string }[] = [
   { id: 'quebrada', name: 'La quebrada y su salud', short: 'Quebrada' },
   { id: 'llave', name: 'Del río a la llave', short: 'Del río a la llave' },
+  { id: 'ptar', name: 'De la casa al río', short: 'De la casa al río' },
   { id: 'ciudad', name: 'La ciudad y la lluvia', short: 'Ciudad y lluvia' },
 ];
 
@@ -30,12 +34,12 @@ export default function QualityLab() {
   const [part, setPart] = useState<PartId>(() => {
     try {
       const v = window.localStorage.getItem(KEY);
-      return v === 'llave' || v === 'ciudad' ? v : 'quebrada';
+      return v === 'llave' || v === 'ptar' || v === 'ciudad' ? v : 'quebrada';
     } catch {
       return 'quebrada';
     }
   });
-  const tabRefs = useRef<Record<PartId, HTMLButtonElement | null>>({ quebrada: null, llave: null, ciudad: null });
+  const tabRefs = useRef<Record<PartId, HTMLButtonElement | null>>({ quebrada: null, llave: null, ptar: null, ciudad: null });
   useEffect(() => {
     try {
       window.localStorage.setItem(KEY, part);
@@ -86,11 +90,21 @@ export default function QualityLab() {
     <ActiveTab.Provider value={`q-tab-${part}`}>
       <PartTab.Provider value={`q-tab-${part}`}>
         {gl ? (
-          part === 'quebrada' ? <CreekLab key="q3c" head={head} /> : part === 'llave' ? <PlantLab key="q3p" head={head} /> : <StreetLab key="q3s" head={head} />
+          part === 'quebrada' ? (
+            <CreekLab key="q3c" head={head} />
+          ) : part === 'llave' ? (
+            <PlantLab key="q3p" head={head} goPtar={() => go('ptar')} />
+          ) : part === 'ptar' ? (
+            <PtarLab key="q3w" head={head} />
+          ) : (
+            <StreetLab key="q3s" head={head} />
+          )
         ) : part === 'quebrada' ? (
           <CreekPart head={head} goStreet={() => go('ciudad')} />
         ) : part === 'llave' ? (
-          <PlantPart head={head} />
+          <PlantPart head={head} goPtar={() => go('ptar')} />
+        ) : part === 'ptar' ? (
+          <PtarPart head={head} />
         ) : (
           <StreetPart head={head} />
         )}

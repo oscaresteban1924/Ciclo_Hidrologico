@@ -5,7 +5,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../state/store';
 import { JarTest, Microscope } from './experiments';
-import { PTAR_STAGES, RAW_WATER, treatPlant, type PlantInput, type RawCase } from './model';
+import { RAW_WATER, treatPlant, type PlantInput, type RawCase } from './model';
+import { ptarStages } from './ptar';
+
+const PTAR_STAGES = ptarStages();
 import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from './shell';
 import { ProcessPanel, TOUR_S } from './ProcessPanel';
 import { PROCESSES, processById, type ProcessId } from './processes';
@@ -72,7 +75,7 @@ const RETOS: Reto<Ctx>[] = [
   },
 ];
 
-export function PlantLab({ head }: { head: ReactNode }) {
+export function PlantLab({ head, goPtar }: { head: ReactNode; goPtar?: () => void }) {
   const { state, dispatch } = useStore();
   const [inp, setInp] = useState<PlantInput>({ raw: 'lluvia', dose: 10, chlorine: 0.8 });
   const reduced = state.prefs.reducedMotion;
@@ -341,7 +344,7 @@ export function PlantLab({ head }: { head: ReactNode }) {
           IRCA {fmt(r.irca, 1)} % · {r.risk}
         </p>
         <h3>¿Y después de usarla?</h3>
-        <p className="q3-small">El agua del baño y la cocina se va por el alcantarillado hasta una planta de tratamiento de aguas residuales. Lo que queda de la materia orgánica (DBO5) después de cada etapa, en una planta típica:</p>
+        <p className="q3-small">El agua del baño y la cocina se va por el alcantarillado hasta una planta de tratamiento de aguas residuales. Lo que queda de la materia orgánica (DBO5) después de cada etapa, en la planta de «De la casa al río» en su operación normal:</p>
         <ol className="q3-ptar">
           {PTAR_STAGES.map((s) => (
             <li key={s.id}>
@@ -353,6 +356,13 @@ export function PlantLab({ head }: { head: ReactNode }) {
             </li>
           ))}
         </ol>
+        {goPtar && (
+          <p>
+            <button type="button" className="btn small" onClick={goPtar}>
+              Ver la planta de aguas residuales
+            </button>
+          </p>
+        )}
         <button
           type="button"
           className="btn small"

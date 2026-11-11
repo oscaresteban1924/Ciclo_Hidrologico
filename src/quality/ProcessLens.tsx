@@ -7,7 +7,8 @@ import type { PlantInput, PlantResult } from './model';
 import type { ProcessId } from './processes';
 import { rng } from './three/kit';
 
-function useTime(): number {
+/** Reloj de las animaciones «con lupa» [s] (quieto con «movimiento reducido»). */
+export function useTime(): number {
   const { state } = useStore();
   const reduced = state.prefs.reducedMotion;
   const [t, setT] = useState(reduced ? 6 : 0);
@@ -28,7 +29,8 @@ function useTime(): number {
 const W = 240, H = 150;
 const CLAY = '#8a6a44', SAND = '#d8b878', FLOC = '#6b5134', BUG = '#8c3fb3', CL = '#3fa565', WATER = '#d9edf5';
 
-function Frame({ children, label }: { children: ReactNode; label: string }) {
+/** Marco de una animación «con lupa» (240 × 150). */
+export function Frame({ children, label }: { children: ReactNode; label: string }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="q3-lens2" role="img" aria-label={label}>
       <rect x="0" y="0" width={W} height={H} rx="10" fill={WATER} />
