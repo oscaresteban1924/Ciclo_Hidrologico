@@ -668,6 +668,30 @@ El canal también tiene ahora «Simular una creciente». Se revisaron en captura
 
 **Comprobado.** Portada en escritorio, tableta y teléfono; paso de la portada a una sala y regreso por el nombre; enlace directo, «atrás», «adelante» y recarga; pruebas 33 de 33 de canales y 26 de 26 de calidad. Superposiciones de toda la aplicación: 152 de 152 estados sin choques ni cortes en las cuatro pantallas. La portada no tiene elementos flotantes que esa revisión mida; se revisó en capturas.
 
+## 4 tricies. Sala «Cuencas: de la lluvia al caudal» (ejecutada)
+
+**Pedido.** «Implementa todos porfavor. Ya sabes el nivel que quiero.» Cuatro salas nuevas al nivel de «Hidráulica de canales», una por una, publicando al terminar cada una. Esta es la primera: Cuencas. Modelo, supuestos y fuentes en `docs/cuencas/MODELO_CUENCAS.md`.
+
+**Navegación para ocho salas.** El encabezado y la portada muestran solo las salas construidas (`ROOMS_OPEN` en `store.tsx`); un enlace directo a una sala que aún no existe (por ejemplo `#acueducto`) abre la portada, sin botones vacíos. La portada agrupa las salas en «El agua en la naturaleza», «El agua en la ciudad» y «Obras hidráulicas», en tres columnas alineadas. En teléfonos y tabletas las salas pasan a varias filas, todas a la vista. La ayuda lista las salas abiertas. El marco común de las salas nuevas está en `src/rooms/RoomLab.tsx`; la pestaña Diseño de canales recibe el juego de herramientas de cada sala y su nota de la norma.
+
+**La sala.** Tres partes:
+- **La cuenca y su respuesta.** Cuenca de ladera en 3D (maqueta con bordes de suelo, quebrada principal y tres afluentes curvos, coberturas de la cabecera a la salida, barrio y estación de aforo). El aguacero se reproduce en unos 24 s: lluvia, pulsos que bajan por los cauces en el tiempo de concentración y el caudal que mide la estación. Instrumentos: aguacero e hidrograma con el minuto actual y registros de caudal y lluvia.
+- **El hidrograma y la urbanización.** Hidrograma urbanizado contra el de la cuenca sin urbanizar; tanque de retención junto a la salida que se llena en la escena; convolución bloque por bloque; partes del hidrograma con el retardo.
+- **Crecientes y riesgo.** Tramo de río con llanuras y diez casas; el agua sube a la profundidad calculada con la sección dividida; regla con los niveles de 2, 10, 50 y 100 años; papel de Gumbel en vivo; vidas útiles simuladas.
+
+Cada parte tiene retos (doce en total; ninguno se cumple solo con los datos de partida), experimentos que se comparan con la teoría y la pestaña Diseño con siete herramientas, gráfica y memoria.
+
+**Comprobado.**
+- Pruebas de la sala: 12 de 12 (`npm run test:basins`, `docs/cuencas/PRUEBAS_CUENCAS.md`): escorrentía de TR-55, tiempos de concentración, racional, bloques alternos, volumen del hidrograma unitario, Gumbel, riesgo, la cuenca de la escena, robustez de las herramientas (2 100 llamadas), tanque (masa con error < 1e-9 y volumen guardado igual al de la teoría), remuestreo, y riesgo simulado con 20 000 vidas a menos de 1 punto de la fórmula. Canales 33 de 33 y calidad 26 de 26 después de los cambios comunes.
+- Superposiciones de la sala: 28 de 28 estados sin choques ni cortes en escritorio, portátil, tableta y teléfono (las tres partes, el aguacero en curso, el tanque, la vista de las casas y la pestaña Diseño). `superposiciones.py` incluye ahora la sala.
+- Sin WebGL: los tres esquemas planos (cuenca, partes del hidrograma y corte del río) llenan la escena con el mismo cálculo.
+- Navegación: `#cuencas` abre la sala; «atrás» vuelve a la portada; `#acueducto` abre la portada mientras la sala no exista.
+- Sin errores en la consola en ninguna pantalla.
+
+**Ajustes durante la verificación.** La cámara general de la cuenca dejaba media escena vacía: se cambió de lado y se agregaron los bordes de la maqueta. Los textos de los esquemas planos salían a 16 px (la clase de texto solo tenía estilo dentro de otra animación): ahora tienen su tamaño. Las etiquetas del eje de tiempo se montaban al final: el último tic es el total. Los registros en vivo escribían «−0» con valores nulos. Un reto de «El hidrograma» se cumplía con los datos de partida: la urbanización inicial bajó a 25 %. En el equipo de verificación (unos 2,5 cuadros por segundo, sin tarjeta gráfica) el reloj del aguacero avanza más lento que el real, porque cada cuadro cuenta como máximo 0,1 s; en un equipo normal dura los 24 s.
+
+**Límites declarados.** La curva IDF, la cuenca, el río y las series son ilustrativos. El tanque es un primer tanteo con salida limitada, no un tránsito con la curva de su descarga. El hidrograma no incluye caudal base ni se transita por los cauces.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

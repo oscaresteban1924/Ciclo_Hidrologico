@@ -1,4 +1,4 @@
-# Superposiciones: recorre los módulos y vistas principales (incluida la hidráulica de canales) en cuatro pantallas (escritorio 1440 × 900, portátil
+# Superposiciones: recorre los módulos y vistas principales (incluidas la hidráulica de canales y las cuencas) en cuatro pantallas (escritorio 1440 × 900, portátil
 # 1280 × 720, tableta 820 × 1180 y teléfono 390 × 844) y mide, en cada estado, si algún elemento flotante se monta
 # sobre otro: rótulos de las escenas 3D, avisos, barras, leyendas, columna de cámara, tarjetas, preguntas y paneles
 # sobre la escena. También informa los que quedan cortados por el borde de la escena o de la pantalla.
@@ -107,6 +107,26 @@ def mode(pg, name):
     pg.wait_for_timeout(2500)
 
 
+def cuencas(pg, screen, shots, report):
+    """Sala de cuencas: las tres partes, el aguacero en curso, el tanque de retención y la pestaña Diseño."""
+    mode(pg, 'Cuencas: de la lluvia al caudal'); pg.wait_for_timeout(4000)
+    for part, tag in [('La cuenca y su respuesta', 'cuenca'), ('El hidrograma y la urbanización', 'hidrograma'), ('Crecientes y riesgo', 'crecientes')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'cuencas-{tag}', shots, report)
+        if tag == 'cuenca':
+            pg.evaluate(BTN, 'Lanzar el aguacero'); pg.wait_for_timeout(9000)
+            top(pg); check(pg, screen, 'cuencas-aguacero', shots, report)
+        if tag == 'hidrograma':
+            pg.evaluate(RANGE, ['Tanque de retención', '3000']); pg.wait_for_timeout(1500)
+            pg.evaluate(BTN, 'Lanzar el aguacero'); pg.wait_for_timeout(12000)
+            top(pg); check(pg, screen, 'cuencas-tanque', shots, report)
+        if tag == 'crecientes':
+            pg.evaluate(BTN, 'Las casas'); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'cuencas-casas', shots, report)
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'cuencas-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -190,6 +210,7 @@ def run(screens, shots):
                     top(pg); check(pg, screen, 'canales-sedimentos-fondo', shots, report)
                     pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
                     top(pg); check(pg, screen, 'canales-diseno', shots, report)
+            cuencas(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

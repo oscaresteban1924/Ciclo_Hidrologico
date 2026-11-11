@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test:city": "tsx tests/city/sim.test.ts",
     "test:quality": "tsx tests/quality/model.test.ts",
-    "test:canals": "tsx tests/canals/hydraulics.test.ts"
+    "test:canals": "tsx tests/canals/hydraulics.test.ts",
+    "test:basins": "tsx tests/basins/hydrology.test.ts"
   },
   "dependencies": {
     "react": "^19.3.1",

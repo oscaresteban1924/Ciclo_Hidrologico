@@ -1,4 +1,4 @@
-// Encabezado del Laboratorio del agua: el nombre (vuelve a la portada), las cuatro salas, las herramientas comunes
+// Encabezado del Laboratorio del agua: el nombre (vuelve a la portada), las salas abiertas, las herramientas comunes
 // (retos, bitácora, glosario), ayuda y ajustes. Dentro del ciclo del agua, una segunda fila con sus tres modos y la
 // gota trazadora.
 
@@ -7,12 +7,14 @@ import { TeacherSources } from './FactCard';
 import { UI } from '../content/ui';
 import { Credits } from './Credits';
 import { speechSupported } from '../lib/speech';
-import { roomOf, useStore, type Mode, type Room, type Tool } from '../state/store';
+import { roomOf, roomOpen, useStore, type Mode, type Room, type Tool } from '../state/store';
 import { Disclosure, Icon, Segmented, Toggle } from './ui';
 
 
-const ROOMS: Room[] = ['ciclo', 'city', 'quality', 'canals'];
+/** En el orden en que viaja el agua: la naturaleza, la ciudad y las obras. */
+const ROOMS: Room[] = (['ciclo', 'basins', 'ground', 'city', 'quality', 'supply', 'canals', 'dams'] as Room[]).filter(roomOpen);
 const CICLO: Mode[] = ['guided', 'explore', 'lab'];
+const NUM: Record<number, string> = { 4: 'cuatro', 5: 'cinco', 6: 'seis', 7: 'siete', 8: 'ocho' };
 /** Herramientas de todas las salas; la gota trazadora es del ciclo del agua. */
 const TOOLS: Exclude<Tool, null>[] = ['challenges', 'logbook', 'glossary'];
 
@@ -95,7 +97,14 @@ export function Help({ onClose }: { onClose: () => void }) {
       <dl className="help-list">
         <dt>Portada y salas</dt>
         <dd>
-          El nombre <strong>Laboratorio del agua</strong>, arriba a la izquierda, vuelve a la portada. Arriba están las cuatro salas: <strong>El ciclo del agua</strong>, <strong>Medellín</strong>, <strong>Calidad del agua</strong> e <strong>Hidráulica de canales</strong>. Retos, Bitácora y Glosario sirven en todas.
+          El nombre <strong>Laboratorio del agua</strong>, arriba a la izquierda, vuelve a la portada. Arriba están las {NUM[ROOMS.length] ?? ROOMS.length} salas, en el orden en que viaja el agua:{' '}
+          {ROOMS.map((r, k) => (
+            <span key={r}>
+              <strong>{UI.roomsShort[r]}</strong>
+              {k < ROOMS.length - 2 ? ', ' : k === ROOMS.length - 2 ? ' y ' : '. '}
+            </span>
+          ))}
+          Retos, Bitácora y Glosario sirven en todas.
         </dd>
         <dt>El ciclo del agua</dt>
         <dd>
@@ -105,6 +114,14 @@ export function Help({ onClose }: { onClose: () => void }) {
         <dd>
           En el paisaje del ciclo: <strong>Cuenca</strong> muestra todo, <strong>Proceso</strong> acerca la zona que estudias y <strong>Detalle</strong> abre lo que no se ve a simple vista. Abajo a la izquierda: pausa, repite y velocidad (cambia el ritmo, no los resultados).
         </dd>
+        {roomOpen('basins') && (
+          <>
+            <dt>Cuencas: de la lluvia al caudal</dt>
+            <dd>
+              Tres partes en 3D: la cuenca y su tiempo de concentración, el hidrograma (y lo que cambia al urbanizar, con un tanque de retención) y las crecientes con su período de retorno y su riesgo. Lanza el aguacero, mira el hidrograma en vivo y usa las calculadoras de caudal de diseño. La cuenca, el río y las series son ilustrativos.
+            </dd>
+          </>
+        )}
         <dt>Medellín: laboratorio de lluvia</dt>
         <dd>
           Una maqueta 3D de un sector de ciudad donde la lluvia se calcula de verdad: elige un sector en el valle, crea lluvia, cambia superficies, construye un jardín de lluvia o limpia un sumidero, y compara dos versiones con la misma lluvia. Es educativo: no es un pronóstico oficial.
@@ -154,12 +171,10 @@ export function Header() {
               className={`mode-tab room-tab${inRoom(r) ? ' is-on' : ''}`}
               aria-pressed={inRoom(r)}
               aria-label={UI.rooms[r]}
+              title={UI.rooms[r]}
               onClick={() => enter(r)}
             >
-              <span className="lbl-long">{UI.rooms[r]}</span>
-              <span className="lbl-short" aria-hidden="true">
-                {UI.roomsShort[r]}
-              </span>
+              {UI.roomsShort[r]}
             </button>
           ))}
         </div>

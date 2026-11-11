@@ -1,9 +1,10 @@
-// Portada del Laboratorio del agua: qué es, las cuatro salas con lo que se hace en cada una, las herramientas que
-// sirven en todas y los créditos. Las ilustraciones son dibujos propios, sin imágenes descargadas.
+// Portada del Laboratorio del agua: qué es, las salas abiertas agrupadas (la naturaleza, la ciudad y las obras) con lo
+// que se hace en cada una, las herramientas que sirven en todas y los créditos. Las ilustraciones son dibujos propios,
+// sin imágenes descargadas.
 
 import type { ReactNode } from 'react';
 import { UI } from '../content/ui';
-import { useStore, type Mode, type Room } from '../state/store';
+import { roomOpen, useStore, type Mode, type Room } from '../state/store';
 import { Credits } from './Credits';
 
 interface RoomCard {
@@ -59,6 +60,19 @@ const ART = {
       <path d="M72 46a8 8 0 0 0 8 8" fill="none" stroke="#ffffff" strokeWidth="2.6" strokeLinecap="round" />
     </svg>
   ),
+  basins: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e6efe2" />
+      <path d="M0 22c24-14 52-16 80-8s56 4 80-8v90H0z" fill="#3f7a3a" />
+      <path d="M0 46c30-10 56-6 80 2s52 6 80-6v54H0z" fill="#93c06c" />
+      <path d="M0 70c28-6 60-2 92 4s48 2 68-4v26H0z" fill="#cdb08f" />
+      <path d="M14 30c18 10 30 22 46 28s34 10 52 12 34 2 48 0" fill="none" stroke="#2f84b5" strokeWidth="3.2" strokeLinecap="round" />
+      <path d="M40 16c6 14 10 26 16 40M98 22c-2 14-4 30-2 46" fill="none" stroke="#2f84b5" strokeWidth="2" strokeLinecap="round" />
+      <rect x="118" y="8" width="38" height="26" rx="3" fill="#ffffff" />
+      <path d="M122 30c4 0 6-17 10-17s7 12 20 15" fill="none" stroke="#1f78b4" strokeWidth="2" />
+      <path d="M122 30h32" stroke="#17324d" strokeWidth="1" />
+    </svg>
+  ),
   canals: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
@@ -85,6 +99,15 @@ const CARDS: RoomCard[] = [
     ],
     art: ART.ciclo,
     tone: 'water',
+  },
+  {
+    room: 'basins',
+    title: UI.rooms.basins,
+    lead: 'Cómo una cuenca convierte un aguacero en el caudal de una quebrada, qué cambia al urbanizarla y qué tan seguido llega una creciente.',
+    items: ['Tiempo de concentración', 'Hidrograma en vivo', 'Tanque de retención', 'Crecientes, período de retorno y riesgo'],
+    enter: [{ mode: 'basins', label: 'Entrar' }],
+    art: ART.basins,
+    tone: 'moss',
   },
   {
     room: 'city',
@@ -115,40 +138,64 @@ const CARDS: RoomCard[] = [
   },
 ];
 
+/** Grupos de la portada, en el orden en que viaja el agua. */
+const GROUPS: { id: string; title: string; rooms: Room[] }[] = [
+  { id: 'naturaleza', title: 'El agua en la naturaleza', rooms: ['ciclo', 'basins', 'ground'] },
+  { id: 'ciudad', title: 'El agua en la ciudad', rooms: ['city', 'quality', 'supply'] },
+  { id: 'obras', title: 'Obras hidráulicas', rooms: ['canals', 'dams'] },
+];
+const NUM: Record<number, string> = { 4: 'Cuatro', 5: 'Cinco', 6: 'Seis', 7: 'Siete', 8: 'Ocho' };
+
+function RoomItem({ c }: { c: RoomCard }) {
+  const { dispatch } = useStore();
+  return (
+    <li className={`room-card tone-${c.tone}`}>
+      <div className="room-art">{c.art}</div>
+      <div className="room-body">
+        <h4>{c.title}</h4>
+        <p>{c.lead}</p>
+        <ul className="room-items">
+          {c.items.map((it) => (
+            <li key={it}>{it}</li>
+          ))}
+        </ul>
+        <div className="room-enter">
+          {c.enter.map((e, k) => (
+            <button key={e.mode} type="button" className={k === 0 ? 'btn' : 'btn-ghost'} onClick={() => dispatch({ type: 'mode', mode: e.mode })} aria-label={c.enter.length > 1 ? `${c.title}: ${e.label}` : `Entrar a ${c.title}`}>
+              {e.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function Home() {
   const { dispatch } = useStore();
+  const open = CARDS.filter((c) => roomOpen(c.room));
+  const groups = GROUPS.map((g) => ({ ...g, cards: g.rooms.map((r) => open.find((c) => c.room === r)).filter((c): c is RoomCard => !!c) })).filter((g) => g.cards.length);
   return (
     <main className="home" id="panel" tabIndex={-1}>
       <section className="home-hero">
         <p className="home-kicker">{UI.appSubtitle}</p>
         <h2>{UI.appTitle}</h2>
         <p className="home-lead">
-          Cuatro salas para entender el agua: cómo viaja por el planeta, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana y cómo se mueve en canales, puentes y alcantarillas.
+          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta y por una cuenca, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana y cómo se mueve en canales, puentes y alcantarillas.
         </p>
       </section>
-      <ul className="home-rooms" aria-label="Salas">
-        {CARDS.map((c) => (
-          <li key={c.room} className={`room-card tone-${c.tone}`}>
-            <div className="room-art">{c.art}</div>
-            <div className="room-body">
-              <h3>{c.title}</h3>
-              <p>{c.lead}</p>
-              <ul className="room-items">
-                {c.items.map((it) => (
-                  <li key={it}>{it}</li>
-                ))}
-              </ul>
-              <div className="room-enter">
-                {c.enter.map((e, k) => (
-                  <button key={e.mode} type="button" className={k === 0 ? 'btn' : 'btn-ghost'} onClick={() => dispatch({ type: 'mode', mode: e.mode })} aria-label={c.enter.length > 1 ? `${c.title}: ${e.label}` : `Entrar a ${c.title}`}>
-                    {e.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {groups.map((g) => (
+        <section key={g.id} className="home-group" aria-labelledby={`home-g-${g.id}`}>
+          <h3 id={`home-g-${g.id}`} className="home-group-title">
+            {g.title}
+          </h3>
+          <ul className="home-rooms">
+            {g.cards.map((c) => (
+              <RoomItem key={c.room} c={c} />
+            ))}
+          </ul>
+        </section>
+      ))}
       <section className="home-tools" aria-label="Herramientas de todas las salas">
         <p>
           En todas las salas: <button type="button" className="link-btn" onClick={() => dispatch({ type: 'tool', tool: 'challenges' })}>Retos</button>, <button type="button" className="link-btn" onClick={() => dispatch({ type: 'tool', tool: 'logbook' })}>Bitácora</button> y{' '}

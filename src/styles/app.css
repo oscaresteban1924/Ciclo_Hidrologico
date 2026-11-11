@@ -2061,8 +2061,8 @@ button.scene-label:hover {
   }
 }
 
-/* Entre 900 y 1320 px las pestañas de los módulos pasan a su propia fila, para que nada quede recortado. */
-@media (max-width: 1320px) and (min-width: 901px) {
+/* Entre 900 y 1500 px las salas pasan a su propia fila, para que nada quede recortado. */
+@media (max-width: 1500px) and (min-width: 901px) {
   .app-header {
     flex-wrap: wrap;
     gap: 6px 12px;
@@ -2117,6 +2117,22 @@ button.scene-label:hover {
   .mode-tabs,
   .tool-tabs {
     flex-shrink: 0;
+  }
+  /* En el teléfono y la tableta las salas no caben en una fila: pasan a varias, todas a la vista (sin desplazar). */
+  .modes {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    overflow-x: visible;
+  }
+  .room-tabs {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .room-tabs .mode-tab {
+    flex: 0 1 auto;
+    min-height: 36px;
+    padding: 5px 10px;
   }
   .header-actions {
     margin-left: auto;
@@ -4489,14 +4505,38 @@ button.scene-label:hover {
   line-height: 1.5;
   color: var(--ink-2);
 }
+.home-group {
+  max-width: 1180px;
+  margin: 0 auto 26px;
+}
+.home-group-title {
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+}
 .home-rooms {
   list-style: none;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
-  max-width: 1180px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  /* tres columnas en todos los grupos (ninguno tiene más de tres salas), para que las tarjetas se alineen */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
+}
+@media (max-width: 980px) {
+  .home-rooms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .home-rooms {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .room-card {
   display: flex;
@@ -4526,7 +4566,7 @@ button.scene-label:hover {
   gap: 10px;
   padding: 16px 18px 18px;
 }
-.room-body h3 {
+.room-body h4 {
   margin: 0;
   font-family: var(--font-display);
   font-size: 21px;

@@ -8,19 +8,23 @@ import type { LayerId } from '../content/types';
 import { loadSaved, save } from '../lib/storage';
 import type { Balance, RainProfile, StormSample } from '../lab/storm';
 
-export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality' | 'canals';
+export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality' | 'canals' | 'basins' | 'supply' | 'ground' | 'dams';
 export type Tool = 'tracer' | 'challenges' | 'glossary' | 'logbook' | null;
 /** Salas: el ciclo del agua agrupa el recorrido, la exploración y los experimentos. */
-export type Room = 'ciclo' | 'city' | 'quality' | 'canals';
-export const roomOf = (m: Mode): Room => (m === 'city' || m === 'quality' || m === 'canals' ? m : 'ciclo');
+export type Room = 'ciclo' | 'basins' | 'ground' | 'city' | 'quality' | 'supply' | 'canals' | 'dams';
+export const roomOf = (m: Mode): Room => (m === 'guided' || m === 'explore' || m === 'lab' ? 'ciclo' : m);
 
-/** Enlaces directos: la dirección termina en #recorrido, #explorar, #experimentos, #medellin, #calidad o #canales. */
-export const MODE_HASH: Record<Mode, string> = { guided: 'recorrido', explore: 'explorar', lab: 'experimentos', city: 'medellin', quality: 'calidad', canals: 'canales' };
+/** Enlaces directos: la dirección termina en #recorrido, #explorar, #experimentos, #cuencas, #acuifero, #medellin, #calidad, #acueducto, #canales o #presas. */
+export const MODE_HASH: Record<Mode, string> = { guided: 'recorrido', explore: 'explorar', lab: 'experimentos', city: 'medellin', quality: 'calidad', canals: 'canales', basins: 'cuencas', supply: 'acueducto', ground: 'acuifero', dams: 'presas' };
+
+/** Salas ya construidas (las demás no aparecen en la portada, en el encabezado ni por enlace directo). */
+export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'city', 'quality', 'canals'];
+export const roomOpen = (r: Room) => ROOMS_OPEN.includes(r);
 
 export function modeFromHash(): Mode | null {
   try {
     const h = decodeURIComponent(window.location.hash.replace(/^#/, '')).toLowerCase();
-    const hit = (Object.keys(MODE_HASH) as Mode[]).find((m) => MODE_HASH[m] === h);
+    const hit = (Object.keys(MODE_HASH) as Mode[]).find((m) => MODE_HASH[m] === h && roomOpen(roomOf(m)));
     return hit ?? (h === 'ciclo' ? 'guided' : null);
   } catch {
     return null;

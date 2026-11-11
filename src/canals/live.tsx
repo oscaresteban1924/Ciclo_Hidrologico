@@ -112,6 +112,8 @@ export interface TraceSpec {
 }
 
 const WINDOW = 40;
+/** Sin «−0»: lo que se redondea a cero se escribe 0. */
+const nz = (v: number, d: number) => (Math.abs(v) < 0.5 * Math.pow(10, -d) ? 0 : v);
 
 /** Registros en el tiempo: una gráfica pequeña por magnitud, cada una con su eje (sin ejes dobles). */
 export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number }) {
@@ -164,8 +166,8 @@ export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number 
             <text x={4} y={10} className="hc-hud-t" fill="#3c4b57">
               {s.label}: <tspan fontWeight="700">{es(s.value, d)} {s.unit}</tspan>
             </text>
-            <text x={L - 4} y={Y(hi - pad) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(hi - pad, d)}</text>
-            <text x={L - 4} y={Y(lo + pad) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(lo + pad, d)}</text>
+            <text x={L - 4} y={Y(hi - pad) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(nz(hi - pad, d), d)}</text>
+            <text x={L - 4} y={Y(lo + pad) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(nz(lo + pad, d), d)}</text>
           </svg>
         );
       })}
@@ -174,8 +176,8 @@ export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number 
   );
 }
 
-/** Panel de instrumentos: encabezado con los valores, perfil y registros. */
-export function LiveHud({ head, profile, profileLabel, traces }: { head: ReactNode[]; profile?: LiveProfileData | null; profileLabel?: string; traces: TraceSpec[] }) {
+/** Panel de instrumentos: encabezado con los valores, perfil (u otra gráfica en vivo) y registros. */
+export function LiveHud({ head, profile, profileLabel, chart, traces }: { head: ReactNode[]; profile?: LiveProfileData | null; profileLabel?: string; chart?: ReactNode; traces: TraceSpec[] }) {
   return (
     <div className="hc-hud" aria-live="off">
       <div className="hc-hud-head">
@@ -184,8 +186,8 @@ export function LiveHud({ head, profile, profileLabel, traces }: { head: ReactNo
           <span key={i}>{h}</span>
         ))}
       </div>
-      <div className={`hc-hud-row${profile ? '' : ' is-single'}`}>
-        {profile && <LiveProfile d={profile} label={profileLabel ?? 'Perfil del agua'} />}
+      <div className={`hc-hud-row${profile || chart ? '' : ' is-single'}`}>
+        {chart ?? (profile && <LiveProfile d={profile} label={profileLabel ?? 'Perfil del agua'} />)}
         <LiveTraces specs={traces} />
       </div>
     </div>

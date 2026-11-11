@@ -149,6 +149,11 @@ const PLANS = new Map<Run, (d: Record<string, number | string>) => { plan?: Plan
 ]);
 
 /** Plano y gráfica del resultado de una herramienta, si los tiene. */
+/** Las demás salas registran aquí el plano o la gráfica de sus herramientas. */
+export function registerPlan(run: Run, build: (d: Record<string, number | string>) => { plan?: Plan; chart?: Chart }): void {
+  PLANS.set(run, build);
+}
+
 export function planFor(run: Run, res: Result): { plan?: Plan; chart?: Chart } {
   if (res.error || !res.data) return {};
   const fn = PLANS.get(run);

@@ -698,7 +698,7 @@
     max-width: calc(100% - 24px);
   }
   /* y el aviso de la bitácora, que en la aplicación va al pie de la pantalla, taparía la pregunta: aquí va arriba */
-  .mode-quality .toast-region {
+  :is(.mode-quality, .mode-canals, .mode-basins, .mode-supply, .mode-ground, .mode-dams) .toast-region {
     top: 10px;
     bottom: auto;
   }

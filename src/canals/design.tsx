@@ -31,7 +31,7 @@ import { memoriaHTML } from './memoria';
 export type DesignPart = 'canal' | 'resalto' | 'puente' | 'alcantarilla' | 'sedimentos' | 'aforo' | 'ondas';
 type Level = 'ninos' | 'uni';
 
-interface Field {
+export interface Field {
   id: string;
   label: string;
   unit?: string;
@@ -44,7 +44,7 @@ interface Field {
   text?: boolean;
 }
 
-interface Tool {
+export interface Tool {
   title: string;
   intro: string;
   kidIntro: string;
@@ -454,7 +454,16 @@ function loadLevel(): Level {
   }
 }
 
-export function DesignTab({ part }: { part: DesignPart }) {
+/** Herramientas de una parte de otra sala: calculadora, prediseñador y las avanzadas (solo para universitarios). */
+export interface ToolSet {
+  calc: Tool;
+  pre: Tool;
+  extra?: (Tool & { kind: 'calc' | 'pre' })[];
+  /** Nota de la norma citada en las verificaciones de esta sala (si no, la de canales). */
+  norm?: string;
+}
+
+export function DesignTab({ part, set, room }: { part: DesignPart | string; set?: ToolSet; room?: string }) {
   const [level, setLevel] = useState<Level>(loadLevel);
   useEffect(() => {
     try {
@@ -463,8 +472,9 @@ export function DesignTab({ part }: { part: DesignPart }) {
       /* sin almacenamiento */
     }
   }, [level]);
-  const t = TOOLS[part];
-  const list: (Tool & { kind: 'calc' | 'pre' })[] = [{ ...t.calc, kind: 'calc' }, { ...t.pre, kind: 'pre' }, ...(level === 'uni' ? EXTRA[part] : [])];
+  const t = set ?? TOOLS[part as DesignPart];
+  const extra = set ? (set.extra ?? []) : EXTRA[part as DesignPart];
+  const list: (Tool & { kind: 'calc' | 'pre' })[] = [{ ...t.calc, kind: 'calc' }, { ...t.pre, kind: 'pre' }, ...(level === 'uni' ? extra : [])];
   const [pick, setPick] = useState(0);
   const sel = list[Math.min(pick, list.length - 1)];
   return (
@@ -484,13 +494,13 @@ export function DesignTab({ part }: { part: DesignPart }) {
           </button>
         ))}
       </div>
-      <ToolForm key={sel.title} tool={sel} level={level} kind={sel.kind} part={part} />
+      <ToolForm key={sel.title} tool={sel} level={level} kind={sel.kind} part={part} room={room} norm={set?.norm} />
       <p className="hc-note">Prediseño académico para aprender: no es un diseño de ingeniería. Un diseño real necesita estudios de campo, hidrología, geotecnia, normas vigentes y la firma de un profesional.</p>
     </div>
   );
 }
 
-function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind: 'calc' | 'pre'; part: DesignPart }) {
+function ToolForm({ tool, level, kind, part, room, norm }: { tool: Tool; level: Level; kind: 'calc' | 'pre'; part: string; room?: string; norm?: string }) {
   const [vals, setVals] = useState<Vals>(() => Object.fromEntries(tool.fields.map((f) => [f.id, f.def])));
   const kid = level === 'ninos';
   const visible = tool.fields.filter((f) => (!kid || f.kid) && (!f.when || f.when[1].includes(String(vals[f.when[0]]))));
@@ -517,7 +527,7 @@ function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind:
   const shown = tool.fields.filter((f) => !f.when || f.when[1].includes(String(vals[f.when[0]])));
   const memo = () => {
     const data = shown.map((f) => ({ label: `${f.label}${f.unit ? ` (${f.unit})` : ''}`, value: f.options ? (f.options.find((o) => o.value === String(vals[f.id]))?.label ?? String(vals[f.id])) : String(vals[f.id]).replace('.', ',') }));
-    const html = memoriaHTML({ title: tool.title, intro: kid ? tool.kidIntro : tool.intro, level: kid ? 'Niños' : 'Universitarios', data, res, planSvg: planBig || undefined, chartSvg: chartBig || undefined, project, author });
+    const html = memoriaHTML({ title: tool.title, intro: kid ? tool.kidIntro : tool.intro, level: kid ? 'Niños' : 'Universitarios', data, res, planSvg: planBig || undefined, chartSvg: chartBig || undefined, project, author, room });
     download(html, `memoria-${kind === 'pre' ? 'prediseno' : 'calculo'}-${part}.html`, 'text/html;charset=utf-8');
   };
   return (
@@ -579,7 +589,9 @@ function ToolForm({ tool, level, kind, part }: { tool: Tool; level: Level; kind:
         <details className="hc-details">
           <summary>Norma colombiana citada</summary>
           <p className="q3-small">
-            {RAS_REF}. Para canales abiertos de aguas lluvias, la lluvia de diseño debe tener un período de retorno de al menos {RAS_TABLA16[4].T} años si el canal drena menos de 1 000 ha, y de {RAS_TABLA16[5].T} años si drena más (Art. 135, Tabla 16). Las demás verificaciones son criterios de la herramienta para aprender. El Manual de Drenaje para Carreteras del INVÍAS (alcantarillas bajo vías y puentes) todavía no está incluido.
+            {RAS_REF}.{' '}
+            {norm ??
+              `Para canales abiertos de aguas lluvias, la lluvia de diseño debe tener un período de retorno de al menos ${RAS_TABLA16[4].T} años si el canal drena menos de 1 000 ha, y de ${RAS_TABLA16[5].T} años si drena más (Art. 135, Tabla 16). Las demás verificaciones son criterios de la herramienta para aprender. El Manual de Drenaje para Carreteras del INVÍAS (alcantarillas bajo vías y puentes) todavía no está incluido.`}
           </p>
         </details>
       )}
