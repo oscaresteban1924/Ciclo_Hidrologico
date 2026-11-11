@@ -30,7 +30,8 @@ export interface Result {
 
 export const f = (v: number, d = 2) => (Number.isFinite(v) ? v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
 const num = (v: number | string | undefined, def = 0) => {
-  const x = typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.'));
+  if (v === undefined) return def; // dato ausente: el valor de ejemplo (un campo vacío sigue siendo 0 y se avisa)
+  const x = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
   return Number.isFinite(x) ? x : def;
 };
 const ceilTo = (v: number, s: number) => Math.ceil(v / s - 1e-9) * s;

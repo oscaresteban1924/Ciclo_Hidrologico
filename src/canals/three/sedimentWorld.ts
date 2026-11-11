@@ -102,6 +102,7 @@ export class SedimentWorld {
     this.moving.frustumCulled = this.bed.frustumCulled = false;
     sc.add(this.bed, this.moving);
     for (let k = 0; k < NM; k++) this.seeds.push({ x: R(), z: R(), zf: R(), ph: R() });
+    for (const w of [this.water]) w.setEnvironment(stage.scene.environment);
     stage.view(this.views.general, false);
   }
 

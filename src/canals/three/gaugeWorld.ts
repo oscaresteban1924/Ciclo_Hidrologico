@@ -103,6 +103,7 @@ export class GaugeWorld {
     }
     this.float = new THREE.Mesh(new THREE.SphereGeometry(0.025, 14, 10), new THREE.MeshStandardMaterial({ color: '#f07a1a', roughness: 0.5 }));
     sc.add(this.float);
+    for (const w of [this.water, this.jet, this.fall]) w.setEnvironment(stage.scene.environment);
     stage.view(this.views.general, false);
   }
 

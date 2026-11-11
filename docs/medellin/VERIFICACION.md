@@ -588,6 +588,24 @@ Capturas: `tools/verificacion/puente_colapso.py` (rótulo y panel durante la cre
 
 **Resultado.** Pruebas: 23 de 23 de «Hidráulica de canales» y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 32 de 32 estados sin choques ni cortes en las cuatro pantallas. Archivo único: 4 436 kB (1 763 kB comprimido con gzip).
 
+## 4 quinvicies. «Hidráulica de canales»: flujo no permanente, ondas y crecientes (ejecutada)
+
+**Pedido.** «Está bien, pero definitivamente lo podemos mejorar muchísimo más, llévalo a otro nivel: mejores animaciones, cálculos mejor elaborados y diseño superior. Mucho más superior.»
+
+**Motor de flujo no permanente.** `src/canals/unsteady.ts` resuelve las ecuaciones de Saint-Venant 1D en tiempo real: volúmenes finitos con flujo HLL, reconstrucción hidrostática (Audusse et al., 2004), fricción de Manning semi-implícita, CFL 0,45, fondo seco y mojado, contornos de caudal, pared, salida libre, caída crítica, nivel fijo y chorro supercrítico, y una compuerta interna (orificio con Cc = 0,61). Se validó contra soluciones exactas y balances: Ritter (H24, error medio 0,46 %), Stoker (H25, 0,39 %; meseta a 0,05 %), flujo uniforme, conservación del volumen (4·10⁻¹⁵) y lago en reposo (H26), ecuación del orificio (H27) y onda de Favre (H28: 1,3418 m frente a 1,3418 m).
+
+**Parte nueva, «Ondas y crecientes».** Un canal de 300 m con tres situaciones: rotura de presa sobre fondo seco o mojado, cierre brusco de una compuerta y creciente con hidrograma gamma. Instrumentos en vivo en el panel: perfil del agua y línea de energía (con la solución exacta superpuesta cuando la pendiente es casi nula), hidrogramas en dos estaciones y velocidad del frente medida y teórica. Retos, experimentos (modelo contra teoría), balance de agua y pestaña Diseño con tres herramientas nuevas (rotura de presa, muros para la onda de cierre y celeridad de la creciente), con plano o gráfica y memoria.
+
+**El resalto se forma solo.** En «La caída y el resalto», el botón «Ver cómo se forma el resalto» calcula el arranque en el tiempo; H29 comprueba que el estado final coincide con el cálculo permanente en cuatro pozos (resultado igual y profundidad del pozo a menos de 4 %). La posición del resalto se informa pero no se exige, porque es muy sensible a la profundidad del pozo.
+
+**Imagen.** El agua, el vidrio y el metal de las siete escenas reflejan el cielo prefiltrado de la escena (sin texturas descargadas).
+
+**Lo que se corrigió en el camino.** Con fondo seco, el primer paso de tiempo salía enorme: el contorno de entrada usa la profundidad crítica y el paso se limita a 1 s. La reconstrucción hidrostática pierde precisión en la rápida del 25 %: el arranque del resalto empieza al pie de la rápida con el chorro del cálculo permanente. Las funciones de las herramientas tomaban 0 cuando faltaba un dato: ahora toman el valor de ejemplo (un campo vacío sigue dando el aviso). En el teléfono, las marcas del hidrograma se repetían con caudales pequeños y la unidad se montaba sobre la primera marca: un decimal y la unidad abajo; en el perfil, la unidad se montaba sobre la marca de 300 m, y los rótulos de los instrumentos llevan ahora un halo claro para leerse aunque los cruce una línea.
+
+**No incluido.** Los instrumentos en vivo están en «Ondas y crecientes» y en el arranque del resalto, no en las otras partes. Siguen sin incluirse criterios de normas colombianas (INVÍAS, Resolución 0330 de 2017).
+
+**Resultado.** Pruebas: 29 de 29 de «Hidráulica de canales» (H15 con veinticuatro herramientas y 9 600 llamadas; H23 con 1 440 memorias, 849 planos y 593 gráficas) y 26 de 26 de «Calidad del agua». Superposiciones del módulo: 40 de 40 estados sin choques ni cortes en las cuatro pantallas, con las siete partes y la presa rota. Archivo único: 4 484 kB (1 778 kB comprimido con gzip).
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

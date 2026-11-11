@@ -5,11 +5,13 @@
 import { BEDFORM_NAME, PARSHALL, PIERS, contractionScour, hortonN, laneK, lanePermissible, midSection, parshallH, parshallQ, pierScour, transport, usbrBasin, yarnell, type ParshallSize, type PierShape } from './advanced';
 import { G, alternateDepths, belanger, geom, manningQ, normalDepth, type Section } from './hydraulics';
 import { bedN } from './sediment';
+import { favreSurge, stoker } from './unsteady';
 import { f, type Check, type Result, type Vals } from './designCalc';
 
 const GAMMA = 9810;
 const num = (v: number | string | undefined, def = 0) => {
-  const x = typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.'));
+  if (v === undefined) return def; // dato ausente: el valor de ejemplo (un campo vacío sigue siendo 0 y se avisa)
+  const x = typeof v === 'number' ? v : Number(String(v).replace(',', '.'));
   return Number.isFinite(x) ? x : def;
 };
 const ceilTo = (v: number, s: number) => Math.ceil(v / s - 1e-9) * s;
@@ -340,5 +342,108 @@ export function calcMolinete(v: Vals): Result {
     ],
     checks: [{ name: 'Ninguna franja lleva más del 10 % del caudal (práctica del USGS, Rantz 1982: más verticales si pasa)', ok: maxShare <= 0.1, value: `${f(maxShare * 100, 0)} %` }],
     kid: `Por la quebrada pasan ${f(ms.Q * 1000, 0)} litros cada segundo.`,
+  };
+}
+
+// ------------------------------------------------------------------ ondas: rotura de presa, compuertas y crecientes
+
+export function calcRotura(v: Vals): Result {
+  const h0 = num(v.h0, 2), h1 = num(v.h1, 0), x = num(v.x, 200);
+  if (h0 <= 0 || h1 < 0 || x <= 0) return bad('Revisa los datos.');
+  if (h1 >= h0) return bad('El agua de abajo debe ser menos profunda que el embalse.');
+  const c0 = Math.sqrt(G * h0);
+  if (h1 <= 0) {
+    const vf = 2 * c0, ta = x / vf;
+    const qd = (8 / 27) * Math.sqrt(G) * Math.pow(h0, 1.5);
+    return {
+      outs: [
+        { label: 'Velocidad del frente', value: `${f(vf, 2)} m/s`, kid: true },
+        { label: `Llega a ${f(x, 0)} m en`, value: `${f(ta, 1)} s`, kid: true },
+        { label: 'Profundidad en el sitio de la presa', value: `${f((4 / 9) * h0, 3)} m` },
+        { label: 'Caudal por metro en la presa', value: `${f(qd, 3)} m²/s` },
+        { label: 'La onda de vaciado sube por el embalse a', value: `${f(c0, 2)} m/s` },
+      ],
+      steps: [
+        `Fondo seco y sin fricción (Ritter, 1892): c0 = √(g·h0) = ${f(c0, 3)} m/s.`,
+        `El frente avanza a 2·c0 = ${f(vf, 3)} m/s (la fricción real lo frena); llega a ${f(x, 0)} m en ${f(ta, 2)} s.`,
+        `Entre −c0·t y 2·c0·t la profundidad es h = (2c0 − x/t)²/(9g); en la presa (x = 0) queda 4/9·h0 = ${f((4 / 9) * h0, 3)} m y pasa q = (8/27)·√g·h0^1,5 = ${f(qd, 3)} m²/s.`,
+      ],
+      kid: `Si la presa se rompe, el agua llega a ${f(x, 0)} m en unos ${f(ta, 0)} segundos.`,
+      data: { h0, h1, x, kind: 'ritter' },
+    };
+  }
+  const st = stoker(h0, h1);
+  const ta = x / st.S;
+  return {
+    outs: [
+      { label: 'Velocidad del frente (resalto móvil)', value: `${f(st.S, 2)} m/s`, kid: true },
+      { label: `Llega a ${f(x, 0)} m en`, value: `${f(ta, 1)} s`, kid: true },
+      { label: 'Altura detrás del frente', value: `${f(st.h2, 3)} m`, kid: true },
+      { label: 'El agua sube de golpe', value: `${f(st.h2 - h1, 3)} m` },
+      { label: 'Velocidad del agua detrás del frente', value: `${f(st.u2, 2)} m/s` },
+    ],
+    steps: [
+      `Fondo mojado y sin fricción (Stoker, 1957): onda de vaciado aguas arriba y un resalto que avanza aguas abajo.`,
+      `En el resalto móvil: masa h2·(S − u2) = h1·S y cantidad de movimiento h2 = (h1/2)·(√(1 + 8S²/(g·h1)) − 1); en la onda de vaciado u2 = 2·(√(g·h0) − √(g·h2)).`,
+      `Se resuelve S por bisección: S = ${f(st.S, 3)} m/s, h2 = ${f(st.h2, 4)} m, u2 = ${f(st.u2, 3)} m/s.`,
+    ],
+    kid: `Con agua abajo, llega un muro de agua de ${f(st.h2 - h1, 2)} m que avanza a ${f(st.S, 1)} m/s.`,
+    data: { h0, h1, x, kind: 'stoker' },
+  };
+}
+
+export function preMuroCompuerta(v: Vals): Result {
+  const Q = num(v.Q, 8), b = num(v.b, 4), n = num(v.n, 0.015), S = num(v.S, 0.1) / 100, fb = num(v.fb, 0.3), keep = num(v.keep, 0) / 100;
+  if (Q <= 0 || b <= 0 || n <= 0 || S <= 0 || fb < 0) return bad('Revisa los datos.');
+  const sec: Section = { shape: 'rect', b, z: 0, D: 0, H: 99 };
+  const y1 = normalDepth(sec, n, S, Q), V1 = Q / (b * y1);
+  const q2 = (keep * Q) / b;
+  const fv = favreSurge(y1, V1, q2);
+  const H = ceilTo(fv.y2 + fb, 0.05);
+  return {
+    outs: [
+      { label: 'Agua antes del cierre', value: `${f(y1, 2)} m a ${f(V1, 2)} m/s`, kid: true },
+      { label: 'Agua cuando pasa la onda', value: `${f(fv.y2, 2)} m`, kid: true },
+      { label: 'La onda sube', value: `${f(fv.y2 - y1, 2)} m`, kid: true },
+      { label: 'Velocidad de la onda (aguas arriba)', value: `${f(fv.Vw, 2)} m/s` },
+      { label: 'Altura de los muros', value: `${f(H, 2)} m`, kid: true },
+    ],
+    steps: [
+      `Antes del cierre, flujo uniforme (Manning, n = ${f(n, 3)}): y1 = ${f(y1, 3)} m, V1 = ${f(V1, 3)} m/s.`,
+      `Cierre ${keep > 0 ? `hasta dejar pasar ${f(keep * 100, 0)} % del caudal` : 'total'}: q2 = ${f(q2, 3)} m²/s.`,
+      `Onda positiva de Favre: masa Vw = (q1 − q2)/(y2 − y1) y cantidad de movimiento (V1 + Vw)² = g·y2·(y1 + y2)/(2·y1) → y2 = ${f(fv.y2, 3)} m, Vw = ${f(fv.Vw, 3)} m/s.`,
+      `Muros = y2 + borde libre = ${f(fv.y2, 3)} + ${f(fb, 2)} = ${f(H, 2)} m (redondeado a 5 cm). Sin fricción en el frente: la onda real se aplana un poco al viajar.`,
+    ],
+    checks: [{ name: 'La onda cabe en los muros con su borde libre', ok: H >= fv.y2 + fb - 1e-9, value: `${f(H - fv.y2, 2)} m sobre la onda` }],
+    kid: `Si cerramos la compuerta de golpe, el agua sube ${f(fv.y2 - y1, 2)} m: los muros deben medir ${f(H, 2)} m.`,
+    data: { b, y1, y2: fv.y2, H },
+  };
+}
+
+export function calcCeleridad(v: Vals): Result {
+  const Q = num(v.Q, 20), b = num(v.b, 10), n = num(v.n, 0.03), S = num(v.S, 0.1) / 100, L = num(v.L, 5000);
+  if (Q <= 0 || b <= 0 || n <= 0 || S <= 0 || L <= 0) return bad('Revisa los datos.');
+  const sec: Section = { shape: 'rect', b, z: 0, D: 0, H: 99 };
+  const y = normalDepth(sec, n, S, Q), V = Q / (b * y);
+  // celeridad cinemática c = dQ/dA con Manning (numérica)
+  const dy = y * 1e-4;
+  const c = (manningQ(sec, n, S, y + dy) - manningQ(sec, n, S, y - dy)) / (b * 2 * dy);
+  const cd = V + Math.sqrt(G * y);
+  return {
+    outs: [
+      { label: 'Profundidad y velocidad del agua', value: `${f(y, 2)} m · ${f(V, 2)} m/s`, kid: true },
+      { label: 'Celeridad de la creciente (onda cinemática)', value: `${f(c, 2)} m/s`, kid: true },
+      { label: `Tarda en recorrer ${f(L / 1000, 1)} km`, value: `${f(L / c / 60, 1)} min`, kid: true },
+      { label: 'Celeridad de una onda pequeña (dinámica)', value: `${f(cd, 2)} m/s` },
+      { label: 'Razón c/V', value: f(c / V, 2) },
+    ],
+    steps: [
+      `Flujo uniforme: y = ${f(y, 3)} m, V = ${f(V, 3)} m/s.`,
+      `La creciente avanza con c = dQ/dA (onda cinemática; Lighthill y Whitham, 1955): ${f(c, 3)} m/s, es decir ${f(c / V, 2)} veces la velocidad del agua (5/3 en un canal muy ancho con Manning).`,
+      `Una onda pequeña (perturbación) viaja más rápido, a V + √(g·y) = ${f(cd, 3)} m/s, pero en una creciente larga la fricción la frena hasta la celeridad cinemática.`,
+      `Tiempo de viaje en ${f(L, 0)} m: ${f(L / c, 0)} s = ${f(L / c / 60, 1)} min.`,
+    ],
+    kid: `La creciente avanza a ${f(c, 1)} m/s: tarda unos ${f(L / c / 60, 0)} minutos en recorrer ${f(L / 1000, 1)} km.`,
+    data: { Q, b, n, S },
   };
 }

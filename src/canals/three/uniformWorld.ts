@@ -210,6 +210,7 @@ export class UniformWorld {
       this.leaves.setColorAt(k, new THREE.Color(RL() < 0.5 ? '#7a8f2e' : '#a07a35'));
     }
     sc.add(this.leaves);
+    for (const w of [this.water, this.flood]) w.setEnvironment(stage.scene.environment);
     stage.view(this.views.general, false);
   }
 

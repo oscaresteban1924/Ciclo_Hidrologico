@@ -36,10 +36,11 @@ import {
   type Section,
   type Shape,
 } from '../../src/canals/hydraulics';
+import { SaintVenant, favreSurge, ritter, stoker, stokerProfile } from '../../src/canals/unsteady';
 import { planFor } from '../../src/canals/designPlans';
 import { chartSVG, planSVG } from '../../src/canals/plan';
 import { memoriaHTML } from '../../src/canals/memoria';
-import { calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from '../../src/canals/designAdvanced';
+import { calcCeleridad, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRotura, calcRugosidad, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from '../../src/canals/designAdvanced';
 import { calcAforo, calcAlcantarilla, calcCanal, calcPuente, calcResalto, calcSedimento, preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente } from '../../src/canals/designCalc';
 import { CR_ROAD, INLETS, ROAD_LEN, culvertModel, inletHW, outletHW, type Inlet } from '../../src/canals/culvert';
 import { BEDFORM_NAME, contractionScour, hortonN, laneK, midSection, parshallH, parshallQ, pierScour, transport, usbrBasin, yarnell, type Bedform } from '../../src/canals/advanced';
@@ -469,7 +470,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     let x = 7;
     return () => ((x = (x * 16807) % 2147483647) / 2147483647);
   })();
-  const fns = { calcCanal, preCanal, calcResalto, prePozo, calcPuente, prePuente, calcAlcantarilla, preAlcantarilla, calcSedimento, preEnrocado, calcAforo, preAforador, calcRugosidad, preCanalTierra, prePozoUSBR, calcPilas, calcContraccion, calcFormulas, calcParshall, preParshall, calcMolinete };
+  const fns = { calcCanal, preCanal, calcResalto, prePozo, calcPuente, prePuente, calcAlcantarilla, preAlcantarilla, calcSedimento, preEnrocado, calcAforo, preAforador, calcRugosidad, preCanalTierra, prePozoUSBR, calcPilas, calcContraccion, calcFormulas, calcParshall, preParshall, calcMolinete, calcRotura, preMuroCompuerta, calcCeleridad };
   let n = 0, bad = 0, thrown = 0;
   const pick = <T,>(a: T[]) => a[Math.floor(R() * a.length)];
   for (let k = 0; k < 400; k++) {
@@ -479,6 +480,7 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
       L: 10 + R() * 60, tw: R() * 2, entrada: pick(['muro', 'campana', 'saliente']), road: 2 + R() * 6, hwd: 1.2 + R() * 0.5, free: 0.3 + R() * 0.5, vmax: 3 + R() * 3,
       d: 0.05 + R() * 300, h: 0.2 + R() * 4, tipo: pick(['rect', 'tri', 'gate']), ang: pick([60, 90]), a: 2 + R() * 8, qmin: 0.5 + R() * 3, qmax: 5 + R() * 40, P: 10 + R() * 10, fb: 10 + R() * 20,
       forma2: pick(['circ', 'cajon']), entradaC: pick(['aletas3075', 'aletas90', 'aletas0', 'muro']), y: 0.1 + R() * 3, nb: 0.012 + R() * 0.05, nw: 0.011 + R() * 0.03, d75: 1 + R() * 120, phi: 25 + R() * 15, tw2: R() * 4, np: Math.floor(R() * 5), Lp: 1 + R() * 10, pila: pick(['semicircular', 'cuadrada', 'triangular', 'otra']), skew: R() * 30, K3: pick([1.1, 1.2, 1.3]), W1: 5 + R() * 60, W2: 3 + R() * 60, y0: 0.3 + R() * 4, d50: 0.1 + R() * 100, size: pick(['1in', '3in', '6in', '9in', '1ft', '3ft', 'x']), Ha: R() * 80, Hb: R() * 60, tabla: pick(['0 0 0\n1 0,5 0,4\n2 0 0', '0 0 0\n2 1 1\n4 1,5 1,2\n6 0 0', 'a b c', '0 0 0']),
+      h0: 0.1 + R() * 20, h1: pick([0, R() * 3, R() * 25]), x: 1 + R() * 5000, keep: pick([0, R() * 100, 100]),
     };
     for (const [name, fn] of Object.entries(fns)) {
       n++;
@@ -499,11 +501,12 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
   const pz = prePozo({ Q: 12, b: 4, H: 6, loss: 10, fs: 1.1 });
   const pe = preEnrocado({ Q: 50, b: 10, S: 1, n: 0.035, fs: 1.5 });
   const pf = preAforador({ qmin: 3, qmax: 15, b: 30, Hc: 45, P: 15 });
-  const okProps = !!pa.checks?.every((c) => c.ok) && !pa.error && !!pc.checks && !pc.error && !!pp.checks?.[0].ok && !!pz.checks && !pz.error && !!pe.checks?.[0].ok && !!pf.checks?.some((c) => c.ok);
+  const pm = preMuroCompuerta({});
+  const okProps = !!pa.checks?.every((c) => c.ok) && !pa.error && !!pc.checks && !pc.error && !!pp.checks?.[0].ok && !!pz.checks && !pz.error && !!pe.checks?.[0].ok && !!pf.checks?.some((c) => c.ok) && !!pm.checks?.every((c) => c.ok) && !pm.error;
   record({
     id: 'H15',
-    name: 'Calculadoras y prediseñadores de las seis partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios',
-    tolerance: '400 juegos de datos al azar en las veintiuna herramientas (8 400 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida',
+    name: 'Calculadoras y prediseñadores de las siete partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios',
+    tolerance: '400 juegos de datos al azar en las veinticuatro herramientas (9 600 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase, el aforador tiene una estructura válida y los muros junto a la compuerta contienen la onda con su borde libre',
     measured: `${n} llamadas; excepciones ${thrown}; con valores inválidos ${bad}; propuestas de ejemplo ${okProps ? 'cumplen' : 'NO cumplen'} (alcantarilla: ${pa.outs[0]?.value ?? pa.error})`,
     pass: thrown === 0 && bad === 0 && okProps,
   });
@@ -654,13 +657,13 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
     let x = 11;
     return () => ((x = (x * 16807) % 2147483647) / 2147483647);
   })();
-  const tools = { preCanal, preCanalTierra, prePozo, prePozoUSBR, prePuente, preAlcantarilla, preEnrocado, preAforador, preParshall, calcFormulas };
+  const tools = { preCanal, preCanalTierra, prePozo, prePozoUSBR, prePuente, preAlcantarilla, preEnrocado, preAforador, preParshall, calcFormulas, calcRotura, preMuroCompuerta };
   let made = 0, plans = 0, charts = 0, bad = 0, thrown = 0;
   for (let k = 0; k < 120; k++) {
     const v: Record<string, number | string> =
       k === 0
         ? {}
-        : { Q: 0.5 + R2() * 60, S: 0.05 + R2() * 2, b: 1 + R2() * 12, z: R2() * 2.5, forma: R2() < 0.5 ? 'trap' : 'rect', material: 'concreto', fb: 20, H: 2 + R2() * 8, loss: 10, tw: R2() * 4, fs: 1.1, B: 4 + R2() * 10, Hc: 3, n: 0.03, blk: R2() * 40, gal: 0.5, L: 30, road: 3 + R2() * 4, entrada: 'muro', hwd: 1.5, free: 0.5, vmax: 4.5, d75: 10 + R2() * 80, phi: 33, d: 0.3 + R2() * 30, qmin: 1 + R2() * 4, qmax: 8 + R2() * 100, P: 15 };
+        : { Q: 0.5 + R2() * 60, S: 0.05 + R2() * 2, b: 1 + R2() * 12, z: R2() * 2.5, forma: R2() < 0.5 ? 'trap' : 'rect', material: 'concreto', fb: 20, H: 2 + R2() * 8, loss: 10, tw: R2() * 4, fs: 1.1, B: 4 + R2() * 10, Hc: 3, n: 0.03, blk: R2() * 40, gal: 0.5, L: 30, road: 3 + R2() * 4, entrada: 'muro', hwd: 1.5, free: 0.5, vmax: 4.5, d75: 10 + R2() * 80, phi: 33, d: 0.3 + R2() * 30, qmin: 1 + R2() * 4, qmax: 8 + R2() * 100, P: 15, h0: 0.5 + R2() * 10, h1: R2() < 0.4 ? 0 : R2() * 0.5, x: 50 + R2() * 2000, keep: R2() * 60 };
     for (const [name, fn] of Object.entries(tools)) {
       try {
         const res = fn(v);
@@ -679,9 +682,157 @@ const CIRC: Section = { shape: 'circ', b: 0, z: 0, D: 1.2, H: 1.2 };
   record({
     id: 'H23',
     name: 'Planos acotados, gráficas y memoria de cálculo imprimible de los prediseños',
-    tolerance: '120 juegos de datos (el primero, los de ejemplo) en los diez prediseños con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»',
+    tolerance: '120 juegos de datos (el primero, los de ejemplo) en las doce herramientas con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»',
     measured: `${made} memorias; ${plans} planos y ${charts} gráficas; excepciones ${thrown}; con valores inválidos ${bad}`,
     pass: thrown === 0 && bad === 0 && plans > 0 && charts > 0,
+  });
+}
+
+// H24) Flujo no permanente: rotura de presa sobre fondo seco (Ritter)
+{
+  const sv = new SaintVenant({ L: 100, N: 800, b: 1, n: 0, zb: () => 0, up: { kind: 'wall' }, down: { kind: 'free' } });
+  sv.init((x) => ({ h: x < 50 ? 1 : 0 }));
+  sv.advance(4, 100000);
+  let e = 0, sum = 0;
+  for (let i = 0; i < 800; i++) {
+    const a = ritter(sv.x[i], sv.t, 50, 1);
+    e += Math.abs(sv.h[i] - a);
+    sum += a;
+  }
+  // dónde la exacta tiene 1 cm de agua: 2c0 − s = √(9·g·0,01)
+  const xf = 50 + (2 * Math.sqrt(9.81) - Math.sqrt(9 * 9.81 * 0.01)) * sv.t;
+  const nf = sv.front(0.01);
+  record({
+    id: 'H24',
+    name: 'Saint-Venant: rotura de presa sobre fondo seco igual a la solución de Ritter',
+    tolerance: 'presa de 1 m en la mitad de un canal de 100 m sin fricción, 800 celdas, a los 4 s: error medio relativo de la profundidad < 2 %; el punto con 1 cm de agua a menos de 2 m del exacto',
+    measured: `error medio ${(100 * e / sum).toFixed(2)} %; frente de 1 cm en ${nf.toFixed(2)} m (exacto ${xf.toFixed(2)} m)`,
+    pass: e / sum < 0.02 && Math.abs(nf - xf) < 2,
+  });
+}
+
+// H25) Rotura de presa sobre fondo mojado (Stoker): la altura intermedia y la posición del frente
+{
+  const sv = new SaintVenant({ L: 100, N: 800, b: 1, n: 0, zb: () => 0, up: { kind: 'wall' }, down: { kind: 'free' } });
+  sv.init((x) => ({ h: x < 50 ? 1 : 0.1 }));
+  sv.advance(5, 100000);
+  const st = stoker(1, 0.1);
+  let e = 0, sum = 0;
+  for (let i = 0; i < 800; i++) {
+    const a = stokerProfile(sv.x[i], sv.t, 50, 1, 0.1);
+    e += Math.abs(sv.h[i] - a);
+    sum += a;
+  }
+  const xm = 50 + ((st.u2 - Math.sqrt(9.81 * st.h2) + st.S) / 2) * sv.t;
+  let xs = 0;
+  for (let i = 0; i < 800; i++) if (sv.x[i] > xm && sv.h[i] > (st.h2 + 0.1) / 2) xs = sv.x[i];
+  const xsE = 50 + st.S * sv.t;
+  record({
+    id: 'H25',
+    name: 'Saint-Venant: rotura de presa sobre fondo mojado igual a la solución de Stoker',
+    tolerance: 'presa de 1 m sobre 0,1 m de agua, a los 5 s: error medio < 2 %; altura de la meseta a menos de 1 % de la exacta; frente (resalto móvil) a menos de 1 m',
+    measured: `error medio ${(100 * e / sum).toFixed(2)} %; meseta ${sv.depthAt(xm).toFixed(4)} m (exacta ${st.h2.toFixed(4)} m); frente en ${xs.toFixed(2)} m (exacto ${xsE.toFixed(2)} m)`,
+    pass: e / sum < 0.02 && rel(sv.depthAt(xm), st.h2) < 0.01 && Math.abs(xs - xsE) < 1,
+  });
+}
+
+// H26) Saint-Venant llega al flujo uniforme de Manning y conserva el volumen
+{
+  const Q = 10, b = 5, n = 0.02, S = 0.002;
+  const sv = new SaintVenant({ L: 2000, N: 200, b, n, zb: (x) => -S * x, up: { kind: 'Q', Q: () => Q }, down: { kind: 'fall' } });
+  sv.init(() => ({ h: 0.5, q: 0 }));
+  const v0 = sv.volume();
+  sv.advance(6000, 400000);
+  const yn = normalDepth({ shape: 'rect', b, z: 0, D: 0, H: 99 }, n, S, Q);
+  const err = (sv.volume() - v0 - (sv.vIn - sv.vOut)) / sv.volume();
+  const lake = new SaintVenant({ L: 100, N: 200, b: 2, n: 0.02, zb: (x) => 0.4 * Math.exp(-((x - 50) ** 2) / 50), up: { kind: 'wall' }, down: { kind: 'wall' } });
+  lake.init((_, z) => ({ h: Math.max(0, 1 - z) }));
+  lake.advance(100, 100000);
+  let um = 0;
+  for (let i = 0; i < 200; i++) um = Math.max(um, Math.abs(lake.q[i]));
+  record({
+    id: 'H26',
+    name: 'Saint-Venant: flujo uniforme, conservación del volumen y lago en reposo sobre un fondo irregular',
+    tolerance: 'canal de 2 km (S = 0,2 %, n = 0,02, 5 m, 10 m³/s): a mitad del canal, profundidad normal de Manning (error < 1 %) y caudal 10 m³/s (error < 0,5 %); volumen final = inicial + entrado − salido (error relativo < 1e-9); un lago sobre una loma queda quieto (caudal por metro < 1e-9 m²/s a los 100 s)',
+    measured: `y = ${sv.depthAt(1000).toFixed(4)} m (Manning ${yn.toFixed(4)} m); Q = ${sv.flowAt(1000).toFixed(4)} m³/s; error de volumen ${err.toExponential(1)}; lago: ${um.toExponential(1)} m²/s`,
+    pass: rel(sv.depthAt(1000), yn) < 0.01 && rel(sv.flowAt(1000), Q) < 0.005 && Math.abs(err) < 1e-9 && um < 1e-9,
+  });
+}
+
+// H27) Compuerta interna: caudal de orificio y vena contraída aguas abajo
+{
+  const sv = new SaintVenant({ L: 60, N: 240, b: 2, n: 0, zb: () => 0, up: { kind: 'Q', Q: () => 2 }, down: { kind: 'free' } });
+  sv.gate = { k: 120, a: 0.3 };
+  sv.init((x) => ({ h: x < 30 ? 1.2 : 0.2 }));
+  sv.advance(420, 400000);
+  const q = 1, a = 0.3, Cc = 0.61;
+  const h1 = (q / (Cc * a)) ** 2 / (2 * 9.81) + Cc * a;
+  record({
+    id: 'H27',
+    name: 'Compuerta en el canal: el agua sube hasta la carga del orificio y sale por la vena contraída',
+    tolerance: 'compuerta de 0,3 m con 1 m²/s: aguas arriba, la profundidad de la ecuación del orificio q = Cc·a·√(2g·(h1 − Cc·a)) (error < 1 %); aguas abajo, Cc·a = 0,183 m (error < 2 %); caudal que pasa igual al que entra (error < 0,5 %)',
+    measured: `arriba ${sv.depthAt(20).toFixed(4)} m (ecuación ${h1.toFixed(4)} m); abajo ${sv.depthAt(45).toFixed(4)} m; Q ${sv.flowAt(45).toFixed(4)} m³/s`,
+    pass: rel(sv.depthAt(20), h1) < 0.01 && rel(sv.depthAt(45), Cc * a) < 0.02 && rel(sv.flowAt(45), 2) < 0.005,
+  });
+}
+
+// H28) Onda por cierre de compuerta: Saint-Venant frente a la teoría de Favre
+{
+  const y1 = 1.0, V1 = 1.0, b = 2;
+  const sv = new SaintVenant({ L: 400, N: 800, b, n: 0, zb: () => 0, up: { kind: 'Q', Q: () => V1 * y1 * b }, down: { kind: 'free' } });
+  sv.init(() => ({ h: y1, q: V1 * y1 }));
+  sv.gate = { k: 600, a: 0 };
+  sv.advance(30, 400000);
+  const th = favreSurge(y1, V1, 0);
+  // frente: el punto más aguas arriba con el agua a medio camino entre y1 e y2
+  let xs = 300;
+  for (let i = 599; i >= 0; i--) if (sv.h[i] > (y1 + th.y2) / 2) xs = sv.x[i];
+  const xsE = 300 - th.Vw * sv.t;
+  record({
+    id: 'H28',
+    name: 'Onda positiva por el cierre brusco de una compuerta (Favre)',
+    tolerance: 'canal con 1 m de agua a 1 m/s y la compuerta cerrada de golpe, a los 30 s: altura detrás del frente a menos de 1 % de la de Favre (masa y cantidad de movimiento en el frente) y frente a menos de 2 m de la posición teórica',
+    measured: `altura ${sv.depthAt(280).toFixed(4)} m (Favre ${th.y2.toFixed(4)} m); frente en ${xs.toFixed(2)} m (Favre ${xsE.toFixed(2)} m, a ${th.Vw.toFixed(3)} m/s)`,
+    pass: rel(sv.depthAt(280), th.y2) < 0.01 && Math.abs(xs - xsE) < 2,
+  });
+}
+
+// H29) El resalto calculado en el tiempo: desde el pozo lleno hasta la cresta, llega al mismo estado que el cálculo
+// permanente (pozo que atrapa o resalto barrido) y a la misma profundidad en el pozo
+{
+  const cases = [
+    { Q: 12, drop: 6, weir: 0.8, basin: 16 },
+    { Q: 12, drop: 6, weir: 0.6, basin: 16 },
+    { Q: 20, drop: 8, weir: 1.2, basin: 25 },
+    { Q: 8, drop: 4, weir: 0.5, basin: 12 },
+  ];
+  const rows: string[] = [];
+  let ok = true;
+  for (const inp of cases) {
+    const r = jumpModel(inp);
+    const x1 = inp.basin + 31;
+    const sv = new SaintVenant({ L: x1, N: Math.round(x1 / 0.1), b: 4, n: 0.014, zb: (x) => (x < inp.basin ? 0 : inp.weir), up: { kind: 'jet', h: r.y1, Q: () => inp.Q }, down: { kind: 'fall' } });
+    sv.init((x) => ({ h: x < inp.basin ? inp.weir : 0, q: 0 }));
+    sv.advance(200, 4e6);
+    const pool = sv.depthAt(inp.basin - 0.5);
+    const swept = pool < (r.y1 + r.y2) / 2;
+    const steadySwept = r.place === 'barrido';
+    let toe = NaN;
+    for (let i = 0; i < sv.cfg.N; i++)
+      if (sv.x[i] <= inp.basin && sv.h[i] > r.y1 + 0.1 * (r.y2 - r.y1)) {
+        toe = sv.x[i];
+        break;
+      }
+    const good = swept === steadySwept && (steadySwept || (rel(pool, r.ytw) < 0.04 && toe < inp.basin));
+    if (!good) ok = false;
+    rows.push(`${inp.Q} m³/s, vertedero ${inp.weir} m: ${steadySwept ? 'barrido' : 'atrapado'} / ${swept ? 'barrido' : `atrapado, pozo ${pool.toFixed(2)} m (permanente ${r.ytw.toFixed(2)}), resalto a ${toe.toFixed(1)} m (permanente ${r.xJump.toFixed(1)})`}`);
+  }
+  record({
+    id: 'H29',
+    name: 'El resalto calculado en el tiempo llega al estado del cálculo permanente',
+    tolerance: 'cuatro pozos: con el chorro del pie de la rápida entrando al pozo lleno hasta la cresta, a los 200 s el modelo de Saint-Venant (celdas de 10 cm) da el mismo resultado que el cálculo permanente (resalto atrapado o barrido); si queda atrapado, la profundidad del pozo a menos de 4 % y el resalto dentro del pozo. La posición del resalto se informa pero no se exige: es muy sensible a la profundidad del pozo',
+    measured: rows.join('; '),
+    pass: ok,
   });
 }
 

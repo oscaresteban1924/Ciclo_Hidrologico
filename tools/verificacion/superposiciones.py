@@ -170,12 +170,15 @@ def run(screens, shots):
             # de sedimentos y la pestaña Diseño
             mode(pg, 'Hidráulica de canales'); pg.wait_for_timeout(4000)
             for part, tag in [('El canal y su caudal', 'canal'), ('La caída y el resalto', 'resalto'), ('El puente y el remanso', 'puente'),
-                              ('Las alcantarillas', 'alcantarilla'), ('El transporte de sedimentos', 'sedimentos'), ('Medir el caudal', 'aforo')]:
+                              ('Las alcantarillas', 'alcantarilla'), ('El transporte de sedimentos', 'sedimentos'), ('Medir el caudal', 'aforo'), ('Ondas y crecientes', 'ondas')]:
                 pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
                 top(pg); check(pg, screen, f'canales-{tag}', shots, report)
                 if tag == 'alcantarilla':
                     pg.evaluate(RANGE, ['Caudal de la creciente', '14']); pg.wait_for_timeout(2500)
                     top(pg); check(pg, screen, 'canales-alcantarilla-encima', shots, report)
+                if tag == 'ondas':
+                    pg.evaluate(BTN, 'Romper la presa'); pg.wait_for_timeout(4000)
+                    top(pg); check(pg, screen, 'canales-ondas-presa', shots, report)
                 if tag == 'sedimentos':
                     pg.evaluate(BTN, 'El fondo'); pg.wait_for_timeout(2500)
                     top(pg); check(pg, screen, 'canales-sedimentos-fondo', shots, report)

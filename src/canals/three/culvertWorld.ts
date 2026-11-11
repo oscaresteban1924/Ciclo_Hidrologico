@@ -69,6 +69,7 @@ export class CulvertWorld {
       w.setColor('#4c8fb0');
       sc.add(w.group);
     }
+    for (const w of [this.pond, this.down, this.inner, this.over]) w.setEnvironment(stage.scene.environment);
     stage.view(this.views.general, false);
   }
 

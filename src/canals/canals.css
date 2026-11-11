@@ -3,9 +3,16 @@
 .hc-tabs.n6 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.hc-tabs.n6 button {
+.hc-tabs.n7 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.hc-tabs.n6 button,
+.hc-tabs.n7 button {
   min-height: 50px;
   border-radius: 10px;
+}
+.hc-tabs.n7 button {
+  font-size: 0.8rem;
 }
 
 /* sin WebGL: el esquema ocupa la escena */
@@ -373,4 +380,72 @@
   border-color: #b8c7d2;
   background: #ffffff;
   color: var(--ink);
+}
+
+/* instrumentos de «Ondas y crecientes» (en el pie de la escena, a todo lo ancho) */
+.hc-hud {
+  flex: 1 1 100%;
+  border: 1px solid #d6e1e8;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 6px 8px 4px;
+}
+.hc-hud-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.hc-hud-head b {
+  color: var(--ink);
+}
+.hc-hud-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.hc-hud-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.hc-hud-t {
+  font-size: 9.5px;
+  /* halo claro: los rótulos se leen aunque los cruce una línea del dibujo */
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.hc-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.hc-act {
+  padding: 8px 12px;
+  border: 1px solid #b8c7d2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.hc-act.is-hot {
+  border-color: #c0392b;
+  background: #fbeeec;
+  color: #9b2c22;
+}
+.hc-act:hover {
+  filter: brightness(0.97);
+}
+@media (max-width: 700px) {
+  .hc-hud-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

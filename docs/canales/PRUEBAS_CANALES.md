@@ -2,7 +2,7 @@
 
 Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes de ejecutarse.
 
-**23 de 23 cumplen.**
+**29 de 29 cumplen.**
 
 ## H1. Geometría: área, perímetro, ancho de superficie y momento estático de las tres secciones — cumple
 
@@ -74,10 +74,10 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 - Tolerancia: θcr mínimo de la curva entre 0,028 y 0,035 y de grava (3 cm) entre 0,05 y 0,06; caída de arena de 0,2 mm entre 0,02 y 0,03 m/s y de limo fino igual a Stokes (5 %); q* = 3,97·(0,1 − 0,0495)^1,5 = 0,0451 (0,5 %); en la malla (siete granos × tres caudales × tres pendientes) sin valores inválidos, sin arrastre bajo el umbral y con el enrocado en θ = 0,047/1,5; la concentración baja con la altura y sube cuanto menor el número de Rouse; aparecen los cinco modos
 - Medido: θcr mínimo 0.0299; grava 0.0553; D* de la grava 759; caída arena 0.0232 m/s; limo 1.7 % de Stokes; q* 0.0451; 63 casos, fallas 0; perfil bien; modos vistos: lavado, mixto, fondo, suspension, quieto
 
-## H15. Calculadoras y prediseñadores de las seis partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios — cumple
+## H15. Calculadoras y prediseñadores de las siete partes: sin errores ni valores inválidos, y propuestas que cumplen sus criterios — cumple
 
-- Tolerancia: 400 juegos de datos al azar en las veintiuna herramientas (8 400 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase y el aforador tiene una estructura válida
-- Medido: 8400 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
+- Tolerancia: 400 juegos de datos al azar en las veinticuatro herramientas (9 600 llamadas): ninguna excepción y ningún resultado o paso con NaN, indefinido o infinito (salvo los avisos de datos inválidos); con los datos de ejemplo, la alcantarilla propuesta cumple sus tres criterios, el puente no estrangula, el enrocado tiene clase, el aforador tiene una estructura válida y los muros junto a la compuerta contienen la onda con su borde libre
+- Medido: 9600 llamadas; excepciones 0; con valores inválidos 0; propuestas de ejemplo cumplen (alcantarilla: 2 de 1,4 m)
 
 ## H16. Fuerza tractiva de Lane y rugosidad compuesta de Horton y Einstein — cumple
 
@@ -116,5 +116,35 @@ Se ejecutan con `npm run test:canals`. Cada prueba declara su tolerancia antes d
 
 ## H23. Planos acotados, gráficas y memoria de cálculo imprimible de los prediseños — cumple
 
-- Tolerancia: 120 juegos de datos (el primero, los de ejemplo) en los diez prediseños con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»
-- Medido: 1200 memorias; 720 planos y 476 gráficas; excepciones 0; con valores inválidos 0
+- Tolerancia: 120 juegos de datos (el primero, los de ejemplo) en las doce herramientas con plano o gráfica: ninguna excepción; cada plano y gráfica es un SVG sin NaN, indefinido ni infinito, y la memoria HTML no contiene NaN ni «undefined»
+- Medido: 1440 memorias; 849 planos y 593 gráficas; excepciones 0; con valores inválidos 0
+
+## H24. Saint-Venant: rotura de presa sobre fondo seco igual a la solución de Ritter — cumple
+
+- Tolerancia: presa de 1 m en la mitad de un canal de 100 m sin fricción, 800 celdas, a los 4 s: error medio relativo de la profundidad < 2 %; el punto con 1 cm de agua a menos de 2 m del exacto
+- Medido: error medio 0.46 %; frente de 1 cm en 69.88 m (exacto 71.30 m)
+
+## H25. Saint-Venant: rotura de presa sobre fondo mojado igual a la solución de Stoker — cumple
+
+- Tolerancia: presa de 1 m sobre 0,1 m de agua, a los 5 s: error medio < 2 %; altura de la meseta a menos de 1 % de la exacta; frente (resalto móvil) a menos de 1 m
+- Medido: error medio 0.39 %; meseta 0.3960 m (exacta 0.3962 m); frente en 65.44 m (exacto 65.53 m)
+
+## H26. Saint-Venant: flujo uniforme, conservación del volumen y lago en reposo sobre un fondo irregular — cumple
+
+- Tolerancia: canal de 2 km (S = 0,2 %, n = 0,02, 5 m, 10 m³/s): a mitad del canal, profundidad normal de Manning (error < 1 %) y caudal 10 m³/s (error < 0,5 %); volumen final = inicial + entrado − salido (error relativo < 1e-9); un lago sobre una loma queda quieto (caudal por metro < 1e-9 m²/s a los 100 s)
+- Medido: y = 1.0779 m (Manning 1.0797 m); Q = 9.9555 m³/s; error de volumen 3.9e-15; lago: 2.0e-15 m²/s
+
+## H27. Compuerta en el canal: el agua sube hasta la carga del orificio y sale por la vena contraída — cumple
+
+- Tolerancia: compuerta de 0,3 m con 1 m²/s: aguas arriba, la profundidad de la ecuación del orificio q = Cc·a·√(2g·(h1 − Cc·a)) (error < 1 %); aguas abajo, Cc·a = 0,183 m (error < 2 %); caudal que pasa igual al que entra (error < 0,5 %)
+- Medido: arriba 1.7002 m (ecuación 1.7049 m); abajo 0.1830 m; Q 1.9970 m³/s
+
+## H28. Onda positiva por el cierre brusco de una compuerta (Favre) — cumple
+
+- Tolerancia: canal con 1 m de agua a 1 m/s y la compuerta cerrada de golpe, a los 30 s: altura detrás del frente a menos de 1 % de la de Favre (masa y cantidad de movimiento en el frente) y frente a menos de 2 m de la posición teórica
+- Medido: altura 1.3418 m (Favre 1.3418 m); frente en 212.25 m (Favre 212.22 m, a 2.926 m/s)
+
+## H29. El resalto calculado en el tiempo llega al estado del cálculo permanente — cumple
+
+- Tolerancia: cuatro pozos: con el chorro del pie de la rápida entrando al pozo lleno hasta la cresta, a los 200 s el modelo de Saint-Venant (celdas de 10 cm) da el mismo resultado que el cálculo permanente (resalto atrapado o barrido); si queda atrapado, la profundidad del pozo a menos de 4 % y el resalto dentro del pozo. La posición del resalto se informa pero no se exige: es muy sensible a la profundidad del pozo
+- Medido: 12 m³/s, vertedero 0.8 m: atrapado / atrapado, pozo 2.32 m (permanente 2.26), resalto a 3.8 m (permanente 7.6); 12 m³/s, vertedero 0.6 m: barrido / barrido; 20 m³/s, vertedero 1.2 m: atrapado / atrapado, pozo 3.32 m (permanente 3.25), resalto a 0.1 m (permanente 4.9); 8 m³/s, vertedero 0.5 m: atrapado / atrapado, pozo 1.64 m (permanente 1.61), resalto a 8.3 m (permanente 10.6)

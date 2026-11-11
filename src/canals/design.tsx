@@ -21,13 +21,13 @@ import {
   type Result,
   type Vals,
 } from './designCalc';
-import { MOLINETE_EJEMPLO, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
+import { MOLINETE_EJEMPLO, calcCeleridad, calcRotura, preMuroCompuerta, calcContraccion, calcFormulas, calcMolinete, calcParshall, calcPilas, calcRugosidad, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
 import { PARSHALL, PIERS, type ParshallSize, type PierShape } from './advanced';
 import { planFor } from './designPlans';
 import { chartSVG, planSVG } from './plan';
 import { memoriaHTML } from './memoria';
 
-export type DesignPart = 'canal' | 'resalto' | 'puente' | 'alcantarilla' | 'sedimentos' | 'aforo';
+export type DesignPart = 'canal' | 'resalto' | 'puente' | 'alcantarilla' | 'sedimentos' | 'aforo' | 'ondas';
 type Level = 'ninos' | 'uni';
 
 interface Field {
@@ -57,6 +57,33 @@ const BOX_OPTS = (Object.keys(INLETS) as Inlet[]).filter((i) => INLETS[i].shape 
 const SHAPE_FIELD: Field = { id: 'forma', label: 'Conducto', def: 'circ', kid: true, options: [{ value: 'circ', label: 'Tubo circular' }, { value: 'cajon', label: 'Cajón' }] };
 
 const TOOLS: Record<DesignPart, { calc: Tool; pre: Tool }> = {
+  ondas: {
+    calc: {
+      title: 'Calculadora de rotura de presa (Ritter y Stoker)',
+      intro: 'Velocidad del frente, tiempo de llegada y alturas después de romperse una presa, sobre fondo seco (Ritter) o mojado (Stoker), sin fricción.',
+      kidIntro: 'Si una presa se rompe, ¿cuánto tarda el agua en llegar?',
+      fields: [
+        { id: 'h0', label: 'Profundidad del embalse', unit: 'm', def: 2, kid: true },
+        { id: 'h1', label: 'Agua aguas abajo (0 = seco)', unit: 'm', def: 0, kid: true },
+        { id: 'x', label: 'Distancia al punto que interesa', unit: 'm', def: 200, kid: true },
+      ],
+      run: calcRotura,
+    },
+    pre: {
+      title: 'Prediseño de muros para el cierre de una compuerta (Favre)',
+      intro: 'Altura de los muros de un canal rectangular para que no se desborde la onda positiva que sube al cerrar de golpe una compuerta.',
+      kidIntro: 'Si cerramos la compuerta de golpe, ¿qué tan altos deben ser los muros?',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 8, kid: true },
+        { id: 'b', label: 'Ancho del canal', unit: 'm', def: 4, kid: true },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.1 },
+        { id: 'n', label: 'n de Manning', def: 0.015 },
+        { id: 'keep', label: 'Caudal que sigue pasando', unit: '%', def: 0 },
+        { id: 'fb', label: 'Borde libre', unit: 'm', def: 0.3 },
+      ],
+      run: preMuroCompuerta,
+    },
+  },
   canal: {
     calc: {
       title: 'Calculadora de flujo uniforme',
@@ -333,6 +360,22 @@ const EXTRA: Record<DesignPart, (Tool & { kind: 'calc' | 'pre' })[]> = {
     },
   ],
   alcantarilla: [],
+  ondas: [
+    {
+      kind: 'calc',
+      title: 'Celeridad y tiempo de viaje de una creciente',
+      intro: 'Con qué velocidad avanza una creciente (onda cinemática, c = dQ/dA) frente a una onda pequeña (V + √(g·y)), y cuánto tarda en recorrer un tramo.',
+      kidIntro: '¿Cuánto tarda la creciente en llegar al pueblo?',
+      fields: [
+        { id: 'Q', label: 'Caudal', unit: 'm³/s', def: 20 },
+        { id: 'b', label: 'Ancho del cauce', unit: 'm', def: 10 },
+        { id: 'n', label: 'n de Manning', def: 0.03 },
+        { id: 'S', label: 'Pendiente', unit: '%', def: 0.1 },
+        { id: 'L', label: 'Largo del tramo', unit: 'm', def: 5000 },
+      ],
+      run: calcCeleridad,
+    },
+  ],
   sedimentos: [
     {
       kind: 'calc',

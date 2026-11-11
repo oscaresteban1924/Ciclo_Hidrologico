@@ -6,7 +6,7 @@ import type { Plan, PlanItem, XY } from './plan';
 const m = (v: number, d = 2) => `${v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d })} m`;
 
 /** Corte de un canal rectangular o trapecial (z = 0 es rectangular), revestido (t > 0) o en tierra. */
-export function channelPlan(o: { title: string; b: number; z: number; y: number; H: number; t?: number; earth?: boolean }): Plan {
+export function channelPlan(o: { title: string; b: number; z: number; y: number; H: number; t?: number; earth?: boolean; before?: number }): Plan {
   const { b, z, y, H } = o;
   const t = o.t ?? 0;
   const hb = b / 2, k = Math.sqrt(1 + z * z);
@@ -24,6 +24,10 @@ export function channelPlan(o: { title: string; b: number; z: number; y: number;
   }
   items.push({ k: 'shape', fill: 'agua', pts: [[-hb, 0], [hb, 0], [hb + z * y, y], [-hb - z * y, y]] });
   items.push({ k: 'line', style: 'agua', pts: [[-hb - z * y, y], [hb + z * y, y]] });
+  if (o.before !== undefined) {
+    items.push({ k: 'line', style: 'eje', pts: [[-hb - z * o.before, o.before], [hb + z * o.before, o.before]] });
+    items.push({ k: 'label', at: [0, o.before - 0.18], text: `agua antes: ${m(o.before)}`, small: true });
+  }
   items.push({ k: 'dim', a: [-hb, 0], b: [hb, 0], text: `b = ${m(b)}`, off: -(0.35 + t + 0.15 * H) });
   items.push({ k: 'dim', a: [-hb - z * H, H], b: [hb + z * H, H], text: `T = ${m(b + 2 * z * H)}`, off: 0.25 + 0.12 * H });
   items.push({ k: 'dim', a: [hb + z * H + side * 0.45, 0], b: [hb + z * H + side * 0.45, y], text: `y = ${m(y)}`, off: 0 });

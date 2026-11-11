@@ -1,10 +1,12 @@
 # Módulo «Hidráulica de canales»: modelo, supuestos y fuentes
 
-Sexto modo de la aplicación (`src/canals/`). Tiene seis partes con la misma distribución que «Calidad del agua»: una escena 3D con una pregunta a la izquierda y un panel a la derecha (una sola columna en teléfonos). Cada parte tiene las pestañas Esquema, Retos, Experimentos, Diseño, Datos y Docente. El cálculo está en módulos sin interfaz (`hydraulics.ts`, `culvert.ts`, `sediment.ts`, `advanced.ts`, `profiles.ts`, `designCalc.ts`, `designAdvanced.ts`, y los planos en `plan.ts`, `planBuilders.ts`, `designPlans.ts` y `memoria.ts`) y se prueba en `tests/canals/hydraulics.test.ts` (`npm run test:canals`; informe en `PRUEBAS_CANALES.md`).
+Sexto modo de la aplicación (`src/canals/`). Tiene siete partes con la misma distribución que «Calidad del agua»: una escena 3D con una pregunta a la izquierda y un panel a la derecha (una sola columna en teléfonos). Cada parte tiene las pestañas Esquema, Retos, Experimentos, Diseño, Datos y Docente. El cálculo está en módulos sin interfaz (`hydraulics.ts`, `culvert.ts`, `sediment.ts`, `advanced.ts`, `profiles.ts`, `unsteady.ts`, `waves.ts`, `designCalc.ts`, `designAdvanced.ts`, y los planos en `plan.ts`, `planBuilders.ts`, `designPlans.ts` y `memoria.ts`) y se prueba en `tests/canals/hydraulics.test.ts` (`npm run test:canals`; informe en `PRUEBAS_CANALES.md`).
 
 **Qué es y qué no es.** Es un laboratorio educativo con las ecuaciones clásicas de la hidráulica de canales y coeficientes publicados. Las escenas son ilustrativas: ningún canal, puente, alcantarilla o quebrada representa uno de Medellín, y los resultados no son pronósticos. Las calculadoras y los prediseñadores dan **prediseños académicos**: no son diseños de ingeniería. Así lo dicen el aviso del módulo, la pestaña Diseño y la memoria de cálculo descargable.
 
 **Profundidades a escala.** El agua se dibuja con su profundidad calculada, sin exagerarla. Su color cambia con la profundidad (más claro donde hay poca agua) y sus ondas avanzan con la velocidad calculada en cada punto (mapa de flujo en dos fases); en la cara que se ve por el vidrio, las vetas van más rápido arriba que abajo (perfil de potencia 1/7). Los trazadores amarillos junto al vidrio viajan a u = 1,143·V·(z/y)^(1/7). Donde un dibujo plano necesita exagerar la escala vertical (el esquema del puente y el de la alcantarilla), el dibujo lo dice. Los granos de sedimento menores de 8 cm se dibujan de 8 cm, y la escena dice cuántas veces se aumentaron.
+
+**Reflejos.** El agua, el vidrio y el metal reflejan un cielo de degradé prefiltrado que se genera en el navegador (no se descargan texturas); el reflejo crece hacia los bordes con la ley de Fresnel.
 
 ## 1. El canal y su caudal (flujo uniforme)
 
@@ -55,6 +57,8 @@ Una rápida de concreto (4 m de ancho, pendiente 25 %, n = 0,014) baja a un pozo
 | I | F1 ≤ 2,5 | ninguno | 6,9·(y2 − y1) | y2 |
 
 Los largos son aproximaciones de las curvas de Peterka para valores típicos de F1. Si el agua disponible no alcanza, el prediseñador baja el piso del pozo y recalcula y1 e y2 hasta que alcance.
+
+**El resalto se forma solo.** El botón «Ver cómo se forma el resalto» arranca el modelo de Saint-Venant de la sección 7 en el pozo y aguas abajo (celdas de 10 cm): el chorro entra al pie de la rápida con la profundidad y la velocidad del cálculo permanente (contorno de chorro supercrítico), el pozo empieza lleno hasta la cresta del vertedero y al final el agua cae con la profundidad crítica. En la escena se ve el frente que avanza, el resalto que se mueve y se acomoda, y unos instrumentos con el perfil del agua y la línea de energía, el nivel del pozo del cálculo permanente y la posición del resalto. A los 150 s vuelve al cálculo permanente. La prueba H29 compara el estado final con el cálculo permanente en cuatro pozos: el resultado (resalto atrapado o barrido) coincide y la profundidad del pozo difiere menos de 4 %. La posición del resalto no se exige porque es muy sensible a la profundidad del pozo (unos centímetros la mueven metros); el modelo la informa.
 
 **Remolino y oleaje.** En la escena, los trazadores del remolino siguen un ciclo ilustrativo (arriba se devuelven, bajan junto al pie y suben al final); la superficie se pica con una amplitud proporcional a la profundidad y a la espuma del resalto. No son un cálculo de turbulencia.
 
@@ -146,7 +150,45 @@ Un canal de laboratorio de 0,30 m de ancho y 0,45 m de alto con una bomba de 0,5
 | Canaleta Parshall | Q = C·Ha^n en pies y pies³/s: 1 pulgada 0,338 y 1,55; 2 pulgadas 0,676 y 1,55; 3 pulgadas 0,992 y 1,55; 6 pulgadas 2,06 y 1,58; 9 pulgadas 3,07 y 1,53; 1 pie 3,95 y 1,55; 2 pies 8,00 y 1,55; 3 pies 12,0 y 1,57. Sumergencia límite Hb/Ha: 0,5 (1 a 3 pulgadas), 0,6 (6 y 9), 0,7 (1 a 8 pies) | USBR, Water Measurement Manual, tabla 8-6 |
 | Molinete | sección media: qᵢ = vᵢ·dᵢ·(xᵢ₊₁ − xᵢ₋₁)/2; aviso si una franja lleva más del 10 % del caudal | ISO 748; Rantz et al. (1982), USGS |
 
-## 7. La pestaña Diseño: calculadoras, prediseñadores, planos y memoria
+## 7. Ondas y crecientes (flujo no permanente)
+
+Un canal de concreto de 300 m, rectangular de 4 m de ancho y n = 0,015, donde el agua cambia en el tiempo. Tiene una compuerta (o presa) en x = 100 m, otra compuerta en x = 200 m, dos estaciones de medición (A en 60 m y B en 240 m) y al final una caída. Tres situaciones:
+
+- **Rotura de presa.** Un embalse de h0 (0,3 a 3 m) detrás de la presa; aguas abajo, canal seco o con h1 (hasta 1 m). Al romperla, sale el frente.
+- **Compuerta.** Un caudal de 0,5 a 15 m³/s pasa bajo la compuerta de x = 200 m. Al cerrarla de golpe, una onda positiva sube por el canal y aguas abajo el agua se va. Al abrirla, sale otra onda.
+- **Creciente.** El caudal de entrada sube a un pico (2 a 40 m³/s) y vuelve, con el hidrograma gamma de la sección 8 y un tiempo al pico de 10 a 120 s. La onda viaja de A a B y se aplana.
+
+En el panel, los instrumentos muestran en vivo el perfil del agua y la línea de energía a lo largo del canal, y los hidrogramas (profundidad y caudal) en A y B, la velocidad del frente medida y la teórica. Con pendiente casi nula (S ≤ 0,05 %) el perfil de la rotura se dibuja junto a la solución exacta de Ritter o de Stoker. La pestaña Experimentos compara el modelo con la teoría en cada situación y la pestaña Datos lleva el balance de agua (entró, salió, está en el canal).
+
+| Pieza | Ecuación o valor | Fuente |
+|---|---|---|
+| Ecuaciones | ∂h/∂t + ∂q/∂x = 0; ∂q/∂t + ∂(q²/h + g·h²/2)/∂x = −g·h·∂zb/∂x − g·h·Sf, con Sf = n²·u·\|u\|/R^(4/3) | Saint-Venant (1871); Chow (1959), cap. 18 |
+| Esquema | volúmenes finitos de primer orden, flujo HLL, paso por la condición CFL (Courant 0,45) | Harten, Lax y van Leer (1983); Toro (2001) |
+| Fondo | reconstrucción hidrostática: conserva el volumen, deja quieto un lago sobre un fondo irregular y no da profundidades negativas al mojar un fondo seco | Audusse et al. (2004) |
+| Fricción | Manning, semi-implícita (estable con poca agua) | — |
+| Contornos | caudal de entrada Q(t), pared, salida libre, caída con la profundidad crítica, nivel fijo y chorro supercrítico (h y Q dados) | — |
+| Compuerta interna | orificio con Cc = 0,61, libre o ahogado; el chorro entra con la velocidad de la vena contraída; cerrada, es una pared | Henderson (1966) |
+| Rotura sobre fondo seco | frente a 2·√(g·h0); en la presa 4/9·h0 y q = (8/27)·√g·h0^1,5 | Ritter (1892) |
+| Rotura sobre fondo mojado | resalto móvil (masa y cantidad de movimiento) unido a la onda de vaciado | Stoker (1957) |
+| Onda por el cierre | Vw = (q1 − q2)/(y2 − y1) y (V1 + Vw)² = g·y2·(y1 + y2)/(2·y1) | Favre (1935); Chow (1959), cap. 18 |
+| Celeridad de la creciente | c = dQ/dA (onda cinemática), 5/3·V en un canal muy ancho con Manning | Lighthill y Whitham (1955) |
+
+**Validación (pruebas H24 a H29).**
+
+| Prueba | Caso | Resultado |
+|---|---|---|
+| H24 | presa de 1 m sobre fondo seco, 800 celdas, 4 s | error medio de la profundidad 0,46 % frente a Ritter |
+| H25 | presa de 1 m sobre 0,1 m de agua, 5 s | error medio 0,39 %; meseta 0,3960 m (Stoker 0,3962 m); frente a 0,1 m del exacto |
+| H26 | canal de 2 km con 10 m³/s; volumen; lago sobre una loma | profundidad normal a 0,2 % de Manning; error de volumen 4·10⁻¹⁵; lago quieto (2·10⁻¹⁵ m²/s) |
+| H27 | compuerta de 0,3 m con 1 m²/s | profundidad aguas arriba a 0,3 % de la ecuación del orificio; aguas abajo Cc·a = 0,183 m |
+| H28 | cierre brusco con 1 m de agua a 1 m/s | altura 1,3418 m (Favre 1,3418 m); frente a 0,03 m de la posición teórica a los 30 s |
+| H29 | el resalto en el tiempo (sección 2) | mismo resultado que el cálculo permanente en cuatro pozos |
+
+Las cifras se reproducen con `npm run test:canals`; el informe completo queda en `PRUEBAS_CANALES.md`.
+
+**Qué no es.** Las situaciones son de un canal de laboratorio ilustrativo: no representan un embalse, una presa ni un río de Medellín, no son un pronóstico de inundación y las alturas de muros que propone la pestaña Diseño son prediseños académicos. El modelo es unidimensional (no ve el agua que se sale del canal ni las ondas de lado a lado) y de primer orden: el frente se suaviza en unas pocas celdas.
+
+## 8. La pestaña Diseño: calculadoras, prediseñadores, planos y memoria
 
 Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la calculadora y el prediseñador básicos, con pocos datos y una frase con el resultado. **Universitarios**: además, las herramientas avanzadas, con todos los datos, los resultados, las verificaciones y el paso a paso con las fórmulas y los números. Las funciones están en `designCalc.ts` y `designAdvanced.ts`, sin interfaz.
 
@@ -158,18 +200,19 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 | Las alcantarillas | calculadora HDS-5 de tubo o cajón; prediseño que prueba doce tubos (0,6 a 3,0 m) o treinta y cinco cajones (1,0 a 4,0 m de ancho por 1,0 a 3,0 m de alto) con 1 a 3 conductos y escoge el de menor área que cumple |
 | Los sedimentos | Shields, umbral, Rouse y arrastre; cuatro fórmulas de transporte y formas del lecho; prediseño de enrocado |
 | Medir el caudal | vertederos y compuerta; escoger vertedero; canaleta Parshall; escoger canaleta Parshall; aforo con molinete por sección media |
+| Ondas y crecientes | rotura de presa (Ritter sobre fondo seco y Stoker sobre fondo mojado: velocidad del frente, tiempo de llegada, alturas); prediseño de los muros junto a una compuerta para la onda de Favre (y2 + borde libre, redondeado a 5 cm); celeridad de una creciente (onda cinemática) y su tiempo de viaje |
 
-**Planos y gráficas.** Los prediseños dibujan su plano acotado (corte del canal con revestimiento y borde libre, perfil del pozo con dados, bloques y umbral, abertura del puente con su gálibo, corte de la alcantarilla por la entrada con la vía y el nivel del agua, enrocado con su capa, alzado del vertedero) a escala, en metros, y una gráfica cuando aplica (curva de descarga del canal, nivel a la entrada de la alcantarilla según el caudal con la vía y el HW máximo, transporte según el caudal con las cuatro fórmulas en escala logarítmica, curvas de calibración). El plano se puede bajar en SVG.
+**Planos y gráficas.** Los prediseños dibujan su plano acotado (corte del canal con revestimiento y borde libre, perfil del pozo con dados, bloques y umbral, abertura del puente con su gálibo, corte de la alcantarilla por la entrada con la vía y el nivel del agua, enrocado con su capa, alzado del vertedero) a escala, en metros, y una gráfica cuando aplica (perfil del agua a tres tiempos después de una rotura de presa, corte del canal con el agua antes del cierre, la onda y los muros, curva de descarga del canal, nivel a la entrada de la alcantarilla según el caudal con la vía y el HW máximo, transporte según el caudal con las cuatro fórmulas en escala logarítmica, curvas de calibración). El plano se puede bajar en SVG.
 
 **Memoria de cálculo.** Cada herramienta arma una memoria en HTML imprimible (se abre en el navegador y se imprime o se guarda en PDF): proyecto y autor opcionales, fecha, nivel, datos, plano, gráfica, cálculo paso a paso, resultados, verificaciones y la advertencia de prediseño académico. Se arma en el navegador: no se envía a ningún servidor, no se guarda y no pide cuenta.
 
 **Simular una creciente.** En el resalto, el puente, la alcantarilla y los sedimentos, el caudal sube a un pico y vuelve con la forma del hidrograma adimensional gamma (Haan, 1970): q/qp = (t/tp·e^(1 − t/tp))^3,7, en tiempo comprimido (unos 30 s); la escena se recalcula en cada paso.
 
-**Entradas siempre válidas.** Las escenas sanean sus entradas (`sanitizeUniform`, `sanitizeJump`, `sanitizeBridge`, `sanitizeGauge`, `sanitizeCulvert`, `sanitizeSediment`): un número que no es finito toma el valor por defecto y uno fuera de rango se lleva al borde. Las herramientas revisan los datos y responden con un aviso cuando no sirven. La prueba H15 llama 8 400 veces las veintiuna herramientas con datos al azar y exige que no haya excepciones ni valores no numéricos; la H23 hace lo mismo con los planos, las gráficas y la memoria.
+**Entradas siempre válidas.** Las escenas sanean sus entradas (`sanitizeUniform`, `sanitizeJump`, `sanitizeBridge`, `sanitizeGauge`, `sanitizeCulvert`, `sanitizeSediment`): un número que no es finito toma el valor por defecto y uno fuera de rango se lleva al borde. Las herramientas revisan los datos y responden con un aviso cuando no sirven. La prueba H15 llama 9 600 veces las veinticuatro herramientas con datos al azar y exige que no haya excepciones ni valores no numéricos; la H23 hace lo mismo con los planos, las gráficas y la memoria.
 
-## 8. Límites
+## 9. Límites
 
-- Flujo permanente y unidimensional; sin pérdidas locales en contracciones salvo donde se dicen.
+- Flujo unidimensional; permanente en las seis primeras partes y no permanente (Saint-Venant) en «Ondas y crecientes» y en el arranque del resalto; sin pérdidas locales en contracciones salvo donde se dicen.
 - Los coeficientes del puente (paso a presión y tablero) son del orden de magnitud de HDS-7, no los de un caso particular.
 - El transporte de sedimentos supone un lecho uniforme de un solo tamaño, sin acorazamiento ni formas de fondo.
 - Las reglas del juego (borde libre, llenado del tubo, criterios de la alcantarilla, factor de seguridad del enrocado) son didácticas; un diseño real sigue la norma vigente del lugar.
@@ -196,3 +239,8 @@ Cada parte tiene un selector de herramientas, en dos niveles. **Niños**: la cal
 - Brown, C. B. (1950), en Rouse, H. (ed.), *Engineering Hydraulics*; van Rijn, L. C. (1984). Sediment transport, parts I y III. *J. Hydraulic Engineering*, 110(10) y 110(12); Engelund, F. y Hansen, E. (1967). *A Monograph on Sediment Transport in Alluvial Streams*; Kennedy, J. F. (1963). *J. Fluid Mechanics*, 16.
 - U.S. Bureau of Reclamation (2001). *Water Measurement Manual*, cap. 8 (canaletas Parshall); ISO 748, aforo con molinete; Rantz, S. E. et al. (1982). *Measurement and Computation of Streamflow*, USGS Water-Supply Paper 2175.
 - Haan, C. T. (1970), forma gamma del hidrograma adimensional, citada en NRCS, *National Engineering Handbook*, parte 630, cap. 16.
+- Ritter, A. (1892). Die Fortpflanzung der Wasserwellen. *Zeitschrift des Vereines Deutscher Ingenieure*, 36; Stoker, J. J. (1957). *Water Waves*. Interscience.
+- Favre, H. (1935). *Étude théorique et expérimentale des ondes de translation dans les canaux découverts*. Dunod.
+- Harten, A., Lax, P. D. y van Leer, B. (1983). On upstream differencing and Godunov-type schemes for hyperbolic conservation laws. *SIAM Review*, 25(1); Toro, E. F. (2001). *Shock-Capturing Methods for Free-Surface Shallow Flows*. Wiley.
+- Audusse, E., Bouchut, F., Bristeau, M.-O., Klein, R. y Perthame, B. (2004). A fast and stable well-balanced scheme with hydrostatic reconstruction for shallow water flows. *SIAM J. Scientific Computing*, 25(6).
+- Lighthill, M. J. y Whitham, G. B. (1955). On kinematic waves I. Flood movement in long rivers. *Proc. Royal Society A*, 229.

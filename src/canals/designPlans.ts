@@ -2,7 +2,8 @@
 
 import { PARSHALL, parshallH, transport, type ParshallSize } from './advanced';
 import { ratingCurve, type Inlet } from './culvert';
-import { calcFormulas, preCanalTierra, preParshall, prePozoUSBR } from './designAdvanced';
+import { calcFormulas, calcRotura, preCanalTierra, preMuroCompuerta, preParshall, prePozoUSBR } from './designAdvanced';
+import { ritter, stokerProfile } from './unsteady';
 import { preAforador, preAlcantarilla, preCanal, preEnrocado, prePozo, prePuente, type Result, type Vals } from './designCalc';
 import { CREEK, manningQ, normalDepth, rectWeirQ, triWeirQ, type Section } from './hydraulics';
 import type { Chart, Plan, XY } from './plan';
@@ -23,6 +24,20 @@ function qyChart(d: Record<string, number | string>, title: string): Chart {
 }
 
 const PLANS = new Map<Run, (d: Record<string, number | string>) => { plan?: Plan; chart?: Chart }>([
+  [preMuroCompuerta, (d) => ({ plan: channelPlan({ title: 'Muros del canal para la onda de cierre', b: N(d.b), z: 0, y: N(d.y2), H: N(d.H), t: 0.2, before: N(d.y1) }) })],
+  [
+    calcRotura,
+    (d) => {
+      const h0 = N(d.h0), h1 = N(d.h1), X = Math.max(60, N(d.x) * 1.2);
+      const prof = (t: number): XY[] => Array.from({ length: 121 }, (_, k) => {
+        const x = -X * 0.4 + (X * 1.4 * k) / 120;
+        return [x, d.kind === 'ritter' ? ritter(x, t, 0, h0) : stokerProfile(x, t, 0, h0, h1)] as XY;
+      });
+      const c = d.kind === 'ritter' ? 2 * Math.sqrt(9.81 * h0) : 0;
+      const tt = d.kind === 'ritter' ? [0.2, 0.5, 1].map((f) => (f * X) / c) : [0.2, 0.5, 1].map((f) => (f * X) / Math.max(1, Math.sqrt(9.81 * h0) * 1.4));
+      return { chart: { title: 'Perfil del agua después de la rotura (presa en x = 0)', xLabel: 'distancia desde la presa (m)', yLabel: 'profundidad (m)', series: tt.map((t, k) => ({ name: `a los ${t.toFixed(0)} s`, pts: prof(t), dash: k === 0 })) } };
+    },
+  ],
   [preCanal, (d) => ({ plan: channelPlan({ title: 'Canal revestido propuesto', b: N(d.b), z: N(d.z), y: N(d.y), H: N(d.H), t: 0.1 }), chart: qyChart(d, 'Curva de descarga del canal propuesto') })],
   [preCanalTierra, (d) => ({ plan: channelPlan({ title: 'Canal en tierra propuesto', b: N(d.b), z: N(d.z), y: N(d.y), H: N(d.H), earth: true }), chart: qyChart(d, 'Curva de descarga del canal en tierra') })],
   [prePozo, (d) => ({ plan: basinPlan({ title: 'Pozo amortiguador propuesto', drop: N(d.drop), L: N(d.L), y1: N(d.y1), y2: N(d.y2), tw: N(d.tw), chute: null, baffle: null, sill: N(d.P), type: 'I' }) })],

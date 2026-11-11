@@ -73,11 +73,24 @@ export function JumpLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [sawBarrido, setSawBarrido] = useState(false);
   const [critical, setCritical] = useState(false);
+  const [arranque, setArranque] = useState(false);
+  const [live, setLive] = useState<ReturnType<JumpWorld['transientProfile']>>(null);
+  useEffect(() => {
+    if (!arranque) {
+      setLive(null);
+      return;
+    }
+    const id = window.setInterval(() => setLive(world.current?.transientProfile() ?? null), 200);
+    return () => window.clearInterval(id);
+  }, [arranque]);
   const r = useMemo(() => jumpModel(inp), [inp]);
   const world = useRef<JumpWorld | null>(null);
   const sync = useRef(r);
   sync.current = r;
-  useEffect(() => world.current?.set(sync.current), [r]);
+  useEffect(() => {
+    world.current?.set(sync.current);
+    setArranque(false);
+  }, [r]);
   useEffect(() => {
     if (r.place === 'barrido') setSawBarrido(true);
   }, [r]);
@@ -107,6 +120,7 @@ export function JumpLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           make={(st) => new JumpWorld(st)}
           onReady={(w) => {
             world.current = w;
+            w.onTransientEnd = () => setArranque(false);
             w.set(sync.current);
           }}
         />
@@ -124,6 +138,25 @@ export function JumpLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     <>
       <DockRange label="Caudal" value={inp.Q} min={2} max={30} step={1} show={`${es(inp.Q, 0)} m³/s`} onChange={(v) => set({ Q: v })} />
       <FloodPlayer q={inp.Q} qMax={30} digits={1} onQ={(v) => set({ Q: v })} />
+      {gl && (
+        <div className="hc-acts">
+          <button
+            type="button"
+            className={`hc-act${arranque ? '' : ' is-hot'}`}
+            title="Calcula en el tiempo (Saint-Venant) cómo el chorro entra al pozo lleno hasta la cresta y forma el resalto"
+            onClick={() => {
+              const w = world.current;
+              if (!w) return;
+              if (arranque) w.stopTransient();
+              else w.startTransient();
+              setArranque(!arranque);
+            }}
+          >
+            {arranque ? 'Volver al cálculo permanente' : 'Ver cómo se forma el resalto'}
+          </button>
+        </div>
+      )}
+      {live && <LiveJump p={live} basin={inp.basin} weir={inp.weir} />}
       <DockRange label="Altura de la caída" value={inp.drop} min={2} max={12} step={0.5} show={`${es(inp.drop, 1)} m`} onChange={(v) => set({ drop: v })} />
       <DockRange label="Vertedero del pozo" value={inp.weir} min={0} max={4} step={0.1} show={`${es(inp.weir, 1)} m`} onChange={(v) => set({ weir: Math.round(v * 10) / 10 })} />
       <DockRange label="Largo del pozo" value={inp.basin} min={6} max={40} step={1} show={`${es(inp.basin, 0)} m`} onChange={(v) => set({ basin: v })} />
@@ -259,6 +292,40 @@ function EnergyCurve({ q, onCritical }: { q: number; onCritical: () => void }) {
       <p className="q3-small">
         Con {es(q)} m²/s por metro de ancho. {atCrit ? 'Esta es la profundidad crítica: la energía es la mínima posible y solo hay una profundidad.' : Number.isFinite(a) ? `Con la misma energía, el agua también podría ir a ${es(a)} m (${a < yc ? 'rápida' : 'lenta'}): son las profundidades alternas.` : ''}
       </p>
+    </div>
+  );
+}
+
+/** Instrumentos del arranque: perfil del pozo calculado en el tiempo, con la profundidad y la posición del cálculo permanente. */
+function LiveJump({ p, basin, weir }: { p: NonNullable<ReturnType<JumpWorld['transientProfile']>>; basin: number; weir: number }) {
+  const W = 560, H = 140, L = 36, R = 10, T = 14, B = 20;
+  const xmax = p.pts[p.pts.length - 1].x;
+  const zmax = Math.max(p.ytw, ...p.pts.map((q) => Math.min(q.E, q.z + 2.5))) * 1.08 + 0.2;
+  const X = (x: number) => L + (x / xmax) * (W - L - R);
+  const Y = (z: number) => H - B - (z / zmax) * (H - T - B);
+  const water = `${p.pts.map((q) => `${X(q.x).toFixed(1)},${Y(q.z).toFixed(1)}`).join(' ')} ${p.pts.slice().reverse().map((q) => `${X(q.x).toFixed(1)},${Y(q.zb).toFixed(1)}`).join(' ')}`;
+  return (
+    <div className="hc-hud">
+      <div className="hc-hud-head">
+        <b>Arranque (Saint-Venant)</b>
+        <span>t = {es(p.t, 1)} s</span>
+        <span>pozo a la mitad: {es(p.pts[Math.floor(p.pts.findIndex((q) => q.x >= basin / 2))]?.z ?? 0)} m · permanente {es(p.ytw)} m</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="hc-hud-svg" role="img" aria-label={`Perfil del pozo a los ${es(p.t, 0)} s`}>
+        <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="#f7fafc" />
+        <polygon points={water} fill="#9ccbe6" stroke="#1f78b4" strokeWidth="1.2" />
+        <polyline points={p.pts.map((q) => `${X(q.x).toFixed(1)},${Y(q.zb).toFixed(1)}`).join(' ')} fill="none" stroke="#6d5a3e" strokeWidth="1.6" />
+        <polyline points={p.pts.map((q) => `${X(q.x).toFixed(1)},${Y(Math.min(q.E, zmax)).toFixed(1)}`).join(' ')} fill="none" stroke="#c0392b" strokeWidth="1" strokeDasharray="5 3" />
+        <line x1={X(0)} x2={X(basin)} y1={Y(p.ytw)} y2={Y(p.ytw)} stroke="#17324d" strokeDasharray="2 2" />
+        <line x1={X(p.xJump)} x2={X(p.xJump)} y1={T} y2={H - B} stroke="#7b5ea7" strokeDasharray="3 3" />
+        <text x={X(p.xJump) + 3} y={T + 9} className="hc-hud-t" fill="#7b5ea7">resalto (permanente)</text>
+        <text x={X(basin) - 3} y={Y(p.ytw) - 4} className="hc-hud-t" textAnchor="end" fill="#17324d">agua del pozo (permanente)</text>
+        <text x={X(basin + 0.5)} y={Y(weir) + 12} className="hc-hud-t" textAnchor="middle" fill="#5b6b78">vertedero</text>
+        {[0, 10, 20, 30, 40].filter((v) => v <= xmax).map((v) => (
+          <text key={v} x={X(v)} y={H - 6} className="hc-hud-t" textAnchor="middle" fill="#5b6b78">{v}</text>
+        ))}
+        <text x={W - R} y={H - 6} className="hc-hud-t" textAnchor="end" fill="#5b6b78">m desde el pie</text>
+      </svg>
     </div>
   );
 }

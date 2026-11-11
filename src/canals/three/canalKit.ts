@@ -210,10 +210,62 @@ export class WaterBody {
     this.vel = Math.max(0, v);
   }
 
+  /** Reflejo del entorno (el cielo de la escena) en la superficie, con su intensidad. */
+  setEnvironment(env: THREE.Texture | null, intensity = 0.9): void {
+    this.topMat.envMap = env;
+    this.topMat.envMapIntensity = intensity;
+    this.topMat.needsUpdate = true;
+  }
+
   /** Escala del dibujo (ver `WaterLook`). */
   setLook(l: WaterLook): void {
     if (l.scale) this.look.scale.value = l.scale;
     if (l.depthRef) this.look.depthRef.value = l.depthRef;
+  }
+
+  /**
+   * Para escenas que cambian en cada cuadro (flujo no permanente): con el mismo número de estaciones, escribe en
+   * los mismos búferes en lugar de rehacer la geometría.
+   */
+  updateFast(st: Station[]): void {
+    const n = st.length, C = this.cols;
+    const tg = this.top.geometry, sg = this.side.geometry;
+    const tp = tg.getAttribute('position') as THREE.BufferAttribute | undefined;
+    if (!tp || tp.count !== n * (C + 1) || (this.hasSide && (sg.getAttribute('position') as THREE.BufferAttribute | undefined)?.count !== n * 2)) {
+      this.update(st);
+      return;
+    }
+    const P = tp.array as Float32Array, F = (tg.getAttribute('aFoam') as THREE.BufferAttribute).array as Float32Array;
+    const V = (tg.getAttribute('aVel') as THREE.BufferAttribute).array as Float32Array, D = (tg.getAttribute('aDepth') as THREE.BufferAttribute).array as Float32Array;
+    const FL = (tg.getAttribute('aFlow') as THREE.BufferAttribute).array as Float32Array;
+    for (let k = 0; k < n; k++) {
+      const s = st[k], y = s.bed + s.depth, zc = s.z0 ?? 0, f = s.foam ?? 0, v = s.vel ?? this.vel;
+      for (let j = 0; j <= C; j++) {
+        const i = k * (C + 1) + j, lat = -1 + (2 * j) / C;
+        P[3 * i] = s.x;
+        P[3 * i + 1] = y;
+        P[3 * i + 2] = zc + lat * s.halfW;
+        FL[2 * i] = s.x;
+        F[i] = f;
+        V[i] = v;
+        D[i] = Math.max(0, s.depth);
+      }
+    }
+    for (const nm of ['position', 'aFoam', 'aVel', 'aDepth', 'aFlow']) tg.getAttribute(nm).needsUpdate = true;
+    tg.computeVertexNormals();
+    if (!this.hasSide) return;
+    const SP = (sg.getAttribute('position') as THREE.BufferAttribute).array as Float32Array, SF = (sg.getAttribute('aFoam') as THREE.BufferAttribute).array as Float32Array;
+    const SV = (sg.getAttribute('aVel') as THREE.BufferAttribute).array as Float32Array, SD = (sg.getAttribute('aDepth') as THREE.BufferAttribute).array as Float32Array;
+    const SFL = (sg.getAttribute('aFlow') as THREE.BufferAttribute).array as Float32Array;
+    for (let k = 0; k < n; k++) {
+      const s = st[k], z = (s.z0 ?? 0) + s.halfW - 0.005, v = s.vel ?? this.vel, f = s.foam ?? 0, d = Math.max(0, s.depth);
+      SP.set([s.x, s.bed, z, s.x, s.bed + s.depth, z], 6 * k);
+      SFL[4 * k] = SFL[4 * k + 2] = s.x;
+      SF[2 * k] = SF[2 * k + 1] = f;
+      SV[2 * k] = SV[2 * k + 1] = v;
+      SD[2 * k] = SD[2 * k + 1] = d;
+    }
+    for (const nm of ['position', 'aFoam', 'aVel', 'aDepth', 'aFlow']) sg.getAttribute(nm).needsUpdate = true;
   }
 
   update(st: Station[]): void {

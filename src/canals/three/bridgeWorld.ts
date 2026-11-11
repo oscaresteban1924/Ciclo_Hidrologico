@@ -52,6 +52,7 @@ export class BridgeWorld {
     sc.add(this.tracers.mesh);
     this.normal = polyline('#17324d');
     sc.add(this.normal);
+    for (const w of [this.water, this.flood]) w.setEnvironment(stage.scene.environment);
     stage.view(this.views.general, false);
   }
 
