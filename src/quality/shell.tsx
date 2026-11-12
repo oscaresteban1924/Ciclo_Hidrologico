@@ -43,6 +43,8 @@ export function Scene3D<W extends WorldLike>({
     if (!el) return;
     const st = new QStage(el, { reducedMotion: state.prefs.reducedMotion, label });
     const w = make(st);
+    // solo en desarrollo: acceso a la escena para revisar encuadres desde las herramientas de verificación
+    if (import.meta.env.DEV) Object.assign(window, { __qstage: st, __qworld: w });
     stageRef.current = st;
     worldRef.current = w;
     st.onHover = (h) => onHover?.(h);

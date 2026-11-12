@@ -135,6 +135,22 @@ const ART = {
       <circle cx="40" cy="35" r="5" fill="#5a9a43" />
     </svg>
   ),
+  pumps: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 96 L0 80 L70 80 L120 30 L160 30 L160 96z" fill="#8fbf6a" />
+      <rect x="6" y="70" width="26" height="18" fill="#cfd8df" stroke="#7a8a97" strokeWidth="0.8" />
+      <rect x="7" y="76" width="24" height="11" fill="#4f9bd0" />
+      <circle cx="46" cy="72" r="7" fill="#2d6ea6" stroke="#17324d" strokeWidth="1" />
+      <circle cx="46" cy="72" r="2.4" fill="#cfe6f5" />
+      <rect x="53" y="68" width="12" height="8" rx="1.5" fill="#35618a" />
+      <path d="M32 72h7M46 65v-5h22l50-48h20" fill="none" stroke="#6c7a86" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M58 60h8M86 36l5-5M104 20l4-4" stroke="#bfe9ff" strokeWidth="2" strokeLinecap="round" />
+      <rect x="128" y="14" width="24" height="16" fill="#d9d6ce" stroke="#7a8a97" strokeWidth="0.8" />
+      <rect x="129" y="20" width="22" height="9" fill="#4f9bd0" />
+      <path d="M146 44l-6 10h6l-6 10" fill="none" stroke="#e0a526" strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  ),
   canals: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
@@ -224,6 +240,15 @@ const CARDS: RoomCard[] = [
     enter: [{ mode: 'dams', label: 'Entrar' }],
     art: ART.dams,
     tone: 'water',
+  },
+  {
+    room: 'pumps',
+    title: UI.rooms.pumps,
+    lead: 'Cuánta agua sube una bomba por una tubería y cuánta energía gasta, por qué el agua puede hervir dentro de la bomba y cuánta luz da un río con una pequeña central.',
+    items: ['Punto de operación y leyes de afinidad', 'NPSH y cavitación en una bomba de vidrio', 'Turbinas, curva de duración y energía del año', 'Calculadoras y memoria de cálculo'],
+    enter: [{ mode: 'pumps', label: 'Entrar' }],
+    art: ART.pumps,
+    tone: 'ink',
   },
   {
     room: 'slopes',

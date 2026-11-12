@@ -227,6 +227,14 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dd>
           </>
         )}
+        {roomOpen('pumps') && (
+          <>
+            <dt>Bombas y energía del agua</dt>
+            <dd>
+              Tres partes en 3D: una estación que sube agua a un tanque en una loma, con la curva de la bomba, la de la tubería y su punto de operación (velocidad, válvula y dos bombas en serie o en paralelo); una bomba de vidrio donde el agua hierve si le falta presión (NPSH); y una pequeña central de pasada con su turbina, la curva de duración del río y un pueblo que se ilumina. Las bombas, el río y la central son ilustrativos.
+            </dd>
+          </>
+        )}
         <dt>Bitácora</dt>
         <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones de todas las salas. Solo queda en este dispositivo.</dd>
       </dl>

@@ -785,6 +785,21 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 - La cuenca, el canal y las partes de canales tenían planos verdes infinitos: ahora tienen praderas con lomas.
 - El piso bajo las maquetas se veía como una banda gris: ahora no recibe luz y tiene el color del fondo, con una capa aparte para las sombras.
 
+## 4 quinquatricies. Sala «Bombas y energía del agua» (ejecutada)
+
+**La sala.** Tres partes (la bomba y la tubería, el agua que hierve en la bomba, la central hidroeléctrica), doce retos que no se cumplen con los datos de partida, experimentos contra la teoría y seis herramientas de diseño. Modelo en `docs/bombas/MODELO_BOMBAS.md`.
+
+**Piezas nuevas para las maquetas** (`src/three/machines.ts`, reutilizables en otras salas): tuberías con flechas que avanzan a la velocidad del agua, bridas con pernos, manómetros de carátula con aguja, válvula de compuerta con volante y vástago, bomba centrífuga con motor de aletas (opaca o de vidrio con su rodete), rodetes de turbinas Pelton, Francis, Kaplan y Michell-Banki, postes y cables de energía, y casas con ventanas que se encienden.
+
+**Comprobado.**
+- Pruebas de la sala: 11 de 11 (`npm run test:pumps`), con la atmósfera estándar de 1976 y la presión de vapor de IAPWS como referencias.
+- Superposiciones de la sala: 24 de 24 estados en las cuatro pantallas (incluye dos bombas en serie, el agua que hierve y la pestaña Diseño), sin errores en la consola.
+
+**Ajustes durante la verificación.**
+- La plataforma de la casa de máquinas quedaba por encima del piso y tapaba la turbina: ahora tiene una cota única.
+- La vista del rodete miraba desde el lado del motor y el disco tapaba las burbujas: ahora mira desde la succión.
+- Las flechas del flujo eran demasiado fuertes sobre tubos oscuros: ahora son azules y suaves sobre PVC claro.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

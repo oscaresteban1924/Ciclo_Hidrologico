@@ -197,6 +197,23 @@ def laderas(pg, screen, shots, report):
             top(pg); check(pg, screen, 'laderas-diseno', shots, report)
 
 
+def bombas(pg, screen, shots, report):
+    """Sala de bombas: las tres partes, dos bombas en serie, el agua que hierve y la pestaña Diseño."""
+    mode(pg, 'Bombas y energía del agua'); pg.wait_for_timeout(4000)
+    for part, tag in [('La bomba y la tubería', 'bomba'), ('El agua hierve en la bomba', 'cavitacion'), ('La central hidroeléctrica', 'central')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'bombas-{tag}', shots, report)
+        if tag == 'bomba':
+            pg.evaluate(BTN, 'Dos en serie'); pg.wait_for_timeout(3000)
+            top(pg); check(pg, screen, 'bombas-serie', shots, report)
+        if tag == 'cavitacion':
+            pg.evaluate(RANGE, ['Temperatura del agua', '75']); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'bombas-cavita', shots, report)
+        if tag == 'central':
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'bombas-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -285,6 +302,7 @@ def run(screens, shots):
             subterraneas(pg, screen, shots, report)
             presas(pg, screen, shots, report)
             laderas(pg, screen, shots, report)
+            bombas(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})
