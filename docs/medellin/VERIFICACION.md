@@ -714,6 +714,26 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 
 **Límites declarados.** Escenas ilustrativas. Tubos dibujados más gruesos y flechas de la red seis veces más rápidas (se dice en cada parte). No se modelan la entrada de aire con presión negativa, la separación de columna ni la fricción no permanente.
 
+## 4 duotricies. Sala «Aguas subterráneas» (ejecutada)
+
+**Pedido.** Tercera de las cuatro salas nuevas. Modelo, supuestos y fuentes en `docs/subterraneas/MODELO_SUBTERRANEAS.md`.
+
+**La sala.** Tres partes:
+- **El acuífero y la ley de Darcy.** Un valle cortado entre una loma y un río: el material del acuífero, la zona saturada bajo el nivel freático de Dupuit, tres pozos de observación y partículas que viajan a la velocidad del agua en los poros, en cámara rápida.
+- **El pozo y su cono.** Un acuífero confinado bajo arcilla, con el cono de abatimiento (escala vertical exagerada, dicha en la escena), tres pozos de observación y el bombeo desde el primer minuto. Hay una prueba de bombeo para analizar con Cooper-Jacob.
+- **La mancha y la zona de captura.** Una fuga 300 m aguas arriba de un pozo: 600 partículas con advección y dispersión durante ocho años, el borde de la zona de captura y la parte de la mancha que llega al pozo.
+
+Doce retos (ninguno se cumple con los datos de partida), experimentos contra la teoría (permeámetro, recta de Cooper-Jacob, fila de partículas contra el ancho de Todd) y ocho herramientas de diseño. En esta sala no se citan artículos del RAS.
+
+**Comprobado.**
+- Pruebas de la sala: 9 de 9 (`npm run test:ground`): W(u) contra las tablas de Theis (±0,05 %); Cooper-Jacob y Thiem; T y S recuperados de una prueba con error de lectura (T a 0,3 %); Darcy y permeámetros; continuidad de Dupuit; partículas contra la solución con entrada de flujo (diferencia 0,002); zona de captura contra trayectorias; robustez de las herramientas.
+- Superposiciones de la sala: 24 de 24 estados sin choques ni cortes en las cuatro pantallas. `superposiciones.py` incluye ahora la sala.
+- Sin errores en la consola.
+
+**Ajustes durante la verificación.** La vista general del valle quedaba lejana y plana: ahora es oblicua. El bloque del pozo era muy grande para ver el cono: se redujo a 500 m y el cono es más visible. La gráfica de la prueba cortaba la última marca del tiempo. Los registros en vivo con valor cero rellenaban el eje con «−0,1»: ahora empiezan en cero (también en las demás salas).
+
+**Primera comparación honesta.** La solución de Ogata y Banks (concentración fija en la entrada) mete más masa por dispersión que una fuente de flujo; las partículas se comparan con la solución de entrada de flujo (van Genuchten y Alves, 1982), y la diferencia con Ogata-Banks se informa en la prueba.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

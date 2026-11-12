@@ -73,6 +73,21 @@ const ART = {
       <path d="M122 30h32" stroke="#17324d" strokeWidth="1" />
     </svg>
   ),
+  ground: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 30c30-6 50 2 80 4s56-4 80 0v62H0z" fill="#8fbf6a" />
+      <path d="M0 36c30-6 50 2 80 4s56-4 80 0v56H0z" fill="#d6bf86" />
+      <path d="M0 56c40 4 90 10 160 14v26H0z" fill="#9fc6e3" opacity="0.85" />
+      <path d="M0 56c40 4 90 10 160 14" fill="none" stroke="#1f78b4" strokeWidth="1.6" />
+      <rect x="0" y="88" width="160" height="8" fill="#7f5f40" />
+      <rect x="96" y="20" width="4" height="64" fill="#e8e2d2" stroke="#9fb3c2" strokeWidth="0.8" />
+      <path d="M80 62c8 2 14 12 18 18 4-6 10-14 22-15" fill="none" stroke="#1f5f8a" strokeWidth="1.4" strokeDasharray="3 2" />
+      {[20, 44, 68].map((x) => (
+        <circle key={x} cx={x} cy={70 + x * 0.06} r="2.2" fill="#ffffff" />
+      ))}
+    </svg>
+  ),
   supply: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#e8eff4" />
@@ -125,6 +140,15 @@ const CARDS: RoomCard[] = [
     items: ['Tiempo de concentración', 'Hidrograma en vivo', 'Tanque de retención', 'Crecientes, período de retorno y riesgo'],
     enter: [{ mode: 'basins', label: 'Entrar' }],
     art: ART.basins,
+    tone: 'moss',
+  },
+  {
+    room: 'ground',
+    title: UI.rooms.ground,
+    lead: 'Cómo se mueve el agua bajo tierra, qué pasa alrededor de un pozo que bombea y cómo una fuga puede llegar años después al agua que tomamos.',
+    items: ['Ley de Darcy y permeámetro', 'Cono de abatimiento y prueba de bombeo', 'Zona de captura de un pozo', 'Una mancha que viaja'],
+    enter: [{ mode: 'ground', label: 'Entrar' }],
+    art: ART.ground,
     tone: 'moss',
   },
   {
@@ -208,7 +232,7 @@ export function Home() {
         <p className="home-kicker">{UI.appSubtitle}</p>
         <h2>{UI.appTitle}</h2>
         <p className="home-lead">
-          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta y por una cuenca, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana, cómo llega a presión a las casas y cómo se mueve en canales, puentes y alcantarillas.
+          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca y bajo tierra, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana, cómo llega a presión a las casas y cómo se mueve en canales, puentes y alcantarillas.
         </p>
       </section>
       {groups.map((g) => (

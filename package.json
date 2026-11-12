@@ -14,7 +14,9 @@
     "test:quality": "tsx tests/quality/model.test.ts",
     "test:canals": "tsx tests/canals/hydraulics.test.ts",
     "test:basins": "tsx tests/basins/hydrology.test.ts",
-    "test:supply": "tsx tests/supply/supply.test.ts"
+    "test:supply": "tsx tests/supply/supply.test.ts",
+    "test:ground": "tsx tests/ground/aquifer.test.ts",
+    "test:dams": "tsx tests/dams/dam.test.ts"
   },
   "dependencies": {
     "react": "^19.3.1",

@@ -21,6 +21,7 @@ const QualityLab = lazy(() => import('./quality/QualityLab'));
 const CanalsLab = lazy(() => import('./canals/CanalsLab'));
 const BasinsLab = lazy(() => import('./basins/BasinsLab'));
 const SupplyLab = lazy(() => import('./supply/SupplyLab'));
+const GroundLab = lazy(() => import('./ground/GroundLab'));
 
 export function App() {
   const { state, dispatch } = useStore();
@@ -176,6 +177,18 @@ export function App() {
           }
         >
           <BasinsLab />
+        </Suspense>
+      ) : state.mode === 'ground' && !state.tool ? (
+        <Suspense
+          fallback={
+            <main className="layout layout-quality">
+              <div className="city-loading" role="status">
+                Cargando la sala de aguas subterráneas…
+              </div>
+            </main>
+          }
+        >
+          <GroundLab />
         </Suspense>
       ) : state.mode === 'supply' && !state.tool ? (
         <Suspense

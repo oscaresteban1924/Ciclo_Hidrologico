@@ -122,6 +122,14 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dd>
           </>
         )}
+        {roomOpen('ground') && (
+          <>
+            <dt>Aguas subterráneas</dt>
+            <dd>
+              Tres partes en 3D: el acuífero entre una loma y un río, con la ley de Darcy y un permeámetro; el pozo y su cono de abatimiento, con una prueba de bombeo para analizar; y una fuga que viaja hacia un pozo, con su zona de captura. El valle, el pozo y la fuga son ilustrativos.
+            </dd>
+          </>
+        )}
         <dt>Medellín: laboratorio de lluvia</dt>
         <dd>
           Una maqueta 3D de un sector de ciudad donde la lluvia se calcula de verdad: elige un sector en el valle, crea lluvia, cambia superficies, construye un jardín de lluvia o limpia un sumidero, y compara dos versiones con la misma lluvia. Es educativo: no es un pronóstico oficial.

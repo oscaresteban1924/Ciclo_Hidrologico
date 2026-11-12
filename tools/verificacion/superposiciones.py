@@ -146,6 +146,22 @@ def acueducto(pg, screen, shots, report):
             top(pg); check(pg, screen, 'acueducto-diseno', shots, report)
 
 
+def subterraneas(pg, screen, shots, report):
+    """Sala de aguas subterráneas: las tres partes, el bombeo, la fuga en viaje y la pestaña Diseño."""
+    mode(pg, 'Aguas subterráneas'); pg.wait_for_timeout(4000)
+    for part, tag in [('El acuífero y la ley de Darcy', 'acuifero'), ('El pozo y su cono', 'pozo'), ('La mancha y la zona de captura', 'mancha')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'subterraneas-{tag}', shots, report)
+        if tag == 'pozo':
+            pg.evaluate(BTN, 'Bombear'); pg.wait_for_timeout(6000)
+            top(pg); check(pg, screen, 'subterraneas-bombeo', shots, report)
+        if tag == 'mancha':
+            pg.evaluate(BTN, 'Simular la fuga'); pg.wait_for_timeout(10000)
+            top(pg); check(pg, screen, 'subterraneas-fuga', shots, report)
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'subterraneas-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -231,6 +247,7 @@ def run(screens, shots):
                     top(pg); check(pg, screen, 'canales-diseno', shots, report)
             cuencas(pg, screen, shots, report)
             acueducto(pg, screen, shots, report)
+            subterraneas(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

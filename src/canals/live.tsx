@@ -143,8 +143,10 @@ export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number 
         const all = s.ref && Number.isFinite(s.ref.value) ? [...vals, s.ref.value] : vals;
         let lo = all.length ? Math.min(...all) : 0, hi = all.length ? Math.max(...all) : 1;
         if (hi - lo < 1e-6) {
-          lo -= Math.max(0.05, Math.abs(lo) * 0.1);
-          hi += Math.max(0.05, Math.abs(hi) * 0.1);
+          // valor constante: si es cero, el eje empieza en cero (sin «−0,1» de relleno)
+          const flat = lo;
+          lo = Math.abs(flat) < 1e-9 ? 0 : flat - Math.max(0.05, Math.abs(flat) * 0.1);
+          hi = flat + Math.max(0.05, Math.abs(flat) * 0.1);
         }
         const pad = (hi - lo) * 0.12;
         lo -= pad;
