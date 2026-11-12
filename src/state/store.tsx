@@ -8,24 +8,24 @@ import type { LayerId } from '../content/types';
 import { loadSaved, save } from '../lib/storage';
 import type { Balance, RainProfile, StormSample } from '../lab/storm';
 
-export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality' | 'canals' | 'basins' | 'supply' | 'ground' | 'dams' | 'slopes' | 'house' | 'pumps' | 'measure';
+export type Mode = 'guided' | 'explore' | 'lab' | 'city' | 'quality' | 'canals' | 'basins' | 'supply' | 'ground' | 'dams' | 'slopes' | 'house' | 'pumps' | 'measure' | 'model2d';
 export type Tool = 'tracer' | 'challenges' | 'glossary' | 'logbook' | null;
 /** Salas: el ciclo del agua agrupa el recorrido, la exploración y los experimentos. */
-export type Room = 'ciclo' | 'basins' | 'ground' | 'slopes' | 'city' | 'quality' | 'supply' | 'house' | 'canals' | 'dams' | 'pumps' | 'measure';
+export type Room = 'ciclo' | 'basins' | 'ground' | 'slopes' | 'city' | 'quality' | 'supply' | 'house' | 'canals' | 'dams' | 'pumps' | 'measure' | 'model2d';
 export const roomOf = (m: Mode): Room => (m === 'guided' || m === 'explore' || m === 'lab' ? 'ciclo' : m);
 
-/** Enlaces directos: la dirección termina en #recorrido, #explorar, #experimentos, #cuencas, #acuifero, #laderas, #medellin, #calidad, #acueducto, #casa, #canales, #presas, #bombas o #medir. */
-export const MODE_HASH: Record<Mode, string> = { guided: 'recorrido', explore: 'explorar', lab: 'experimentos', city: 'medellin', quality: 'calidad', canals: 'canales', basins: 'cuencas', supply: 'acueducto', ground: 'acuifero', dams: 'presas', slopes: 'laderas', house: 'casa', pumps: 'bombas', measure: 'medir' };
+/** Enlaces directos: la dirección termina en #recorrido, #explorar, #experimentos, #cuencas, #acuifero, #laderas, #medellin, #calidad, #acueducto, #casa, #canales, #presas, #bombas, #medir o #modelo2d. */
+export const MODE_HASH: Record<Mode, string> = { guided: 'recorrido', explore: 'explorar', lab: 'experimentos', city: 'medellin', quality: 'calidad', canals: 'canales', basins: 'cuencas', supply: 'acueducto', ground: 'acuifero', dams: 'presas', slopes: 'laderas', house: 'casa', pumps: 'bombas', measure: 'medir', model2d: 'modelo2d' };
 
 /** Grupos de salas, en el orden en que viaja el agua (portada y encabezado). */
 export const ROOM_GROUPS: { id: string; title: string; short: string; rooms: Room[] }[] = [
   { id: 'naturaleza', title: 'El agua en la naturaleza', short: 'Naturaleza', rooms: ['ciclo', 'basins', 'ground', 'slopes'] },
   { id: 'ciudad', title: 'El agua en la ciudad', short: 'Ciudad', rooms: ['city', 'quality', 'supply', 'house'] },
-  { id: 'obras', title: 'Obras hidráulicas', short: 'Obras', rooms: ['canals', 'dams', 'pumps', 'measure'] },
+  { id: 'obras', title: 'Obras hidráulicas', short: 'Obras', rooms: ['canals', 'dams', 'pumps', 'measure', 'model2d'] },
 ];
 
 /** Salas ya construidas (las demás no aparecen en la portada, en el encabezado ni por enlace directo). */
-export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'ground', 'slopes', 'city', 'quality', 'supply', 'house', 'canals', 'dams', 'pumps', 'measure'];
+export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'ground', 'slopes', 'city', 'quality', 'supply', 'house', 'canals', 'dams', 'pumps', 'measure', 'model2d'];
 export const roomOpen = (r: Room) => ROOMS_OPEN.includes(r);
 
 export function modeFromHash(): Mode | null {

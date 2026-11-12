@@ -603,6 +603,16 @@
 .hc-hud-row.is-single .hc-traces {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
+/* en pantallas angostas la gráfica va arriba, a lo ancho, y los medidores debajo en dos columnas */
+@media (max-width: 700px) {
+  .hc-hud-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hc-hud-row .hc-traces {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
 
 /* controles del pie: deslizadores con la parte recorrida pintada */
 .q3-dock {

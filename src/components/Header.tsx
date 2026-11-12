@@ -251,6 +251,14 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dd>
           </>
         )}
+        {roomOpen('model2d') && (
+          <>
+            <dt>Modelación hidráulica 2D</dt>
+            <dd>
+              Cinco partes en 3D sobre un valle ilustrativo con su quebrada, un jarillón, un barrio y una vía con su puente: el terreno como lo ve el modelo (MDT o MDS, píxeles de 1 a 30 m, remuestreo y error de la fuente); las coberturas y su n de Manning; los periodos de retorno con Gumbel, el riesgo y las condiciones de borde; la malla, las tablas subgrid y las ecuaciones con su paso de tiempo; y un modelo 2D armado paso a paso como en HEC-RAS, que corre en el navegador y dibuja profundidad, velocidad, llegada y amenaza. No es HEC-RAS ni un estudio de amenaza.
+            </dd>
+          </>
+        )}
         <dt>Bitácora</dt>
         <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones de todas las salas. Solo queda en este dispositivo.</dd>
       </dl>

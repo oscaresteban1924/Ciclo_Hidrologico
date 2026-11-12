@@ -151,6 +151,21 @@ const ART = {
       <path d="M146 44l-6 10h6l-6 10" fill="none" stroke="#e0a526" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   ),
+  model2d: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 70 Q40 58 80 66 T160 62 V96 H0z" fill="#9cc06b" />
+      <path d="M0 74 Q40 64 80 72 T160 68 L160 76 Q120 82 80 80 T0 82z" fill="#4f9bd0" />
+      <g stroke="#17324d" strokeOpacity="0.35" strokeWidth="0.8">
+        <path d="M8 40h144M8 52h144M8 64h144M8 28h144" />
+        <path d="M20 22v62M44 22v62M68 22v62M92 22v62M116 22v62M140 22v62" />
+      </g>
+      <rect x="68" y="52" width="24" height="12" fill="#2f7fb8" fillOpacity="0.55" stroke="#c0632b" strokeWidth="1.6" />
+      <path d="M100 54 Q112 46 124 54" fill="none" stroke="#e0a526" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M128 18h20v12h-20z" fill="#fff" stroke="#9fb3c2" strokeWidth="0.8" />
+      <path d="M131 27l4-5 3 2 4-5 4 3" fill="none" stroke="#2a78d6" strokeWidth="1.4" />
+    </svg>
+  ),
   measure: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#e8eff4" />
@@ -294,6 +309,15 @@ const CARDS: RoomCard[] = [
     tone: 'water',
   },
   {
+    room: 'model2d',
+    title: UI.rooms.model2d,
+    lead: 'Cómo se construye un modelo hidráulico bidimensional como HEC-RAS 2D: el terreno que ve (MDT, MDS y el píxel), el n de cada cobertura, la creciente de diseño y sus bordes, la malla y las ecuaciones, y el modelo armado y corrido paso a paso.',
+    items: ['MDT, MDS, píxel y remuestreo', 'Coberturas y n de Manning', 'Periodos de retorno y bordes', 'Tablas subgrid, Courant y θ', 'Modelo 2D paso a paso con mapas de amenaza'],
+    enter: [{ mode: 'model2d', label: 'Entrar' }],
+    art: ART.model2d,
+    tone: 'ink',
+  },
+  {
     room: 'house',
     title: UI.rooms.house,
     lead: 'Cuánta agua usa una casa y dónde se va, cómo se lee el medidor y se entiende la factura, y cuánto ahorra un tanque de agua lluvia para los sanitarios.',
@@ -315,7 +339,7 @@ const CARDS: RoomCard[] = [
 
 /** Grupos de la portada, en el orden en que viaja el agua. */
 const GROUPS = ROOM_GROUPS;
-const NUM: Record<number, string> = { 4: 'Cuatro', 5: 'Cinco', 6: 'Seis', 7: 'Siete', 8: 'Ocho', 9: 'Nueve', 10: 'Diez', 11: 'Once', 12: 'Doce' };
+const NUM: Record<number, string> = { 4: 'Cuatro', 5: 'Cinco', 6: 'Seis', 7: 'Siete', 8: 'Ocho', 9: 'Nueve', 10: 'Diez', 11: 'Once', 12: 'Doce', 13: 'Trece' };
 
 function RoomItem({ c }: { c: RoomCard }) {
   const { dispatch } = useStore();
@@ -352,7 +376,7 @@ export function Home() {
         <p className="home-kicker">{UI.appSubtitle}</p>
         <h2>{UI.appTitle}</h2>
         <p className="home-lead">
-          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca, bajo tierra y por las laderas; qué hace en una ciudad como Medellín y en cada casa; y cómo la llevan, la guardan, la bombean y la miden las obras hidráulicas.
+          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca, bajo tierra y por las laderas; qué hace en una ciudad como Medellín y en cada casa; y cómo la llevan, la guardan, la bombean, la miden y la modelan las obras hidráulicas.
         </p>
       </section>
       {groups.map((g) => (

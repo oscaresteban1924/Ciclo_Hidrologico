@@ -1,0 +1,225 @@
+/* Sala «Modelación hidráulica 2D»: pasos del modelo, registro de la corrida, leyendas de capas, barras de amenaza
+   y ecuaciones. */
+
+.m2-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+.m2-steps button {
+  border: 1px solid #cdd7e0;
+  background: #fff;
+  color: #3c4b57;
+  border-radius: 999px;
+  padding: 3px 9px 3px 4px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.m2-steps button b {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e8eef3;
+  font-size: 11px;
+}
+.m2-steps button.is-done b {
+  background: #cfe6d8;
+  color: #1d5a37;
+}
+.m2-steps button.is-on {
+  border-color: #17324d;
+  background: #17324d;
+  color: #fff;
+}
+.m2-steps button.is-on b {
+  background: #fff;
+  color: #17324d;
+}
+.m2-steps button:focus-visible,
+.m2-stepnav button:focus-visible {
+  outline: 2px solid #2a78d6;
+  outline-offset: 2px;
+}
+.m2-stepnav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 0;
+}
+.m2-stepnav button {
+  border: 1px solid #cdd7e0;
+  background: #f5f8fb;
+  color: #17324d;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.m2-stepnav button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.m2-run {
+  margin: 4px 0 6px;
+}
+.m2-progress {
+  position: relative;
+  height: 26px;
+  border-radius: 6px;
+  background: #e8eef3;
+  overflow: hidden;
+}
+.m2-progress i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #9cc7e4;
+  transition: width 0.15s linear;
+}
+.m2-progress span {
+  position: relative;
+  display: block;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: #17324d;
+  font-variant-numeric: tabular-nums;
+}
+.m2-log {
+  margin: 6px 0 0;
+  padding: 7px 10px 7px 22px;
+  border-radius: 6px;
+  background: #f5f8fb;
+  border: 1px solid #e1e8ee;
+  font-size: 12px;
+  color: #3c4b57;
+  font-variant-numeric: tabular-nums;
+}
+.m2-log li + li {
+  margin-top: 2px;
+}
+.m2-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  font-size: 12px;
+  color: #3c4b57;
+  margin: 4px 0 6px;
+}
+.m2-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.m2-legend i {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(23, 50, 77, 0.2);
+}
+.m2-legend.is-ramp i {
+  flex: 1;
+  min-width: 90px;
+  height: 10px;
+}
+.m2-legend.is-ramp {
+  flex-wrap: nowrap;
+}
+.m2-haz {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  max-width: 520px;
+}
+.m2-haz-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 76px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #3c4b57;
+}
+.m2-haz-k {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 11px;
+  color: #17324d;
+  height: 18px;
+}
+.m2-haz-bar {
+  height: 10px;
+  background: #eef2f5;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.m2-haz-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.m2-haz-v {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.m2-math .m2-eq {
+  font-family: 'Cambria Math', 'STIX Two Math', Georgia, serif;
+  font-size: 14px;
+  background: #f5f8fb;
+  border-left: 3px solid #2a78d6;
+  padding: 6px 10px;
+  border-radius: 0 6px 6px 0;
+  color: #17324d;
+  overflow-x: auto;
+}
+.m2-algo {
+  padding-left: 20px;
+  font-size: 14px;
+}
+.m2-algo li + li {
+  margin-top: 3px;
+}
+.m2-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 13px;
+  color: #3c4b57;
+  margin: 6px 0;
+}
+.m2-inline label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.m2-inline output {
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+.hc-flood.is-inline {
+  position: static;
+  margin: 6px 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.hc-flood-q.is-bad {
+  background: #fbe3dc;
+  color: #8a2c1b;
+}
+/* cinco partes en una fila */
+.hc-tabs.n5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.hc-tabs.n5 button {
+  font-size: 0.82rem;
+}

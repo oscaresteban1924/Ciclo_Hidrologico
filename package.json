@@ -20,7 +20,8 @@
     "test:slopes": "tsx tests/slopes/slope.test.ts",
     "test:pumps": "tsx tests/pumps/pump.test.ts",
     "test:measure": "tsx tests/measure/measure.test.ts",
-    "test:house": "tsx tests/house/house.test.ts"
+    "test:house": "tsx tests/house/house.test.ts",
+    "test:model2d": "tsx tests/model2d/model2d.test.ts"
   },
   "dependencies": {
     "n8ao": "^2.0.1",

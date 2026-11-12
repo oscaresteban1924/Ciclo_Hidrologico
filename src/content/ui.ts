@@ -18,6 +18,7 @@ export const UI = {
     house: 'El agua en casa',
     pumps: 'Bombas y energía del agua',
     measure: 'Medir el agua',
+    model2d: 'Modelación hidráulica 2D',
   },
   tools: {
     tracer: 'Gota trazadora',
@@ -40,6 +41,7 @@ export const UI = {
     house: 'En casa',
     pumps: 'Bombas',
     measure: 'Medir',
+    model2d: 'Modelo 2D',
   },
   /** Salas de la portada: el ciclo del agua (con sus tres modos) y los tres laboratorios. */
   rooms: {
@@ -55,6 +57,7 @@ export const UI = {
     house: 'El agua en casa',
     pumps: 'Bombas y energía del agua',
     measure: 'Medir el agua',
+    model2d: 'Modelación hidráulica 2D',
   },
   roomsShort: {
     ciclo: 'Ciclo del agua',
@@ -69,6 +72,7 @@ export const UI = {
     house: 'En casa',
     pumps: 'Bombas',
     measure: 'Medir',
+    model2d: 'Modelo 2D',
   },
   toolsShort: {
     tracer: 'Gota',

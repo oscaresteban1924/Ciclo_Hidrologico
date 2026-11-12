@@ -253,6 +253,32 @@ def casa(pg, screen, shots, report):
             top(pg); check(pg, screen, 'casa-diseno', shots, report)
 
 
+def modelo2d(pg, screen, shots, report):
+    """Sala de modelación 2D: las cinco partes, píxeles gruesos, el MDS, la malla gruesa, los pasos del modelo y Diseño."""
+    mode(pg, 'Modelación hidráulica 2D'); pg.wait_for_timeout(4000)
+    parts = [('El terreno: MDT, MDS y el píxel', 'terreno'), ('Coberturas y n de Manning', 'cobertura'), ('Periodos de retorno y bordes', 'retorno'), ('La malla y las ecuaciones', 'ecuaciones'), ('HEC-RAS 2D paso a paso', 'modelo')]
+    for part, tag in parts:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(4000)
+        top(pg); check(pg, screen, f'modelo2d-{tag}', shots, report)
+        if tag == 'terreno':
+            pg.evaluate(BTN, '30 m'); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'modelo2d-pixel30', shots, report)
+            pg.evaluate(BTN, 'MDS (superficie)'); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'modelo2d-mds', shots, report)
+        if tag == 'cobertura':
+            pg.wait_for_timeout(6000)
+            top(pg); check(pg, screen, 'modelo2d-cobertura-agua', shots, report)
+        if tag == 'ecuaciones':
+            pg.evaluate(BTN, '40 m'); pg.wait_for_timeout(5000)
+            top(pg); check(pg, screen, 'modelo2d-celdas40', shots, report)
+        if tag == 'modelo':
+            for k in (3, 6, 7, 8):
+                pg.evaluate("(k) => { const b = document.querySelectorAll('.m2-steps button')[k]; if (b) b.click(); }", k); pg.wait_for_timeout(2500)
+                top(pg); check(pg, screen, f'modelo2d-paso{k + 1}', shots, report)
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'modelo2d-diseno', shots, report)
+
+
 SIN_MEDELLIN = '--sin-medellin' in sys.argv
 
 
@@ -348,6 +374,7 @@ def run(screens, shots):
             bombas(pg, screen, shots, report)
             medir(pg, screen, shots, report)
             casa(pg, screen, shots, report)
+            modelo2d(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

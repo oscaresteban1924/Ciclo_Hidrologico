@@ -834,6 +834,60 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 - Pruebas de las doce salas: 202 de 202 (ciudad 64, calidad 26, canales 33, cuencas 12, acueducto 12, aguas subterráneas 9, presas 8, laderas 9, bombas 11, medición 10, casa 8).
 - Superposiciones: en el escritorio, el recorrido completo de las doce salas (88 estados) sin choques ni cortes. En la primera pasada completa, el portátil mostró un aviso de medalla sobre los botones de vistas (por la escena aplastada, ya corregida) y la tableta y el teléfono se interrumpieron esperando la simulación de un sector de Medellín; por eso las cuatro pantallas se repitieron sin la ciudad (`--sin-medellin`), ya con la escena corregida: **292 de 292 estados** sin choques ni cortes (escritorio 73, portátil, tableta y teléfono 219). La ciudad se revisó aparte en la tableta y el teléfono (valle y dos sectores, que cargan en unos 35 s): sin choques ni errores; en el escritorio ya había pasado completa en la primera pasada.
 
+## 4 nonquatricies. Sala «Modelación hidráulica 2D» (ejecutada)
+
+**La sala.** Tiene cinco partes:
+
+1. El terreno: MDT, MDS y el píxel.
+2. Coberturas y n de Manning.
+3. Periodos de retorno y bordes.
+4. La malla y las ecuaciones.
+5. HEC-RAS 2D paso a paso, en diez pasos.
+
+Suma diecinueve retos que no se cumplen con los datos de partida, experimentos y doce herramientas de diseño. Corre en el navegador un modelo 2D construido con las ideas de HEC-RAS 2D:
+
+- tablas subgrid de celdas y caras;
+- onda difusiva implícita con θ, iteraciones y tolerancia, e inercia local explícita;
+- reparto del caudal de entrada por conducción y profundidad normal a la salida;
+- líneas de quiebre;
+- amenaza H1–H6.
+
+Modelo en `docs/modelo2d/MODELO_2D.md`.
+
+**Confirmado en fuentes.**
+- Las opciones por omisión de HEC-RAS: θ = 1, 20 iteraciones, tolerancia de 0,01 pie y la guía de Courant (1, hasta 3 o 5).
+- El reparto del hidrograma en la línea de borde.
+- Los límites H1–H5 (AIDR, 2017).
+- La calidad QL2 del LiDAR (USGS 3DEP).
+- La precisión del Copernicus GLO-30.
+- Que el MDE de 12,5 m de ALOS PALSAR RTC es el SRTM de 30 m remuestreado (ASF).
+- La proyección EPSG:9377 (IGAC, Resolución 370 de 2021).
+
+El valle, la serie y las obras son ilustrativos y así se dice.
+
+**Comprobado.**
+- Pruebas de la sala: 15 de 15 (`npm run test:model2d`).
+  - La curva cota-volumen es exacta.
+  - El lago en reposo cambia menos de 0,001 mm.
+  - El error de volumen es menor que 10⁻⁸ %.
+  - Contra Ritter, las ecuaciones completas dan 2,4 % y la inercia local 34 %.
+  - La onda difusiva y la inercia local quedan a 1 cm en el puente.
+  - El explícito con Δt fijo de 3 s se vuelve inestable y el implícito es estable con Courant 10.
+  - Con celdas de 40 m, el subgrid queda a 6 cm de la referencia y sin subgrid a 66 cm.
+- Pruebas de las trece salas: 217 de 217.
+- Superposiciones de la sala: 56 de 56 estados en las cuatro pantallas. Incluyen píxeles de 30 m, el MDS, el agua de la corrida, celdas de 40 m, los pasos 4, 7, 8 y 9 y la pestaña Diseño, sin errores en la consola. En todos los paneles no aparece NaN, «undefined» ni «Infinity».
+
+**Ajustes durante la verificación.**
+- **Onda difusiva implícita.**
+  - Al limitar el agua que entrega una celda se cuenta también la que le llega en el mismo paso: en un esquema implícito el agua puede atravesar una celda seca en un paso.
+  - El residuo del sistema se mide como error de nivel y no frente a la diagonal: con caras muy conductoras, un sistema «casi resuelto» se volvía un paso explícito.
+  - El área mojada que linealiza la curva cota-volumen es la real en las celdas con agua.
+  - Las caras con menos de 1 cm de agua no conducen.
+  - El precondicionador pasó a Cholesky incompleto modificado (de 36 a 18 iteraciones por sistema).
+- **Salida de la inercia local.** Se evalúa al final del paso; antes, la celda del borde se vaciaba y se llenaba en cada paso.
+- **Cálculo en la página.** Se da al menos la mitad del tiempo al cálculo aunque la escena tarde en dibujarse (equipos lentos).
+- **En todas las salas.** En los teléfonos, los instrumentos ponen la gráfica arriba y los medidores debajo en dos columnas; antes se apretaban en una fila y se cortaban los números.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
