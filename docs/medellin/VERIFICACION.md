@@ -734,6 +734,30 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 
 **Primera comparación honesta.** La solución de Ogata y Banks (concentración fija en la entrada) mete más masa por dispersión que una fuente de flujo; las partículas se comparan con la solución de entrada de flujo (van Genuchten y Alves, 1982), y la diferencia con Ogata-Banks se informa en la prueba.
 
+## 4 tertricies. Sala «Presas y embalses» (ejecutada)
+
+**Pedido.** Cuarta y última de las salas nuevas. Modelo, supuestos y fuentes en `docs/presas/MODELO_PRESAS.md`.
+
+**La sala.** Tres partes:
+- **El embalse y la creciente.** Un valle con una presa de gravedad y un vertedero libre. Una creciente de 48 horas se reproduce en 24 s: el lago sube, la lámina pasa por el vertedero y el río crece. Hidrogramas de entrada y salida en vivo, con el volumen guardado.
+- **El vertedero y el pozo.** Maqueta cortada por el eje: cresta WES, rápida, pozo con umbral y río. El resalto queda en el pozo o se forma río abajo, según el agua del río y la profundización del pozo; la espuma marca dónde está.
+- **La presa de gravedad.** La sección sobre roca con flechas proporcionales a cada fuerza, la resultante, la barra del tercio medio y el diagrama de esfuerzos de la base; la galería de drenes cambia la subpresión.
+
+Doce retos (ninguno se cumple con los datos de partida), experimentos contra la teoría (balance de masa del tránsito; fuerza específica y pérdida del resalto calculadas de dos maneras; suma de fuerzas contra la reacción de la base; nivel de falla por bisección) y seis herramientas de diseño con memoria. En esta sala no se citan artículos del RAS; los factores de seguridad y el límite H/Hd son criterios usuales, dichos así.
+
+**Comprobado.**
+- Pruebas de la sala: 8 de 8 (`npm run test:dams`): Puls contra el embalse lineal exacto; masa, atenuación y pico en el cruce de los hidrogramas; perfil WES, tangencia, energía al pie y fuerza específica del resalto (1e-9); una sección triangular calculada a mano; tercio medio, esfuerzos y drenes; volumen del embalse; robustez de las seis herramientas con 240 llamadas al azar; coeficiente de la cresta con otras cargas, pozo justo (dentro con la profundidad exacta, fuera con 1 cm menos) y pérdida del resalto.
+- Superposiciones de la sala: 20 de 20 estados sin choques ni cortes en las cuatro pantallas (las tres partes, la creciente en curso y la pestaña Diseño). `superposiciones.py` incluye ahora la sala.
+- Versión de un solo archivo abierta desde el disco: la sala carga, las tres partes cambian y la portada muestra ocho salas; sin errores en la consola.
+
+**Ajustes durante la verificación.**
+- El primer cuadro de la reproducción podía llegar con una marca de tiempo anterior al inicio y dejar una línea del gráfico sin posición: el índice ahora empieza en cero. Se aplicó la misma protección a los relojes sin WebGL de Cuencas, del pozo y del golpe de ariete.
+- La vista general del embalse miraba el valle de lado y la ladera tapaba el lago: ahora mira a lo largo del valle desde aguas abajo.
+- El muro lateral cercano del vertedero tapaba toda la maqueta: ahora la maqueta está cortada por el eje, con el embalse aguas arriba, y se ve el perfil.
+- Fuera del pozo, el corte mostraba el resalto subiendo a la profundidad conjugada sobre el lecho y salía del gráfico: ahora el chorro sigue por el río y el resalto llega al agua del río, como en la maqueta 3D.
+- El diagrama de esfuerzos de la presa quedaba dentro de la roca: ahora está delante de la base. La leyenda del esquema se montaba («subpresión» sobre «resultante»).
+- Las diferencias muy pequeñas se escriben con coma decimal o como «menor de 10⁻¹²».
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

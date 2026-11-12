@@ -150,6 +150,14 @@ export function Help({ onClose }: { onClose: () => void }) {
         <dd>
           Siete partes con escenas 3D, retos, instrumentos en vivo y una pestaña de diseño con calculadoras, prediseñadores y memoria de cálculo: el canal, el resalto, el puente, las alcantarillas, los sedimentos, la medición del caudal y las ondas y crecientes. Son prediseños académicos, no diseños de ingeniería.
         </dd>
+        {roomOpen('dams') && (
+          <>
+            <dt>Presas y embalses</dt>
+            <dd>
+              Tres partes en 3D: el embalse que recibe una creciente y la suelta despacio por su vertedero; el vertedero de cresta con el pozo de disipación y el resalto; y la presa de gravedad, con las fuerzas, los drenes y los esfuerzos en la base. El embalse, el vertedero y la presa son ilustrativos.
+            </dd>
+          </>
+        )}
         <dt>Bitácora</dt>
         <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones de todas las salas. Solo queda en este dispositivo.</dd>
       </dl>

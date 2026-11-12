@@ -82,7 +82,7 @@ export function PozoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     let raf = 0;
     const t0 = performance.now(), a = Math.log10(0.001), b = Math.log10(sync.current.t);
     const loop = (now: number) => {
-      const k = Math.min(1, (now - t0) / 16000);
+      const k = Math.min(1, Math.max(0, now - t0) / 16000);
       const t = Math.pow(10, a + k * (b - a));
       world.current?.at(t);
       if (k >= 1) {

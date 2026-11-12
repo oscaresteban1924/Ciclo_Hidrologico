@@ -72,7 +72,7 @@ export function useStorm(r: BasinResult, gl: boolean, world: MutableRefObject<Ba
     const loop = (now: number) => {
       const rr = rRef.current;
       const total = rr.hydro.length * rr.dt;
-      const tm = ((now - t0) / 1000) * (total / PLAY_SECONDS);
+      const tm = (Math.max(0, now - t0) / 1000) * (total / PLAY_SECONDS);
       if (tm >= total) {
         tick.current(null);
         return;

@@ -1,4 +1,4 @@
-# Superposiciones: recorre los módulos y vistas principales (incluidas la hidráulica de canales y las cuencas) en cuatro pantallas (escritorio 1440 × 900, portátil
+# Superposiciones: recorre los módulos y vistas principales (incluidas todas las salas de obras y de la naturaleza) en cuatro pantallas (escritorio 1440 × 900, portátil
 # 1280 × 720, tableta 820 × 1180 y teléfono 390 × 844) y mide, en cada estado, si algún elemento flotante se monta
 # sobre otro: rótulos de las escenas 3D, avisos, barras, leyendas, columna de cámara, tarjetas, preguntas y paneles
 # sobre la escena. También informa los que quedan cortados por el borde de la escena o de la pantalla.
@@ -162,6 +162,20 @@ def subterraneas(pg, screen, shots, report):
             top(pg); check(pg, screen, 'subterraneas-diseno', shots, report)
 
 
+def presas(pg, screen, shots, report):
+    """Sala de presas y embalses: las tres partes, la creciente en el embalse y la pestaña Diseño."""
+    mode(pg, 'Presas y embalses'); pg.wait_for_timeout(4000)
+    for part, tag in [('El embalse y la creciente', 'embalse'), ('El vertedero y el pozo', 'vertedero'), ('La presa de gravedad', 'estabilidad')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'presas-{tag}', shots, report)
+        if tag == 'embalse':
+            pg.evaluate(BTN, 'Llega la creciente'); pg.wait_for_timeout(8000)
+            top(pg); check(pg, screen, 'presas-creciente', shots, report)
+        if tag == 'estabilidad':
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'presas-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -248,6 +262,7 @@ def run(screens, shots):
             cuencas(pg, screen, shots, report)
             acueducto(pg, screen, shots, report)
             subterraneas(pg, screen, shots, report)
+            presas(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

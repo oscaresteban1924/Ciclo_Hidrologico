@@ -116,7 +116,7 @@ export function ArieteLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     const t0 = performance.now();
     let raf = 0;
     const loop = (now: number) => {
-      const t = ((now - t0) / 1000 / HAMMER_PLAY) * sync.current.inp.tEnd;
+      const t = (Math.max(0, now - t0) / 1000 / HAMMER_PLAY) * sync.current.inp.tEnd;
       if (t >= sync.current.inp.tEnd) {
         onTime.current(null);
         return;

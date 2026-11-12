@@ -18,7 +18,7 @@ export const roomOf = (m: Mode): Room => (m === 'guided' || m === 'explore' || m
 export const MODE_HASH: Record<Mode, string> = { guided: 'recorrido', explore: 'explorar', lab: 'experimentos', city: 'medellin', quality: 'calidad', canals: 'canales', basins: 'cuencas', supply: 'acueducto', ground: 'acuifero', dams: 'presas' };
 
 /** Salas ya construidas (las demás no aparecen en la portada, en el encabezado ni por enlace directo). */
-export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'ground', 'city', 'quality', 'supply', 'canals'];
+export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'ground', 'city', 'quality', 'supply', 'canals', 'dams'];
 export const roomOpen = (r: Room) => ROOMS_OPEN.includes(r);
 
 export function modeFromHash(): Mode | null {

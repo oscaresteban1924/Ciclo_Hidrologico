@@ -106,8 +106,20 @@ const ART = {
       <path d="M20 22L140 40" stroke="#1f78b4" strokeWidth="1.6" strokeDasharray="4 3" />
     </svg>
   ),
-  canals: (
+  dams: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 24c16-8 30-10 44-6l20 78H0z" fill="#8fbf6a" />
+      <path d="M0 40h66v56H0z" fill="#9fc6e3" />
+      <path d="M0 40h66" stroke="#1f78b4" strokeWidth="1.6" />
+      <path d="M62 30h10l34 66H62z" fill="#cfcac0" stroke="#7d7568" strokeWidth="1" />
+      <path d="M72 34c8 2 14 18 22 40s10 22 22 22" fill="none" stroke="#2f84b5" strokeWidth="3.2" strokeLinecap="round" />
+      <path d="M106 88h54v8h-54z" fill="#9fc6e3" />
+      <path d="M110 84c4-6 8-6 10 0s6 6 10 0" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+      <path d="M140 18c4 0 6 12 10 12M126 30c4 0 6-12 14-12" fill="none" stroke="#1f5f8a" strokeWidth="1.4" />
+    </svg>
+  ),
+  canals: (    <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
       <path d="M0 40h22l18 30h80l18-30h22v56H0z" fill="#b9bec3" />
       <path d="M29 52h102l-11 18H40z" fill="#2f7fb0" />
@@ -187,6 +199,15 @@ const CARDS: RoomCard[] = [
     art: ART.canals,
     tone: 'ink',
   },
+  {
+    room: 'dams',
+    title: UI.rooms.dams,
+    lead: 'Cómo un embalse amortigua una creciente, cómo un vertedero y su pozo frenan el agua que cae y por qué una presa de gravedad no se vuelca ni desliza.',
+    items: ['Tránsito de una creciente', 'Vertedero de cresta y resalto en el pozo', 'Fuerzas, drenes y tercio medio', 'Calculadoras y memoria de cálculo'],
+    enter: [{ mode: 'dams', label: 'Entrar' }],
+    art: ART.dams,
+    tone: 'water',
+  },
 ];
 
 /** Grupos de la portada, en el orden en que viaja el agua. */
@@ -232,7 +253,7 @@ export function Home() {
         <p className="home-kicker">{UI.appSubtitle}</p>
         <h2>{UI.appTitle}</h2>
         <p className="home-lead">
-          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca y bajo tierra, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana, cómo llega a presión a las casas y cómo se mueve en canales, puentes y alcantarillas.
+          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca y bajo tierra, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana, cómo llega a presión a las casas, cómo se mueve en canales, puentes y alcantarillas y cómo lo guardan y lo dejan pasar las presas.
         </p>
       </section>
       {groups.map((g) => (
