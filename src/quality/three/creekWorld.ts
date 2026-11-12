@@ -3,6 +3,7 @@
 // calculado (model.ts) en cada punto. Dibujo esquemático: la distancia se comprime (más espacio cerca del tubo).
 
 import * as THREE from 'three';
+import { Birds } from '../../three/scenery';
 import { plumeFactor, plumeMixing, type CreekInput, type CreekModel } from '../model';
 import { naturalWater, doColor, fishGeometry, houses, rng, trees, waterMaterial, noise2, WALLS, type HouseSpot, type TreeSpot } from './kit';
 import type { QStage, StageLabel, StageView } from './stage';
@@ -247,6 +248,9 @@ export class CreekWorld {
       forest.push({ x: u, y: groundY(u, z), z, r: 1.4 + R2() * 1.5 });
     }
     sc.add(trees(forest, 9));
+    const birds = new Birds(new THREE.Vector3(0, 30, 0), 160, 60, 8, 2.4);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     const bank: TreeSpot[] = [];
     for (let u = U0 + 2; u < U1; u += 3.1) for (const side of [-1, 1]) {
       if (side > 0 && u > -30 && u < 8) continue; // el barrio llega hasta la orilla

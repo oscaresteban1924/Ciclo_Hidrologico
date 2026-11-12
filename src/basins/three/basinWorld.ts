@@ -4,7 +4,8 @@
 // reproduce el hietograma y el hidrograma calculados en tiempo comprimido (unos 24 s).
 
 import * as THREE from 'three';
-import { lookWater } from '../../three/look';
+import { Birds, RainStreaks, strataWall, studioFloor } from '../../three/scenery';
+import { lookMaterial, lookWater } from '../../three/look';
 import { houses, noise2, rng, trees, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { staffGauge } from '../../canals/three/canalKit';
@@ -32,8 +33,7 @@ export class BasinWorld {
   private pathLen: number[] = [];
   private streams: THREE.Mesh[] = [];
   private streamMat: THREE.MeshStandardMaterial;
-  private rain: THREE.Points;
-  private rainV: Float32Array;
+  private rain: RainStreaks;
   private pulses: THREE.InstancedMesh;
   private pulseT: Float32Array;
   private veg = new THREE.Group();
@@ -49,7 +49,7 @@ export class BasinWorld {
   /** Llamado en cada cuadro durante el aguacero: minuto del modelo (o null al terminar). */
   onTime: ((tMin: number | null) => void) | null = null;
   readonly views: Record<'general' | 'salida' | 'arriba', StageView> = {
-    general: { eye: [250, 245, 235], target: [-5, 0, 0], fit: 330, portrait: { eye: [300, 380, 360], target: [-10, 0, -10] } },
+    general: { eye: [265, 250, 250], target: [-15, -6, -6], fit: 360, portrait: { eye: [300, 380, 360], target: [-10, 0, -10] } },
     salida: { eye: [196, 34, 66], target: [138, 2, 0], fit: 70 },
     arriba: { eye: [0, 380, 2], target: [0, 0, 0] },
   };
@@ -62,26 +62,16 @@ export class BasinWorld {
     g.rotateX(-Math.PI / 2);
     g.translate((X0 + X1) / 2, 0, (Z0 + Z1) / 2);
     g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
-    this.ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+    this.ground = new THREE.Mesh(g, lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.14, patches: 0.1, clouds: [0.15, 90] }));
     this.ground.receiveShadow = true;
     sc.add(this.ground, this.veg);
     this.streamMat = new THREE.MeshStandardMaterial({ color: '#2f84b5', emissive: '#1f5f8a', emissiveIntensity: 0.15, roughness: 0.2, metalness: 0.05 });
-    // lluvia
-    const N = 1600, R = rng(9);
-    const pos = new Float32Array(N * 3);
-    this.rainV = new Float32Array(N);
-    for (let k = 0; k < N; k++) {
-      pos[3 * k] = X0 + R() * (X1 - X0);
-      pos[3 * k + 1] = 20 + R() * 120;
-      pos[3 * k + 2] = Z0 + R() * (Z1 - Z0);
-      this.rainV[k] = 60 + R() * 30;
-    }
-    const rg = new THREE.BufferGeometry();
-    rg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    this.rain = new THREE.Points(rg, new THREE.PointsMaterial({ color: '#7fb2d9', size: 0.9, transparent: true, opacity: 0.75, depthWrite: false }));
-    this.rain.frustumCulled = false;
-    this.rain.visible = false;
-    sc.add(this.rain);
+    // lluvia en trazos con salpicaduras
+    this.rain = new RainStreaks({ x0: X0, x1: X1, z0: Z0, z1: Z1, top: 130 }, (x, z) => this.h(x, z, this.slope), 2600, 70, 3.2, [0.1, 0.03], 1.2);
+    sc.add(this.rain.group);
+    const birds = new Birds(new THREE.Vector3(-20, 40, 0), 170, 50, 7, 2.2);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     // pulsos de agua por los cauces
     this.pulses = new THREE.InstancedMesh(new THREE.SphereGeometry(1.4, 10, 8), new THREE.MeshStandardMaterial({ color: '#7fd0ff', emissive: '#2a8fd0', emissiveIntensity: 0.6 }), 60);
     this.pulses.frustumCulled = false;
@@ -177,32 +167,16 @@ export class BasinWorld {
     for (let j = 1; j <= NZ; j++) edge.push([X1, Z0 + ((Z1 - Z0) * j) / NZ]);
     for (let i = NX - 1; i >= 0; i--) edge.push([X0 + ((X1 - X0) * i) / NX, Z1]);
     for (let j = NZ - 1; j >= 0; j--) edge.push([X0, Z0 + ((Z1 - Z0) * j) / NZ]);
-    const pos: number[] = [], col: number[] = [], idx: number[] = [];
-    const top = new THREE.Color('#8a6a48'), bot = new THREE.Color('#5b4630');
-    edge.forEach(([x, z], k) => {
-      pos.push(x, this.h(x, z, S), z, x, BASE, z);
-      col.push(top.r, top.g, top.b, bot.r, bot.g, bot.b);
-      if (k < edge.length - 1) {
-        const a = 2 * k;
-        idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3);
-      }
-    });
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    g.setIndex(idx);
-    g.computeVertexNormals();
+    // paredes del corte con las capas del suelo; piso de estudio la primera vez
+    const wall = strataWall(edge, (x, z) => this.h(x, z, S), BASE);
     if (this.skirt) {
+      this.stage.scene.remove(this.skirt);
       this.skirt.geometry.dispose();
-      this.skirt.geometry = g;
     } else {
-      this.skirt = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide }));
-      const base = new THREE.Mesh(new THREE.PlaneGeometry(X1 - X0 + 60, Z1 - Z0 + 60), new THREE.MeshStandardMaterial({ color: '#c9d6cf', roughness: 1 }));
-      base.rotateX(-Math.PI / 2);
-      base.position.set((X0 + X1) / 2, BASE, (Z0 + Z1) / 2);
-      base.receiveShadow = true;
-      this.stage.scene.add(this.skirt, base);
+      this.stage.scene.add(studioFloor((X0 + X1) / 2, (Z0 + Z1) / 2, Math.hypot(X1 - X0, Z1 - Z0) / 2, BASE));
     }
+    this.skirt = wall;
+    this.stage.scene.add(wall);
   }
 
   private buildTerrain(S: number): void {
@@ -312,7 +286,9 @@ export class BasinWorld {
     this.pulseT.fill(-1);
     if (on && this.tankFill) this.setTankLevel(0);
     if (!on) {
-      this.rain.visible = false;
+      this.rain.intensity = 0;
+      this.rain.update(0);
+      this.stage.weather(0);
       this.onTime?.(null);
     }
   }
@@ -364,18 +340,9 @@ export class BasinWorld {
     const iNow = kr < r.rain.length ? (r.rain[kr] / r.dt) * 60 : 0;
     const iMax = Math.max(...r.rain) / r.dt * 60;
     // lluvia: más gotas con más intensidad
-    this.rain.visible = iNow > 0 && !this.stage.reducedMotion;
-    if (this.rain.visible) {
-      const p = this.rain.geometry.attributes.position as THREE.BufferAttribute;
-      const n = p.count, show = Math.floor(n * Math.min(1, iNow / Math.max(1, iMax)));
-      for (let k = 0; k < n; k++) {
-        let y = p.getY(k) - this.rainV[k] * h;
-        if (y < 0) y += 140;
-        p.setY(k, k < show ? y : -500);
-      }
-      p.needsUpdate = true;
-      this.rain.geometry.setDrawRange(0, n);
-    }
+    this.rain.intensity = iNow > 0 && !this.stage.reducedMotion ? Math.max(0.08, Math.min(1, iNow / Math.max(1, iMax))) : 0;
+    this.rain.update(h);
+    this.stage.weather(Math.min(0.75, this.rain.intensity * 0.9));
     // cauces: más brillo y algo más anchos con más caudal
     const k = Math.floor(tMin / r.dt);
     const Q = k < r.hydro.length ? r.hydro[k] : 0;

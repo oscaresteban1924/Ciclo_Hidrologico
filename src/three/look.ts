@@ -30,6 +30,8 @@ export interface LookOptions {
   water?: { flow?: [number, number]; strength?: number };
   /** Viento en copas (desplazamiento máximo en la punta, en unidades del objeto). */
   sway?: number;
+  /** Sombras de nubes que pasan sobre el terreno: [fuerza 0..0,3, tamaño de las nubes en unidades del mundo]. */
+  clouds?: [number, number];
 }
 
 /**
@@ -47,12 +49,14 @@ export function lookMaterial<M extends THREE.Material>(mat: M, o: LookOptions): 
   const uD = { value: new THREE.Vector3(o.detail ?? 0, o.patches ?? 0, o.scale ?? 1) };
   const uW = { value: new THREE.Vector4(o.water?.flow?.[0] ?? 0.35, o.water?.flow?.[1] ?? 0.12, o.water?.strength ?? 0.6, water ? 1 : 0) };
   const uS = { value: o.sway ?? 0 };
-  mat.userData.lookUniforms = { detail: uD, water: uW, sway: uS };
+  const uC = { value: new THREE.Vector2(o.clouds?.[0] ?? 0, o.clouds?.[1] ?? 100) };
+  mat.userData.lookUniforms = { detail: uD, water: uW, sway: uS, clouds: uC };
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
     sh.uniforms.uLkD = uD;
     sh.uniforms.uLkW = uW;
     sh.uniforms.uLkS = uS;
+    sh.uniforms.uLkC = uC;
     sh.uniforms.uLkT = LOOK_TIME;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLkW;\nvarying vec3 vLkN;\nuniform float uLkS;\nuniform float uLkT;').replace(
       '#include <begin_vertex>',
@@ -76,7 +80,7 @@ export function lookMaterial<M extends THREE.Material>(mat: M, o: LookOptions): 
       }`,
     );
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vLkW;\nvarying vec3 vLkN;\nuniform vec3 uLkD;\nuniform vec4 uLkW;\nuniform float uLkT;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vLkW;\nvarying vec3 vLkN;\nuniform vec3 uLkD;\nuniform vec4 uLkW;\nuniform vec2 uLkC;\nuniform float uLkT;\n${NOISE}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -92,6 +96,12 @@ export function lookMaterial<M extends THREE.Material>(mat: M, o: LookOptions): 
                     + (lkG2 - 0.5) * uLkD.x * 0.9 * (1.0 - smoothstep(0.4, 1.2, lkFw * 0.33))
                     + (lkG3 - 0.5) * uLkD.y * 1.6 * lkA.y;
           diffuseColor.rgb *= 1.0 + lkV;
+        }
+        if (uLkC.x > 0.0) {
+          // sombras de nubes que pasan: ruido grande que avanza con el viento
+          vec2 lkCp = vLkW.xz / uLkC.y + vec2(uLkT * 0.018, uLkT * 0.007);
+          float lkCs = smoothstep(0.5, 0.74, lkF(lkCp));
+          diffuseColor.rgb *= 1.0 - uLkC.x * lkCs;
         }`,
       )
       .replace(

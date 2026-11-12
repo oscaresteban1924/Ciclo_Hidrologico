@@ -4,6 +4,7 @@
 // reglas (estaciones A y B) en el vidrio, trazadores que viajan con el agua y espuma en los frentes empinados.
 
 import * as THREE from 'three';
+import { meadow } from '../../three/scenery';
 import { WAVE, type WaveSim } from '../waves';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
@@ -136,18 +137,18 @@ export class WavesWorld {
     this.dyn.add(slab(conc, L, L + 14, yE - 3.6, yE - 3.2, -HB - 2, HB + 2));
     this.dyn.add(slab(wallC, L + 14, L + 14.4, yE - 3.6, yE - 0.8, -HB - 2, HB + 2));
     for (const z of [-HB - 2.2, HB + 2]) this.dyn.add(slab(wallC, L, L + 14.4, yE - 3.6, yE - 0.8, z, z + 0.2));
-    const grass = new THREE.Mesh(new THREE.PlaneGeometry(800, 600), new THREE.MeshStandardMaterial({ color: '#6c9a4a', roughness: 1 }));
-    grass.rotation.x = -Math.PI / 2;
-    grass.position.set(150, yE - 3.6, 0);
-    grass.receiveShadow = true;
-    this.dyn.add(grass);
+    const land = meadow({ keep: [-80, L + 60, -HB - 70, HB + 12], extent: [-300, 600, -320, 320], y0: yE - 3.6, hills: 14, ramp: 70, cell: 4, seed: 8 });
+    this.dyn.add(land.mesh);
     const ts: TreeSpot[] = [];
     for (let k = 0; k < 90; k++) {
       const x = -60 + R() * 420;
       const z = -HB - 8 - R() * 60;
       ts.push({ x, y: -S * Math.min(L, Math.max(0, x)) + H, z, r: 1.6 + R() * 1.8 });
     }
-    for (let k = 0; k < 40; k++) ts.push({ x: -60 + R() * 420, y: yE - 3.6, z: HB + 14 + R() * 50, r: 1.6 + R() * 1.6 });
+    for (let k = 0; k < 80; k++) {
+      const x = -200 + R() * 700, z = HB + 14 + R() * 200;
+      ts.push({ x, y: land.height(x, z), z, r: 1.6 + R() * 1.6 });
+    }
     this.dyn.add(trees(ts, 7));
   }
 

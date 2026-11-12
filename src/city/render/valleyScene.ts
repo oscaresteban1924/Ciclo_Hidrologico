@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { Finisher, LOOK_TIME, lookScene } from '../../three/look';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -1222,10 +1223,16 @@ export class ValleyScene {
     return h.length ? (h[0].object.userData.pin as string) : null;
   }
 
+  /** Oclusión ambiental y suavizado (solo en calidad alta) y acabado de las superficies (src/three/look.ts). */
+  private finisher: Finisher | null = null;
+  private looked = new WeakSet<THREE.Material>();
+  private lookFrames = 0;
+
   resize(): void {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
+    this.finisher?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     for (const m of this.lineMats) m.resolution.set(w, h);
@@ -1271,6 +1278,8 @@ export class ValleyScene {
     fog.near = Math.max(2000, dist * 1.05);
     fog.far = Math.max(5600, dist * 2.8);
     this.controls.update();
+    LOOK_TIME.value = performance.now() / 1000;
+    if (this.lookFrames++ % (this.lookFrames < 120 ? 5 : 30) === 0) lookScene(this.scene, this.looked);
     this.renderer.render(this.scene, this.camera);
     const w = this.container.clientWidth, h = this.container.clientHeight;
     const pos = new Map<string, { x: number; y: number; visible: boolean }>();
@@ -1285,6 +1294,7 @@ export class ValleyScene {
 
   dispose(): void {
     this.disposed = true;
+    this.finisher?.dispose();
     this.controls.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;

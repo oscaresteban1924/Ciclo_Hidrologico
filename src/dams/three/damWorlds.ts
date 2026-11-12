@@ -3,6 +3,7 @@
 // Maquetas ilustrativas; las alturas y las fuerzas van a escala (las flechas, proporcionales a su valor).
 
 import * as THREE from 'three';
+import { Birds } from '../../three/scenery';
 import { lookWater } from '../../three/look';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { noise2, trees, type TreeSpot } from '../../quality/three/kit';
@@ -74,6 +75,9 @@ export class ReservoirWorld {
       ts.push({ x, y, z, r: 2.2 + R() * 2.2 });
     }
     sc.add(trees(ts, 9));
+    const birds = new Birds(new THREE.Vector3(-120, 40, 0), 140, 55, 8, 2.6);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     // el lago: un plano que la ladera recorta
     this.lake = new THREE.Mesh(new THREE.PlaneGeometry(420, 260), waterMat(0.86));
     this.lake.rotation.x = -Math.PI / 2;

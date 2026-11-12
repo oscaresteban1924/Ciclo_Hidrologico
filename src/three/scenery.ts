@@ -257,7 +257,7 @@ export function meadow(o: MeadowOptions): { mesh: THREE.Mesh; height: (x: number
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.computeVertexNormals();
-  const mat = lookMaterial(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.97 }), { detail: 0.08, patches: 0.05 });
+  const mat = lookMaterial(new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.97 }), { detail: 0.08, patches: 0.05, clouds: [0.16, Math.max(30, (x1 - x0) / 5)] });
   const mesh = new THREE.Mesh(g, mat);
   mesh.receiveShadow = true;
   return { mesh, height };
@@ -288,6 +288,34 @@ function strataColor(depth: number, x: number, z: number, out: THREE.Color): THR
   // grano dentro de cada capa
   out.multiplyScalar(0.9 + 0.18 * vnoise(x * 0.4 + d * 0.8, z * 0.4 - d, 3));
   return out;
+}
+
+/**
+ * Piso de estudio bajo una maqueta: del mismo color que el suelo del cielo (sin borde visible) y una capa aparte
+ * que recibe las sombras.
+ */
+export function studioFloor(cx: number, cz: number, R0: number, y: number, floorColor = STUDIO_FLOOR): THREE.Group {
+  const g = new THREE.Group();
+  const fg = new THREE.CircleGeometry(R0 * 5, 72);
+  fg.rotateX(-Math.PI / 2);
+  const fp = fg.attributes.position as THREE.BufferAttribute;
+  const fcol = new Float32Array(fp.count * 3);
+  const fc0 = new THREE.Color(floorColor).multiplyScalar(0.97), fc1 = new THREE.Color(floorColor), c = new THREE.Color();
+  for (let k = 0; k < fp.count; k++) {
+    const r = Math.hypot(fp.getX(k), fp.getZ(k)) / R0;
+    c.copy(fc0).lerp(fc1, THREE.MathUtils.smoothstep(r, 0.6, 1.2));
+    fcol.set([c.r, c.g, c.b], 3 * k);
+  }
+  fg.setAttribute('color', new THREE.Float32BufferAttribute(fcol, 3));
+  const floor = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+  floor.material.userData.noLook = true;
+  floor.position.set(cx, y - 0.06, cz);
+  const shade = new THREE.Mesh(new THREE.CircleGeometry(R0 * 2.2, 48), new THREE.ShadowMaterial({ opacity: 0.18 }));
+  shade.rotateX(-Math.PI / 2);
+  shade.position.set(cx, y - 0.04, cz);
+  shade.receiveShadow = true;
+  g.add(floor, shade);
+  return g;
 }
 
 /**
@@ -350,7 +378,7 @@ export function terrainBlock(h: (x: number, z: number) => number, x0: number, x1
     col.set([c.r, c.g, c.b], 3 * k);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const topMat = lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.15, patches: 0.12 });
+  const topMat = lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.15, patches: 0.12, clouds: [0.15, Math.max(30, Math.max(x1 - x0, z1 - z0) / 4)] });
   const top = new THREE.Mesh(geo, topMat);
   top.receiveShadow = true;
   top.castShadow = true;
@@ -361,28 +389,158 @@ export function terrainBlock(h: (x: number, z: number) => number, x0: number, x1
   for (let i = nx - 1; i >= 0; i--) edge.push([x0 + ((x1 - x0) * i) / nx, z0]);
   for (let j = 1; j <= nz; j++) edge.push([x0, z0 + ((z1 - z0) * j) / nz]);
   const walls = strataWall(edge, h, base);
-  // piso de estudio: claro bajo la maqueta y fundido con el fondo hacia afuera
-  const R0 = Math.hypot(x1 - x0, z1 - z0) * 0.5;
-  const fg = new THREE.CircleGeometry(R0 * 5, 72, 0, Math.PI * 2);
-  fg.rotateX(-Math.PI / 2);
-  const fp = fg.attributes.position as THREE.BufferAttribute;
-  const fcol = new Float32Array(fp.count * 3);
-  // sombra suave bajo la maqueta que se pierde en el color del fondo
-  const fc0 = new THREE.Color(floorColor).multiplyScalar(0.97), fc1 = new THREE.Color(floorColor);
-  for (let k = 0; k < fp.count; k++) {
-    const r = Math.hypot(fp.getX(k), fp.getZ(k)) / R0;
-    c.copy(fc0).lerp(fc1, THREE.MathUtils.smoothstep(r, 0.6, 1.2));
-    fcol.set([c.r, c.g, c.b], 3 * k);
-  }
-  fg.setAttribute('color', new THREE.Float32BufferAttribute(fcol, 3));
-  // el piso no recibe luz (tiene el mismo color del fondo y no se ve su borde); las sombras van en una capa aparte
-  const floor = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
-  floor.material.userData.noLook = true;
-  floor.position.set((x0 + x1) / 2, base - 0.06, (z0 + z1) / 2);
-  const shade = new THREE.Mesh(new THREE.CircleGeometry(R0 * 2.2, 48), new THREE.ShadowMaterial({ opacity: 0.18 }));
-  shade.rotateX(-Math.PI / 2);
-  shade.position.set((x0 + x1) / 2, base - 0.04, (z0 + z1) / 2);
-  shade.receiveShadow = true;
-  g.add(top, walls, floor, shade);
+  const floor = studioFloor((x0 + x1) / 2, (z0 + z1) / 2, Math.hypot(x1 - x0, z1 - z0) * 0.5, base, floorColor);
+  g.add(top, walls, floor);
   return g;
+}
+
+// ------------------------------------------------------------------ aves
+
+/** Bandada de aves que planean en círculos sobre la maqueta (alas que aletean de vez en cuando). */
+export class Birds {
+  readonly group = new THREE.Group();
+  private birds: { body: THREE.Group; l: THREE.Mesh; r: THREE.Mesh; a0: number; rr: number; h: number; sp: number; ph: number }[] = [];
+  constructor(
+    private center: THREE.Vector3,
+    radius: number,
+    height: number,
+    n = 7,
+    size = 1,
+  ) {
+    const wing = new THREE.BufferGeometry();
+    wing.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -0.18, 0, 0, 0.18, 1, 0.04, 0.05], 3));
+    wing.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color: '#2f3a44', roughness: 0.8, side: THREE.DoubleSide });
+    mat.userData.noLook = true;
+    const R = rng(77);
+    for (let k = 0; k < n; k++) {
+      const body = new THREE.Group();
+      const l = new THREE.Mesh(wing, mat), r = new THREE.Mesh(wing, mat);
+      r.scale.x = -1;
+      body.add(l, r);
+      body.scale.setScalar(size * (0.8 + R() * 0.4));
+      this.group.add(body);
+      this.birds.push({ body, l, r, a0: R() * Math.PI * 2, rr: radius * (0.55 + R() * 0.45), h: height * (0.85 + R() * 0.3), sp: (0.08 + R() * 0.06) * (R() < 0.5 ? 1 : -1), ph: R() * 10 });
+    }
+  }
+  update(t: number): void {
+    for (const b of this.birds) {
+      const a = b.a0 + t * b.sp;
+      const x = this.center.x + Math.cos(a) * b.rr, z = this.center.z + Math.sin(a) * b.rr;
+      b.body.position.set(x, this.center.y + b.h + Math.sin(t * 0.5 + b.ph) * b.h * 0.05, z);
+      // mira en la dirección del vuelo y se inclina hacia adentro del círculo
+      b.body.rotation.set(0, -a + (b.sp > 0 ? 0 : Math.PI), (b.sp > 0 ? 1 : -1) * 0.25);
+      // aleteo en ráfagas, planeo el resto del tiempo
+      const burst = Math.max(0, Math.sin(t * 0.7 + b.ph));
+      const flap = Math.sin(t * 11 + b.ph) * 0.55 * burst + 0.12;
+      b.l.rotation.z = flap;
+      b.r.rotation.z = -flap;
+    }
+  }
+}
+
+// ------------------------------------------------------------------ lluvia
+
+/**
+ * Lluvia en trazos: cada gota es un segmento corto que cae (largo según la velocidad, inclinado por el viento),
+ * con anillos de salpicadura donde llega al suelo. `intensity` (0..1) decide cuántas gotas se ven.
+ */
+export class RainStreaks {
+  readonly group = new THREE.Group();
+  private lines: THREE.LineSegments;
+  private v: Float32Array;
+  private xz: Float32Array;
+  private y: Float32Array;
+  private splash: THREE.InstancedMesh;
+  private sAge: Float32Array;
+  private sNext = 0;
+  private n: number;
+  intensity = 0;
+  constructor(
+    private box: { x0: number; x1: number; z0: number; z1: number; top: number },
+    private ground: (x: number, z: number) => number,
+    n = 2400,
+    private speed = 70,
+    private len = 2.2,
+    private wind: [number, number] = [0.12, 0.04],
+    splashSize = 0.6,
+  ) {
+    this.n = n;
+    const R = rng(31);
+    const pos = new Float32Array(n * 6);
+    this.v = new Float32Array(n);
+    this.xz = new Float32Array(n * 2);
+    this.y = new Float32Array(n);
+    for (let k = 0; k < n; k++) {
+      this.xz[2 * k] = box.x0 + R() * (box.x1 - box.x0);
+      this.xz[2 * k + 1] = box.z0 + R() * (box.z1 - box.z0);
+      this.y[k] = ground(this.xz[2 * k], this.xz[2 * k + 1]) + R() * (box.top - ground(this.xz[2 * k], this.xz[2 * k + 1]));
+      this.v[k] = speed * (0.85 + R() * 0.3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const col = new Float32Array(n * 6);
+    for (let k = 0; k < n; k++) col.set([0.62, 0.74, 0.84, 0.92, 0.96, 1], k * 6);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    this.lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, depthWrite: false }));
+    this.lines.frustumCulled = false;
+    const ring = new THREE.RingGeometry(0.55, 0.7, 16);
+    ring.rotateX(-Math.PI / 2);
+    this.splash = new THREE.InstancedMesh(ring, new THREE.MeshBasicMaterial({ color: '#e7f3fb', transparent: true, opacity: 0.55, depthWrite: false }), 260);
+    this.splash.frustumCulled = false;
+    this.splash.userData.size = splashSize;
+    this.sAge = new Float32Array(260).fill(9);
+    for (let k = 0; k < 260; k++) this.splash.setMatrixAt(k, new THREE.Matrix4().makeScale(0, 0, 0));
+    this.group.add(this.lines, this.splash);
+    this.group.visible = false;
+  }
+  private m = new THREE.Matrix4();
+  update(dt: number): void {
+    const on = this.intensity > 0.001;
+    this.group.visible = on;
+    if (!on) return;
+    const count = Math.max(1, Math.round(this.n * Math.min(1, this.intensity)));
+    const P = this.lines.geometry.attributes.position as THREE.BufferAttribute;
+    const a = P.array as Float32Array;
+    const [wx, wz] = this.wind;
+    const size = this.splash.userData.size as number;
+    for (let k = 0; k < count; k++) {
+      let x = this.xz[2 * k], z = this.xz[2 * k + 1];
+      let y = this.y[k] - this.v[k] * dt;
+      x += wx * this.v[k] * dt;
+      z += wz * this.v[k] * dt;
+      const gy = this.ground(x, z);
+      if (y <= gy) {
+        // salpicadura (una de cada pocas gotas, para no llenar el suelo)
+        if ((k & 3) === 0) {
+          const i = this.sNext++ % this.sAge.length;
+          this.sAge[i] = 0;
+          this.splash.setMatrixAt(i, this.m.makeTranslation(x, gy + 0.05, z));
+        }
+        x = this.box.x0 + Math.random() * (this.box.x1 - this.box.x0);
+        z = this.box.z0 + Math.random() * (this.box.z1 - this.box.z0);
+        y = this.box.top - Math.random() * 6;
+      }
+      if (x > this.box.x1) x -= this.box.x1 - this.box.x0;
+      if (z > this.box.z1) z -= this.box.z1 - this.box.z0;
+      this.xz[2 * k] = x;
+      this.xz[2 * k + 1] = z;
+      this.y[k] = y;
+      const L = this.len * (this.v[k] / this.speed);
+      a.set([x, y, z, x - wx * L, y + L, z - wz * L], k * 6);
+    }
+    P.needsUpdate = true;
+    this.lines.geometry.setDrawRange(0, count * 2);
+    // anillos que crecen y se borran
+    const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    for (let i = 0; i < this.sAge.length; i++) {
+      if (this.sAge[i] > 0.5) continue;
+      this.sAge[i] += dt;
+      this.splash.getMatrixAt(i, this.m);
+      this.m.decompose(pos, q, sc);
+      const s = this.sAge[i] > 0.5 ? 0 : size * (0.3 + this.sAge[i] * 2.4);
+      this.splash.setMatrixAt(i, this.m.compose(pos, q, sc.set(s, s, s)));
+    }
+    this.splash.instanceMatrix.needsUpdate = true;
+  }
 }

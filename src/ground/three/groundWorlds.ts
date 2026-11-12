@@ -3,6 +3,7 @@
 // (planta, con la zona de captura). Todas son maquetas ilustrativas; donde una escala se exagera, el rótulo lo dice.
 
 import * as THREE from 'three';
+import { Birds } from '../../three/scenery';
 import { lookWater } from '../../three/look';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { houses, noise2, trees, type TreeSpot } from '../../quality/three/kit';
@@ -75,6 +76,9 @@ export class AquiferWorld {
       ts.push({ x: AX(x), y: groundAt(x), z, r: 1.8 + R() * 1.8 });
     }
     sc.add(trees(ts, 6));
+    const birds = new Birds(new THREE.Vector3(0, 30, -40), 160, 45, 7, 2.4);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     this.parts = new THREE.InstancedMesh(new THREE.SphereGeometry(1.1, 8, 6), new THREE.MeshStandardMaterial({ color: '#cfeeff', emissive: '#2a8fd0', emissiveIntensity: 0.7 }), 140);
     this.parts.frustumCulled = false;
     for (let k = 0; k < 140; k++) this.pos.push({ x: R() * 590, f: 0.08 + R() * 0.85 });

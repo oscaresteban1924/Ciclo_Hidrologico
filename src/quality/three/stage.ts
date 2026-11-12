@@ -77,6 +77,11 @@ export class QStage {
   private introDone = false;
   /** Posición del sol respecto al punto de mira. */
   private sunOffset = new THREE.Vector3(-95, 82, 62);
+  private animators: ((t: number, dt: number) => void)[] = [];
+  /** Animaciones de ambiente (aves, nubes) que no dependen del estado del mundo. */
+  animate(fn: (t: number, dt: number) => void): void {
+    this.animators.push(fn);
+  }
   /** Se llama con el texto de ayuda del objeto bajo el puntero (o null). */
   onHover: ((hint: string | null) => void) | null = null;
 
@@ -216,6 +221,7 @@ export class QStage {
     this.sky.setSun(this.sunOffset);
     LOOK_TIME.value = this.time;
     this.update?.(this.reducedMotion ? 0 : dt, this.time);
+    for (const fn of this.animators) fn(this.time, this.reducedMotion ? 0 : dt);
     // el acabado llega a lo que el mundo agregó (se revisa cada medio segundo, más seguido al empezar)
     if (this.frames++ % (this.frames < 120 ? 5 : 30) === 0) lookScene(this.scene, this.looked);
     this.sky.follow(this.camera);

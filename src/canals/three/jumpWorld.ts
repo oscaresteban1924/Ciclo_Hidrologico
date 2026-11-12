@@ -5,6 +5,7 @@
 // de golpe en el resalto. Todo a escala real.
 
 import * as THREE from 'three';
+import { Birds, meadow } from '../../three/scenery';
 import { CHUTE, type JumpResult } from '../hydraulics';
 import { SaintVenant } from '../unsteady';
 import { JUMP_DOWN as DOWN, JUMP_UP as UP, jumpSurface } from '../profiles';
@@ -43,14 +44,18 @@ export class JumpWorld {
     stage.setShadowSpan(80);
     stage.controls.minDistance = 3;
     const R = rng(31);
-    const far = new THREE.Mesh(new THREE.PlaneGeometry(500, 300), new THREE.MeshStandardMaterial({ color: '#6c9a4a', roughness: 1 }));
-    far.rotation.x = -Math.PI / 2;
-    far.position.y = -0.6;
-    far.receiveShadow = true;
-    sc.add(far);
+    // pradera plana junto a la obra y con lomas hacia afuera
+    const land = meadow({ keep: [-170, 140, -14, 14], extent: [-330, 300, -220, 220], y0: -0.6, hills: 12, ramp: 60, cell: 3, seed: 6 });
+    sc.add(land.mesh);
     const ts: TreeSpot[] = [];
-    for (let k = 0; k < 70; k++) ts.push({ x: -160 + R() * 280, y: -0.6, z: (R() < 0.5 ? -1 : 1) * (12 + R() * 60), r: 1.6 + R() * 1.8 });
+    for (let k = 0; k < 120; k++) {
+      const x = -260 + R() * 500, z = (R() < 0.5 ? -1 : 1) * (12 + R() * 150);
+      ts.push({ x, y: land.height(x, z), z, r: 1.6 + R() * 1.8 });
+    }
     sc.add(trees(ts, 6));
+    const birds = new Birds(new THREE.Vector3(-20, 0, 0), 70, 30, 6, 0.9);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     sc.add(this.dyn);
     this.water = new WaterBody(this.time);
     this.water.setColor(WATER.clear);

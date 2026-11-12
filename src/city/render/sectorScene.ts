@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { Finisher, LOOK_TIME, lookScene } from '../../three/look';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { COVERS, COVER_LIST } from '../sim/constants';
 import type { Compiled } from '../sim/compile';
@@ -2349,10 +2350,16 @@ export class SectorScene {
   }
 
   // ------------------------------------------------------------ dibujo
+  /** Oclusión ambiental y suavizado (solo en calidad alta) y acabado de las superficies (src/three/look.ts). */
+  private finisher: Finisher | null = null;
+  private looked = new WeakSet<THREE.Material>();
+  private lookFrames = 0;
+
   resize(): void {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
+    this.finisher?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -2432,7 +2439,15 @@ export class SectorScene {
     }
     this.controls.update();
     if (this.envPending > 0 && --this.envPending === 0) this.captureEnv();
-    this.renderer.render(this.scene, this.camera);
+    LOOK_TIME.value = performance.now() / 1000;
+    if (this.lookFrames++ % (this.lookFrames < 120 ? 5 : 30) === 0) lookScene(this.scene, this.looked);
+    if (this.quality === 'alta' && !this.finisher) {
+      this.finisher = new Finisher(this.renderer, this.scene, this.camera);
+      this.finisher.setScale(Math.max(this.W, this.H) * 0.5);
+      this.finisher.setSize(this.container.clientWidth, this.container.clientHeight);
+    }
+    if (this.finisher) this.finisher.render();
+    else this.renderer.render(this.scene, this.camera);
     this.onAfterRender?.(this.renderer.domElement);
     // etiquetas
     const w = this.container.clientWidth, h = this.container.clientHeight;
@@ -2480,6 +2495,7 @@ export class SectorScene {
 
   dispose(): void {
     this.disposed = true;
+    this.finisher?.dispose();
     this.controls.dispose();
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;

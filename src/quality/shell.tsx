@@ -167,10 +167,17 @@ export function Question({ q, answer, tone }: { q: string; answer: ReactNode; to
       host.style.removeProperty('--q3-qh');
     };
   }, []);
+  // la respuesta se muestra en dos líneas para dejar ver la maqueta; «Ver todo» la abre completa
+  const [open, setOpen] = useState(false);
   return (
-    <div ref={ref} className={`q3-question is-${tone}`} role="status" aria-live="polite">
+    <div ref={ref} className={`q3-question is-${tone}${open ? ' is-open' : ''}`}>
       <strong>{q}</strong>
-      <span>{answer}</span>
+      <span className="q3-answer" role="status" aria-live="polite">
+        {answer}
+      </span>
+      <button type="button" className="q3-more" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {open ? 'Ver menos' : 'Ver todo'}
+      </button>
     </div>
   );
 }

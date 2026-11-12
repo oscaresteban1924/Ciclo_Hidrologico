@@ -5,6 +5,7 @@
 // Los granos se dibujan en la franja de 1,6 m junto al vidrio, que es la que se ve; el resto del lecho es del mismo color.
 
 import * as THREE from 'three';
+import { meadow } from '../../three/scenery';
 import { BED_W, rouseProfile, type SedimentResult } from '../sediment';
 import { BEDFORM_NAME, transport, type TransportResult } from '../advanced';
 import { rng, trees, type TreeSpot } from '../../quality/three/kit';
@@ -53,15 +54,11 @@ export class SedimentWorld {
     stage.setShadowSpan(30);
     stage.controls.minDistance = 1;
     const R = rng(41);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 200), new THREE.MeshStandardMaterial({ color: '#6c9a4a', roughness: 1 }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = 3;
-    ground.position.z = -100 - HB;
-    sc.add(ground);
-    const low = new THREE.Mesh(new THREE.PlaneGeometry(300, 200), new THREE.MeshStandardMaterial({ color: '#5f8a42', roughness: 1 }));
-    low.rotation.x = -Math.PI / 2;
-    low.position.set(0, -0.6, 100 + HB);
-    sc.add(low);
+    // orilla de atrás (a la cota de la ribera) y la de adelante (más baja, desde donde se mira por el vidrio)
+    const back = meadow({ keep: [-150, 150, -HB - 14, -HB], extent: [-160, 160, -HB - 220, -HB], y0: 3, hills: 10, ramp: 40, cell: 2.5, seed: 9 });
+    sc.add(back.mesh);
+    const front = meadow({ keep: [-160, 160, HB, HB + 300], extent: [-160, 160, HB, HB + 200], y0: -0.6, hills: 0, cell: 3, seed: 10 });
+    sc.add(front.mesh);
     // orilla de atrás, lecho y vidrio al frente
     sc.add(slab(new THREE.MeshStandardMaterial({ color: '#7d6a4f', roughness: 1 }), -LEN / 2, LEN / 2, -0.6, 3, -HB - 4, -HB));
     this.bedMat = new THREE.MeshStandardMaterial({ color: '#9c8f7c', roughness: 1 });
@@ -76,7 +73,10 @@ export class SedimentWorld {
     this.gauge.position.set(-6, 0, HB - 0.06);
     sc.add(this.gauge);
     const ts: TreeSpot[] = [];
-    for (let k = 0; k < 40; k++) ts.push({ x: -80 + R() * 160, y: 3, z: -HB - 6 - R() * 40, r: 1.4 + R() * 1.6 });
+    for (let k = 0; k < 70; k++) {
+      const x = -120 + R() * 240, z = -HB - 6 - R() * 110;
+      ts.push({ x, y: back.height(x, z), z, r: 1.4 + R() * 1.6 });
+    }
     sc.add(trees(ts, 7));
     // formas del lecho (rizos, dunas, antidunas): superficie en la franja junto al vidrio y su cara en el corte
     const fg = new THREE.PlaneGeometry(GL, BAND + 0.1, 260, 2);

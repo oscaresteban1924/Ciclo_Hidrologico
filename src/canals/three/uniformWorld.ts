@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { lookMaterial } from '../../three/look';
-import { meadow, strataWall } from '../../three/scenery';
+import { Birds, meadow, strataWall } from '../../three/scenery';
 import { MATERIALS, SHAPES, geom, type Material, type Section, type UniformInput, type UniformResult } from '../hydraulics';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
@@ -176,6 +176,9 @@ export class UniformWorld {
     const R = rng(21);
     void R;
     sc.add(this.land);
+    const birds = new Birds(new THREE.Vector3(-10, 2, 0), 45, 22, 6, 0.7);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     sc.add(this.dyn);
     this.water = new WaterBody(this.time, { side: false });
     this.flood = new WaterBody(this.time, { side: false, opacity: 0.7 });

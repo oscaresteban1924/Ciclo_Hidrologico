@@ -4,6 +4,7 @@
 // encima. El tubo se dibuja más grueso que el real para verlo.
 
 import * as THREE from 'three';
+import { Birds } from '../../three/scenery';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { polyline, setPolyline } from '../../canals/three/canalKit';
@@ -67,6 +68,9 @@ export class PipeWorld {
       ts.push({ x, y: ground(x, z), z, r: 1.6 + R() * 1.6 });
     }
     sc.add(trees(ts, 4));
+    const birds = new Birds(new THREE.Vector3(0, 50, -30), 150, 40, 7, 2.2);
+    sc.add(birds.group);
+    stage.animate((t) => birds.update(t));
     // el tubo, en el corte
     this.path = PIPE_PROFILE.map((p) => new THREE.Vector3(p.x + OFF, p.z, 0.6));
     const dense: THREE.Vector3[] = [];

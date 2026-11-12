@@ -238,13 +238,19 @@ function makeSprite(sym: Sym): HTMLCanvasElement {
       break;
     }
     case 'vap': {
+      // anillo fino con halo suave: sigue siendo el símbolo del vapor (círculo hueco) sin ensuciar el cielo
+      const halo = g.createRadialGradient(0, 0, 2.2, 0, 0, 5.4);
+      halo.addColorStop(0, 'rgba(255,255,255,0)');
+      halo.addColorStop(0.62, 'rgba(255,255,255,0.7)');
+      halo.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = halo;
       g.beginPath();
-      g.arc(0, 0, 4.4, 0, Math.PI * 2);
-      g.lineWidth = 2.6;
-      g.strokeStyle = 'rgba(255,255,255,0.92)';
-      g.stroke();
-      g.lineWidth = 1.3;
-      g.strokeStyle = '#5b5fc7';
+      g.arc(0, 0, 5.4, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.arc(0, 0, 3.7, 0, Math.PI * 2);
+      g.lineWidth = 1.15;
+      g.strokeStyle = 'rgba(88,92,200,0.82)';
       g.stroke();
       break;
     }
