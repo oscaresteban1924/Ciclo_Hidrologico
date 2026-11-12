@@ -167,6 +167,24 @@ const ART = {
       <rect x="140" y="20" width="10" height="16" rx="2" fill="#d9dde0" stroke="#7a8a97" strokeWidth="0.8" />
     </svg>
   ),
+  house: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 80h160v16H0z" fill="#8fbf6a" />
+      <path d="M22 44 L62 18 L102 44z" fill="#a8553a" />
+      <rect x="28" y="44" width="68" height="36" fill="#f1e8d6" stroke="#c9bfa9" strokeWidth="0.8" />
+      <rect x="38" y="52" width="14" height="12" fill="#bcd6e6" />
+      <rect x="70" y="58" width="12" height="22" fill="#7b4a2e" />
+      <path d="M22 45h82" stroke="#d9dde0" strokeWidth="2.4" />
+      <path d="M103 45v12h8" fill="none" stroke="#d9dde0" strokeWidth="2.2" />
+      <rect x="108" y="54" width="22" height="26" rx="3" fill="#2f6fa8" fillOpacity="0.45" stroke="#25588a" strokeWidth="1" />
+      <rect x="109" y="66" width="20" height="13" fill="#3b83ad" />
+      <rect x="24" y="84" width="10" height="6" fill="#b08d3b" />
+      <circle cx="29" cy="87" r="2" fill="#fbfaf6" />
+      <path d="M116 6v8M124 3v8M132 7v8" stroke="#4fa3d8" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M44 66c0 4 6 4 6 0" fill="none" stroke="#4fa3d8" strokeWidth="1.4" />
+    </svg>
+  ),
   canals: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
@@ -274,6 +292,15 @@ const CARDS: RoomCard[] = [
     enter: [{ mode: 'measure', label: 'Entrar' }],
     art: ART.measure,
     tone: 'water',
+  },
+  {
+    room: 'house',
+    title: UI.rooms.house,
+    lead: 'Cuánta agua usa una casa y dónde se va, cómo se lee el medidor y se entiende la factura, y cuánto ahorra un tanque de agua lluvia para los sanitarios.',
+    items: ['Aparatos, hábitos y fugas, hora por hora', 'Medidor, rangos de la CRA y estratos', 'Tanque de agua lluvia con un año de lluvia', 'Calculadoras y memoria de cálculo'],
+    enter: [{ mode: 'house', label: 'Entrar' }],
+    art: ART.house,
+    tone: 'moss',
   },
   {
     room: 'slopes',

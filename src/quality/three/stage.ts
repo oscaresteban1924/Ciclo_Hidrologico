@@ -251,6 +251,13 @@ export class QStage {
 
   view(input: StageView, animate = true): void {
     const v = this.fitted(input);
+    // plano cercano según la vista: los primeros planos (un medidor, un pluviómetro) no se recortan
+    const dist = new THREE.Vector3(...v.eye).distanceTo(new THREE.Vector3(...v.target));
+    const near = Math.min(0.5, Math.max(0.02, dist * 0.04));
+    if (Math.abs(this.camera.near - near) > 1e-6) {
+      this.camera.near = near;
+      this.camera.updateProjectionMatrix();
+    }
     this.finisher.setScale(input.fit ?? new THREE.Vector3(...v.eye).distanceTo(new THREE.Vector3(...v.target)) * 0.9);
     // la primera vista entra con un acercamiento suave desde más lejos y más alto
     if (!this.introDone && !animate && !this.reducedMotion) {
@@ -350,6 +357,8 @@ export class QStage {
       if (!el) {
         el = document.createElement(l.onClick ? 'button' : 'div');
         if (l.onClick) (el as HTMLButtonElement).type = 'button';
+        // nace oculto: se muestra cuando se le encuentra lugar
+        el.style.visibility = 'hidden';
         this.labelLayer.appendChild(el);
         this.labelEls.set(l.id, el);
       }
@@ -362,6 +371,9 @@ export class QStage {
       }
       el.onclick = l.onClick ? () => l.onClick?.() : null;
     }
+    // los rótulos se acomodan ya (no solo en el próximo cuadro): si cambian desde la interfaz durante una
+    // reproducción, nunca se pintan un instante fuera de su lugar
+    this.layoutLabels();
   }
 
   private layoutLabels(): void {

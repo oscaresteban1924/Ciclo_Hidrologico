@@ -26,6 +26,7 @@ const DamsLab = lazy(() => import('./dams/DamsLab'));
 const SlopesLab = lazy(() => import('./slopes/SlopesLab'));
 const PumpsLab = lazy(() => import('./pumps/PumpsLab'));
 const MeasureLab = lazy(() => import('./measure/MeasureLab'));
+const HouseLab = lazy(() => import('./house/HouseLab'));
 
 export function App() {
   const { state, dispatch } = useStore();
@@ -265,6 +266,18 @@ export function App() {
           }
         >
           <MeasureLab />
+        </Suspense>
+      ) : state.mode === 'house' && !state.tool ? (
+        <Suspense
+          fallback={
+            <main className="layout layout-quality">
+              <div className="city-loading" role="status">
+                Cargando la sala del agua en casa…
+              </div>
+            </main>
+          }
+        >
+          <HouseLab />
         </Suspense>
       ) : (
       <main className={`layout${state.panelCollapsed ? ' is-collapsed' : ''}`}>

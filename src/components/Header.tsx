@@ -215,6 +215,14 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dd>
           </>
         )}
+        {roomOpen('house') && (
+          <>
+            <dt>El agua en casa</dt>
+            <dd>
+              Tres partes en 3D: una casa sin techo donde se ve qué aparato usa agua a cada hora del día, con los hábitos, los aparatos ahorradores y las fugas; el medidor de la calle con sus tambores y agujas, la factura por rangos y estratos y la prueba de noche para encontrar fugas; y un tanque de agua lluvia que se llena y se vacía durante un año. La casa, la tarifa y la lluvia son ilustrativas.
+            </dd>
+          </>
+        )}
         <dt>Hidráulica de canales</dt>
         <dd>
           Siete partes con escenas 3D, retos, instrumentos en vivo y una pestaña de diseño con calculadoras, prediseñadores y memoria de cálculo: el canal, el resalto, el puente, las alcantarillas, los sedimentos, la medición del caudal y las ondas y crecientes. Son prediseños académicos, no diseños de ingeniería.

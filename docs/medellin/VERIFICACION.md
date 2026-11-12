@@ -813,6 +813,19 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 - El corte de velocidades quedaba bajo la lámina de agua: la maqueta del río ahora termina en la línea de aforo y el corte es su cara.
 - La regla de los piezómetros se veía estirada y las columnas eran muy delgadas: se rehízo con su proporción y las columnas son más gruesas.
 
+## 4 septquatricies. Sala «El agua en casa» (ejecutada)
+
+**La sala.** Tres partes (cuánta agua usa la casa, el medidor y la factura, agua lluvia para la casa), doce retos que no se cumplen con los datos de partida, experimentos y seis herramientas de diseño. Modelo en `docs/casa/MODELO_CASA.md`. Los rangos de consumo (Resolución CRA 750 de 2016) y los topes de subsidios y aportes (Ley 1450 de 2011, art. 125) se confirmaron en las normas publicadas por la CRA; la tarifa y los factores por estrato son de ejemplo y así se dice.
+
+**Comprobado.**
+- Pruebas de la sala: 8 de 8 (`npm run test:house`).
+- Superposiciones de la sala: 28 de 28 estados en las cuatro pantallas (incluye un día en la casa, la prueba de noche, un año de lluvia y la pestaña Diseño), sin errores en la consola.
+
+**Ajustes durante la verificación.**
+- Con un día en reproducción, los rótulos de los aparatos aparecían un instante fuera de su lugar: ahora nacen ocultos y se acomodan en cuanto cambian (en todas las salas).
+- Los primeros planos (el medidor, el pluviómetro, el rodete) se recortaban con el plano cercano de la cámara: ahora el plano cercano se ajusta a cada vista.
+- En el modo de consumo los muros del baño tapaban los aparatos: la casa se corta a 1,3 m, como en un plano.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

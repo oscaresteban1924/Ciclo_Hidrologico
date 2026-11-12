@@ -25,7 +25,7 @@ export const ROOM_GROUPS: { id: string; title: string; short: string; rooms: Roo
 ];
 
 /** Salas ya construidas (las demás no aparecen en la portada, en el encabezado ni por enlace directo). */
-export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'ground', 'slopes', 'city', 'quality', 'supply', 'canals', 'dams', 'pumps', 'measure'];
+export const ROOMS_OPEN: Room[] = ['ciclo', 'basins', 'ground', 'slopes', 'city', 'quality', 'supply', 'house', 'canals', 'dams', 'pumps', 'measure'];
 export const roomOpen = (r: Room) => ROOMS_OPEN.includes(r);
 
 export function modeFromHash(): Mode | null {

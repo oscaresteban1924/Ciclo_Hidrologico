@@ -233,6 +233,26 @@ def medir(pg, screen, shots, report):
             top(pg); check(pg, screen, 'medir-diseno', shots, report)
 
 
+def casa(pg, screen, shots, report):
+    """Sala del agua en casa: las tres partes, un día en la casa, la prueba de noche, un año de lluvia y Diseño."""
+    mode(pg, 'El agua en casa'); pg.wait_for_timeout(4000)
+    for part, tag in [('¿Cuánta agua usa la casa?', 'consumo'), ('El medidor y la factura', 'factura'), ('Agua lluvia para la casa', 'lluvia')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'casa-{tag}', shots, report)
+        if tag == 'consumo':
+            pg.evaluate(BTN, 'Un día en la casa'); pg.wait_for_timeout(5000)
+            top(pg); check(pg, screen, 'casa-dia', shots, report)
+        if tag == 'factura':
+            pg.evaluate(RANGE, ['Fuga escondida', '12']); pg.wait_for_timeout(1500)
+            pg.evaluate(BTN, 'Prueba de noche'); pg.wait_for_timeout(4000)
+            top(pg); check(pg, screen, 'casa-noche', shots, report)
+        if tag == 'lluvia':
+            pg.evaluate(BTN, 'Un año de lluvia'); pg.wait_for_timeout(5000)
+            top(pg); check(pg, screen, 'casa-anio', shots, report)
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'casa-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -323,6 +343,7 @@ def run(screens, shots):
             laderas(pg, screen, shots, report)
             bombas(pg, screen, shots, report)
             medir(pg, screen, shots, report)
+            casa(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})
