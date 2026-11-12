@@ -119,7 +119,24 @@ const ART = {
       <path d="M140 18c4 0 6 12 10 12M126 30c4 0 6-12 14-12" fill="none" stroke="#1f5f8a" strokeWidth="1.4" />
     </svg>
   ),
-  canals: (    <svg viewBox="0 0 160 96" aria-hidden="true">
+  slopes: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 30 L96 96 H0z" fill="#8a8378" />
+      <path d="M0 18 L112 96 H96 L0 30z" fill="#a07a4f" />
+      <path d="M0 18 L112 96" stroke="#5d9a43" strokeWidth="4" />
+      <path d="M0 26 L104 96" fill="none" stroke="#4fa3d8" strokeWidth="2.4" strokeDasharray="5 4" />
+      <path d="M112 96 h48 v-8 h-48z" fill="#8fbf6a" />
+      <rect x="120" y="76" width="12" height="12" fill="#c06c48" />
+      <rect x="138" y="72" width="14" height="16" fill="#efe0c0" />
+      <path d="M118 76 l8 -6 8 6M136 72 l9 -7 9 7" fill="#7d3b2b" />
+      <path d="M22 8v8M30 4v8M38 9v8M46 5v8" stroke="#4fa3d8" strokeWidth="1.6" strokeLinecap="round" />
+      <circle cx="24" cy="24" r="5" fill="#4d8a3a" />
+      <circle cx="40" cy="35" r="5" fill="#5a9a43" />
+    </svg>
+  ),
+  canals: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
       <path d="M0 40h22l18 30h80l18-30h22v56H0z" fill="#b9bec3" />
       <path d="M29 52h102l-11 18H40z" fill="#2f7fb0" />
@@ -208,6 +225,15 @@ const CARDS: RoomCard[] = [
     art: ART.dams,
     tone: 'water',
   },
+  {
+    room: 'slopes',
+    title: UI.rooms.slopes,
+    lead: 'Qué hace la lluvia con una ladera: cuánta entra al suelo, por qué una lluvia larga puede tumbar una ladera y cuánta tierra se lleva el agua de un cultivo.',
+    items: ['Infiltración y encharcamiento', 'Factor de seguridad con agua y raíces', 'Pérdida de suelo y barreras vivas', 'Calculadoras y memoria de cálculo'],
+    enter: [{ mode: 'slopes', label: 'Entrar' }],
+    art: ART.slopes,
+    tone: 'moss',
+  },
 ];
 
 /** Grupos de la portada, en el orden en que viaja el agua. */
@@ -249,7 +275,7 @@ export function Home() {
         <p className="home-kicker">{UI.appSubtitle}</p>
         <h2>{UI.appTitle}</h2>
         <p className="home-lead">
-          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca y bajo tierra, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana, cómo llega a presión a las casas, cómo se mueve en canales, puentes y alcantarillas y cómo lo guardan y lo dejan pasar las presas.
+          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta, por una cuenca, bajo tierra y por las laderas; qué hace en una ciudad como Medellín y en cada casa; y cómo la llevan, la guardan, la bombean y la miden las obras hidráulicas.
         </p>
       </section>
       {groups.map((g) => (

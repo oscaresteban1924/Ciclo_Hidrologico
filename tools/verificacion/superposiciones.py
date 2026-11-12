@@ -183,6 +183,20 @@ def presas(pg, screen, shots, report):
             top(pg); check(pg, screen, 'presas-diseno', shots, report)
 
 
+def laderas(pg, screen, shots, report):
+    """Sala de laderas: las tres partes, la lluvia en la parcela y la pestaña Diseño."""
+    mode(pg, 'Laderas: lluvia, suelo y deslizamientos'); pg.wait_for_timeout(4000)
+    for part, tag in [('La lluvia entra al suelo', 'infiltracion'), ('La ladera y el agua', 'talud'), ('La ladera pierde suelo', 'erosion')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'laderas-{tag}', shots, report)
+        if tag == 'infiltracion':
+            pg.evaluate(BTN, 'Que llueva'); pg.wait_for_timeout(6000)
+            top(pg); check(pg, screen, 'laderas-lluvia', shots, report)
+        if tag == 'erosion':
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'laderas-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -270,6 +284,7 @@ def run(screens, shots):
             acueducto(pg, screen, shots, report)
             subterraneas(pg, screen, shots, report)
             presas(pg, screen, shots, report)
+            laderas(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

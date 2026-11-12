@@ -760,6 +760,31 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 - El diagrama de esfuerzos de la presa quedaba dentro de la roca: ahora está delante de la base. La leyenda del esquema se montaba («subpresión» sobre «resultante»).
 - Las diferencias muy pequeñas se escriben con coma decimal o como «menor de 10⁻¹²».
 
+## 4 quatertricies. Acabado visual común y sala «Laderas» (ejecutada)
+
+**Pedido.** «Procede con todos y no finalices hasta que estén todos elaborados. También repasa cada uno de los módulos y mejora sustancialmente sus animaciones y estilo gráfico.»
+
+**Acabado visual común** (`src/three/look.ts`, `src/three/scenery.ts`), en las seis salas 3D y en Medellín:
+- cielo con sol y nubes que pasan, y luz principal desde atrás y a un lado de la cámara;
+- grano y manchas en las superficies, agua con ondas y brillos, sombras de nubes que se mueven sobre el terreno;
+- árboles de varias especies (con guayacanes en flor) que se mecen con el viento;
+- praderas con lomas, maquetas con capas de suelo en los cortes y un piso de estudio que se funde con el fondo;
+- lluvia en trazos con salpicaduras y aves;
+- oclusión ambiental y suavizado que se apagan solos en equipos lentos o con render por software;
+- entrada de cámara, viñeta, instrumentos con medidores y deslizadores nuevos, pregunta compacta y encabezado con las salas agrupadas.
+
+**La sala «Laderas».** Tres partes (infiltración de Green-Ampt, talud infinito con agua y raíces, RUSLE), doce retos que no se cumplen con los datos de partida, experimentos contra la teoría y seis herramientas de diseño. Modelo en `docs/laderas/MODELO_LADERAS.md`.
+
+**Comprobado.**
+- Pruebas de la sala: 9 de 9 (`npm run test:slopes`), con los ejemplos de Chow y otros (1988) para Green-Ampt.
+- Superposiciones de la sala: 20 de 20 estados en las cuatro pantallas; los paneles no muestran valores raros.
+- La oclusión ambiental se probó forzada (`?calidad=alta`): funciona sin errores. Con render por software se apaga sola.
+
+**Ajustes durante la verificación.**
+- La oclusión a media resolución de N8AO falla con three r187: se usa a resolución completa.
+- La cuenca, el canal y las partes de canales tenían planos verdes infinitos: ahora tienen praderas con lomas.
+- El piso bajo las maquetas se veía como una banda gris: ahora no recibe luz y tiene el color del fondo, con una capa aparte para las sombras.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

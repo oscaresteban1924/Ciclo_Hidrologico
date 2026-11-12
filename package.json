@@ -16,7 +16,8 @@
     "test:basins": "tsx tests/basins/hydrology.test.ts",
     "test:supply": "tsx tests/supply/supply.test.ts",
     "test:ground": "tsx tests/ground/aquifer.test.ts",
-    "test:dams": "tsx tests/dams/dam.test.ts"
+    "test:dams": "tsx tests/dams/dam.test.ts",
+    "test:slopes": "tsx tests/slopes/slope.test.ts"
   },
   "dependencies": {
     "n8ao": "^2.0.1",

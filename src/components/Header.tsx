@@ -191,6 +191,14 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dd>
           </>
         )}
+        {roomOpen('slopes') && (
+          <>
+            <dt>Laderas</dt>
+            <dd>
+              Tres partes en 3D: una parcela donde llueve, con el frente de humedecimiento que baja por el corte y los charcos cuando el suelo no da abasto; una ladera con su capa de suelo sobre la roca, donde la lluvia sube el agua y la capa se puede deslizar hacia las casas; y una ladera de cultivo que pierde suelo, con barreras vivas y terrazas. Las parcelas y laderas son ilustrativas.
+            </dd>
+          </>
+        )}
         <dt>Medellín: laboratorio de lluvia</dt>
         <dd>
           Una maqueta 3D de un sector de ciudad donde la lluvia se calcula de verdad: elige un sector en el valle, crea lluvia, cambia superficies, construye un jardín de lluvia o limpia un sumidero, y compara dos versiones con la misma lluvia. Es educativo: no es un pronóstico oficial.
