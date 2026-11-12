@@ -748,6 +748,8 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 **Comprobado.**
 - Pruebas de la sala: 8 de 8 (`npm run test:dams`): Puls contra el embalse lineal exacto; masa, atenuación y pico en el cruce de los hidrogramas; perfil WES, tangencia, energía al pie y fuerza específica del resalto (1e-9); una sección triangular calculada a mano; tercio medio, esfuerzos y drenes; volumen del embalse; robustez de las seis herramientas con 240 llamadas al azar; coeficiente de la cresta con otras cargas, pozo justo (dentro con la profundidad exacta, fuera con 1 cm menos) y pérdida del resalto.
 - Superposiciones de la sala: 20 de 20 estados sin choques ni cortes en las cuatro pantallas (las tres partes, la creciente en curso y la pestaña Diseño). `superposiciones.py` incluye ahora la sala.
+- Recorrido completo de `superposiciones.py` por toda la aplicación, con las ocho salas: 252 de 252 estados sin choques ni cortes en las cuatro pantallas.
+- Pruebas de las demás salas sin cambios: canales 33/33, calidad 26/26, cuencas 12/12, acueducto 12/12, aguas subterráneas 9/9 y lluvia urbana 64/64.
 - Versión de un solo archivo abierta desde el disco: la sala carga, las tres partes cambian y la portada muestra ocho salas; sin errores en la consola.
 
 **Ajustes durante la verificación.**
