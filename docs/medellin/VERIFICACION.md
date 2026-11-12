@@ -886,7 +886,7 @@ El valle, la serie y las obras son ilustrativos y así se dice.
   - El precondicionador pasó a Cholesky incompleto modificado (de 36 a 18 iteraciones por sistema).
 - **Salida de la inercia local.** Se evalúa al final del paso; antes, la celda del borde se vaciaba y se llenaba en cada paso.
 - **Cálculo en la página.** Se da al menos la mitad del tiempo al cálculo aunque la escena tarde en dibujarse (equipos lentos).
-- **En todas las salas.** En los teléfonos, los instrumentos ponen la gráfica arriba y los medidores debajo en dos columnas; antes se apretaban en una fila y se cortaban los números.
+- **En todas las salas.** En los teléfonos, los instrumentos ponen la gráfica arriba y los medidores debajo en dos columnas; antes se apretaban en una fila y se cortaban los números. Con el cambio se repasó el teléfono en todas las salas menos Medellín: **87 de 87 estados** sin choques ni cortes.
 
 ## 5. Rendimiento medido
 
