@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { UI } from '../content/ui';
-import { roomOpen, useStore, type Mode, type Room } from '../state/store';
+import { ROOM_GROUPS, roomOpen, useStore, type Mode, type Room } from '../state/store';
 import { Credits } from './Credits';
 
 interface RoomCard {
@@ -211,12 +211,8 @@ const CARDS: RoomCard[] = [
 ];
 
 /** Grupos de la portada, en el orden en que viaja el agua. */
-const GROUPS: { id: string; title: string; rooms: Room[] }[] = [
-  { id: 'naturaleza', title: 'El agua en la naturaleza', rooms: ['ciclo', 'basins', 'ground'] },
-  { id: 'ciudad', title: 'El agua en la ciudad', rooms: ['city', 'quality', 'supply'] },
-  { id: 'obras', title: 'Obras hidráulicas', rooms: ['canals', 'dams'] },
-];
-const NUM: Record<number, string> = { 4: 'Cuatro', 5: 'Cinco', 6: 'Seis', 7: 'Siete', 8: 'Ocho' };
+const GROUPS = ROOM_GROUPS;
+const NUM: Record<number, string> = { 4: 'Cuatro', 5: 'Cinco', 6: 'Seis', 7: 'Siete', 8: 'Ocho', 9: 'Nueve', 10: 'Diez', 11: 'Once', 12: 'Doce' };
 
 function RoomItem({ c }: { c: RoomCard }) {
   const { dispatch } = useStore();

@@ -103,7 +103,14 @@ def top(pg):
 
 
 def mode(pg, name):
-    pg.locator(f'.mode-tab[aria-label="{name}"]').first.click()
+    # las salas están en menús por grupo: se abre el grupo y se elige la sala
+    btn = pg.locator(f'.mode-tab[aria-label="{name}"]').first
+    if not btn.is_visible():
+        menu = pg.locator('.room-menu', has=btn)
+        if menu.count():
+            menu.first.locator('.room-group').click()
+            pg.wait_for_timeout(300)
+    btn.click()
     pg.wait_for_timeout(2500)
 
 

@@ -7,14 +7,14 @@ import { TeacherSources } from './FactCard';
 import { UI } from '../content/ui';
 import { Credits } from './Credits';
 import { speechSupported } from '../lib/speech';
-import { roomOf, roomOpen, useStore, type Mode, type Room, type Tool } from '../state/store';
+import { ROOM_GROUPS, roomOf, roomOpen, useStore, type Mode, type Room, type Tool } from '../state/store';
 import { Disclosure, Icon, Segmented, Toggle } from './ui';
 
 
 /** En el orden en que viaja el agua: la naturaleza, la ciudad y las obras. */
-const ROOMS: Room[] = (['ciclo', 'basins', 'ground', 'city', 'quality', 'supply', 'canals', 'dams'] as Room[]).filter(roomOpen);
+const ROOMS: Room[] = ROOM_GROUPS.flatMap((g) => g.rooms).filter(roomOpen);
 const CICLO: Mode[] = ['guided', 'explore', 'lab'];
-const NUM: Record<number, string> = { 4: 'cuatro', 5: 'cinco', 6: 'seis', 7: 'siete', 8: 'ocho' };
+const NUM: Record<number, string> = { 4: 'cuatro', 5: 'cinco', 6: 'seis', 7: 'siete', 8: 'ocho', 9: 'nueve', 10: 'diez', 11: 'once', 12: 'doce' };
 /** Herramientas de todas las salas; la gota trazadora es del ciclo del agua. */
 const TOOLS: Exclude<Tool, null>[] = ['challenges', 'logbook', 'glossary'];
 
@@ -26,6 +26,67 @@ function Mark() {
       <path d="M8 29 q6 -4 12 0 t12 0" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
       <path d="M15.5 25 a4.5 4.5 0 0 0 4.5 4.5" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * Salas agrupadas: un botón por grupo (naturaleza, ciudad, obras) que abre la lista de sus salas. El grupo de la
+ * sala abierta muestra su nombre. Los botones de las salas siguen siendo «mode-tab» con el nombre completo.
+ */
+function RoomMenus({ inRoom, enter }: { inRoom: (r: Room) => boolean; enter: (r: Room) => void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null);
+    };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(null);
+    window.addEventListener('pointerdown', away);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('pointerdown', away);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const groups = ROOM_GROUPS.map((g) => ({ ...g, rooms: g.rooms.filter(roomOpen) })).filter((g) => g.rooms.length);
+  return (
+    <div className="room-menus" role="group" aria-label="Salas" ref={ref}>
+      {groups.map((g) => {
+        const here = g.rooms.find(inRoom);
+        const isOpen = open === g.id;
+        return (
+          <div key={g.id} className={`room-menu${isOpen ? ' is-open' : ''}`}>
+            <button type="button" className={`room-group${here ? ' is-on' : ''}`} aria-expanded={isOpen} aria-controls={`rooms-${g.id}`} onClick={() => setOpen(isOpen ? null : g.id)}>
+              <span className="room-group-name">{g.short}</span>
+              {here && <span className="room-group-here">{UI.roomsShort[here]}</span>}
+              <svg viewBox="0 0 12 12" aria-hidden="true" className="room-group-caret">
+                <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <div className="room-list" id={`rooms-${g.id}`} role="group" aria-label={g.title}>
+              <p className="room-list-title">{g.title}</p>
+              {g.rooms.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`mode-tab room-tab${inRoom(r) ? ' is-on' : ''}`}
+                  aria-pressed={inRoom(r)}
+                  aria-label={UI.rooms[r]}
+                  onClick={() => {
+                    setOpen(null);
+                    enter(r);
+                  }}
+                >
+                  <span className="room-tab-name">{UI.roomsShort[r]}</span>
+                  <span className="room-tab-long">{UI.rooms[r]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -187,21 +248,7 @@ export function Header() {
         </button>
       </h1>
       <nav className="modes" aria-label="Salas y herramientas">
-        <div className="mode-tabs room-tabs" role="group" aria-label="Salas">
-          {ROOMS.map((r) => (
-            <button
-              key={r}
-              type="button"
-              className={`mode-tab room-tab${inRoom(r) ? ' is-on' : ''}`}
-              aria-pressed={inRoom(r)}
-              aria-label={UI.rooms[r]}
-              title={UI.rooms[r]}
-              onClick={() => enter(r)}
-            >
-              {UI.roomsShort[r]}
-            </button>
-          ))}
-        </div>
+        <RoomMenus inRoom={inRoom} enter={enter} />
         <div className="tool-tabs" role="group" aria-label="Herramientas de todas las salas">
           {TOOLS.map((t) => (
             <button

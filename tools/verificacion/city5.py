@@ -17,7 +17,7 @@ with sync_playwright() as p:
         pg.locator('.city-simbar .btn').first.click()
         pg.wait_for_timeout(1500)
         live = pg.evaluate('window.__cityDebug.live')
-        pg.locator('.mode-tab[aria-label="El ciclo del agua"]').first.click(); pg.wait_for_timeout(300)
+        pg.evaluate("() => document.querySelector('.mode-tab[aria-label=\\"El ciclo del agua\\"]').click()"); pg.wait_for_timeout(300)
         pg.get_by_role('button', name='Recorrido guiado').click()
         pg.wait_for_timeout(800)
         st = pg.evaluate("() => ({ live: window.__cityDebug.live, last: window.__cityDebug.lastDisposed, canvases: document.querySelectorAll('canvas.city-canvas').length, labels: document.querySelectorAll('.city-labels').length, glCreated: window.__gl })")

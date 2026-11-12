@@ -14,6 +14,10 @@ export const UI = {
     supply: 'Acueducto: el agua a presión',
     ground: 'Aguas subterráneas',
     dams: 'Presas y embalses',
+    slopes: 'Laderas: lluvia, suelo y deslizamientos',
+    house: 'El agua en casa',
+    pumps: 'Bombas y energía del agua',
+    measure: 'Medir el agua',
   },
   tools: {
     tracer: 'Gota trazadora',
@@ -32,6 +36,10 @@ export const UI = {
     supply: 'Acueducto',
     ground: 'Acuífero',
     dams: 'Presas',
+    slopes: 'Laderas',
+    house: 'En casa',
+    pumps: 'Bombas',
+    measure: 'Medir',
   },
   /** Salas de la portada: el ciclo del agua (con sus tres modos) y los tres laboratorios. */
   rooms: {
@@ -43,6 +51,10 @@ export const UI = {
     supply: 'Acueducto: el agua a presión',
     canals: 'Hidráulica de canales',
     dams: 'Presas y embalses',
+    slopes: 'Laderas: lluvia, suelo y deslizamientos',
+    house: 'El agua en casa',
+    pumps: 'Bombas y energía del agua',
+    measure: 'Medir el agua',
   },
   roomsShort: {
     ciclo: 'Ciclo del agua',
@@ -53,6 +65,10 @@ export const UI = {
     supply: 'Acueducto',
     canals: 'Canales',
     dams: 'Presas',
+    slopes: 'Laderas',
+    house: 'En casa',
+    pumps: 'Bombas',
+    measure: 'Medir',
   },
   toolsShort: {
     tracer: 'Gota',
