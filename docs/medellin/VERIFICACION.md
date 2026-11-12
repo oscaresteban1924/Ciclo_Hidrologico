@@ -826,6 +826,14 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 - Los primeros planos (el medidor, el pluviómetro, el rodete) se recortaban con el plano cercano de la cámara: ahora el plano cercano se ajusta a cada vista.
 - En el modo de consumo los muros del baño tapaban los aparatos: la casa se corta a 1,3 m, como en un plano.
 
+## 4 octoquatricies. Repaso visual y verificación de las doce salas (ejecutada)
+
+**Repaso.** En pantallas bajas (por ejemplo 1 280 × 720) los instrumentos y controles crecían y aplastaban la escena 3D a unos 130 px: ahora la escena conserva entre 280 y 520 px de alto y la columna se desplaza. Las maquetas largas se veían como una franja delgada con mucho cielo: la conducción del acueducto y el valle del acuífero se miran ahora en tres cuartos desde un extremo (con el tanque o la loma en primer plano), y el golpe de ariete con una vista de frente más amplia que incluye el tanque. Los rótulos 3D se acomodan en cuanto cambian y el plano cercano de la cámara se ajusta a cada vista (sirve a todas las salas).
+
+**Comprobado.**
+- Pruebas de las doce salas: 202 de 202 (ciudad 64, calidad 26, canales 33, cuencas 12, acueducto 12, aguas subterráneas 9, presas 8, laderas 9, bombas 11, medición 10, casa 8).
+- Superposiciones: en el escritorio, el recorrido completo de las doce salas (88 estados) sin choques ni cortes. En la primera pasada completa, el portátil mostró un aviso de medalla sobre los botones de vistas (por la escena aplastada, ya corregida) y la tableta y el teléfono se interrumpieron esperando la simulación de un sector de Medellín; por eso las cuatro pantallas se repitieron sin la ciudad (`--sin-medellin`), ya con la escena corregida: **292 de 292 estados** sin choques ni cortes (escritorio 73, portátil, tableta y teléfono 219). La ciudad se revisó aparte en la tableta y el teléfono (valle y dos sectores, que cargan en unos 35 s): sin choques ni errores; en el escritorio ya había pasado completa en la primera pasada.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

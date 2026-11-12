@@ -34,7 +34,7 @@ export class HammerWorld {
   /** Llamado en cada cuadro durante la reproducción: tiempo del cálculo (s), o null al terminar. */
   onTime: ((t: number | null) => void) | null = null;
   readonly views: Record<'general' | 'valvula' | 'tanque', StageView> = {
-    general: { eye: [40, 150, 520], target: [0, 40, 0], fit: 700, portrait: { eye: [40, 260, 900], target: [0, 50, 0] } },
+    general: { eye: [-180, 190, 600], target: [-40, 40, 0], fit: 800, portrait: { eye: [-120, 280, 920], target: [0, 50, 0] } },
     valvula: { eye: [360, 60, 150], target: [270, 40, 0], fit: 140 },
     tanque: { eye: [-250, 90, 140], target: [-320, 50, 0], fit: 140 },
   };

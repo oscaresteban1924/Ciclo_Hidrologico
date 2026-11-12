@@ -42,7 +42,7 @@ export class PipeWorld {
   private m4 = new THREE.Matrix4();
   private labelT = 0;
   readonly views: Record<'general' | 'tanque' | 'loma' | 'valvula', StageView> = {
-    general: { eye: [-30, 48, 205], target: [-10, 24, 0], fit: 300, portrait: { eye: [-20, 90, 420], target: [0, 24, 0] } },
+    general: { eye: [-250, 105, 170], target: [30, 14, -6], fit: 260, portrait: { eye: [-260, 170, 360], target: [20, 18, 0] } },
     tanque: { eye: [-150, 62, 70], target: [-200, 46, -4], fit: 70 },
     loma: { eye: [55, 42, 80], target: [35, 26, 0], fit: 90 },
     valvula: { eye: [245, 22, 46], target: [205, 9, 0], fit: 60 },

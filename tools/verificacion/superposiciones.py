@@ -253,6 +253,9 @@ def casa(pg, screen, shots, report):
             top(pg); check(pg, screen, 'casa-diseno', shots, report)
 
 
+SIN_MEDELLIN = '--sin-medellin' in sys.argv
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -272,31 +275,32 @@ def run(screens, shots):
             check(pg, screen, 'recorrido', shots, report)
             mode(pg, 'Exploración libre'); check(pg, screen, 'exploracion', shots, report)
             mode(pg, 'Experimentos'); check(pg, screen, 'laboratorio', shots, report)
-            # Medellín: valle, sectores, vistas, creciente, cine
-            mode(pg, 'Medellín: laboratorio de lluvia')
-            pg.wait_for_selector('.city-pick', timeout=60000); pg.wait_for_timeout(2500)
-            check(pg, screen, 'valle', shots, report)
-            for sector in ['Calle de prueba', 'Ladera con quebrada', 'La Iguaná · El Pesebre']:
-                pg.locator('.city-pick button', has_text=sector).first.evaluate('e => e.click()')
-                pg.wait_for_selector('.city-simbar', timeout=90000); pg.wait_for_timeout(3500)
-                pg.evaluate("() => { const b = document.querySelector('.city-coach button'); if (b) b.click(); }")
-                tag = sector.split(' ')[0].lower()
-                check(pg, screen, f'{tag}-general', shots, report)
-                pg.evaluate("() => window.__cityDebug?.controller?.camera('calle')"); pg.wait_for_timeout(2000)
-                check(pg, screen, f'{tag}-calle', shots, report)
-                pg.evaluate("() => window.__cityDebug?.controller?.camera('general')"); pg.wait_for_timeout(1500)
-                for v in ['peligro', 'resultados']:
-                    pg.evaluate(f"() => window.__cityDebug?.controller?.setView('{v}')"); pg.wait_for_timeout(1200)
-                    check(pg, screen, f'{tag}-{v}', shots, report)
-                pg.evaluate("() => window.__cityDebug?.controller?.setView('realista')")
-                if sector == 'Ladera con quebrada':
-                    pg.evaluate("""() => { const c = window.__cityDebug.controller; c.update({ shared: { creek: { source: 'ejemplo', peakM3s: 120, timeToPeakMin: 3, startMin: 0, sedimentCv: 0.2 }, simMinutes: 20 } }); c.reset(); c.speed = 240; c.start(); c.setAmplify(5); }""")
-                    pg.wait_for_timeout(25000)
-                    check(pg, screen, 'ladera-creciente', shots, report)
-                    pg.evaluate("() => window.__cityDebug.controller.setCinema(true)"); pg.wait_for_timeout(2500)
-                    check(pg, screen, 'ladera-cine', shots, report)
-                    pg.evaluate("() => { const c = window.__cityDebug.controller; c.setCinema(false); c.setAmplify(1); c.reset(); }")
-                pg.evaluate("() => window.__cityDebug.controller.showValley()"); pg.wait_for_timeout(3500)
+            # Medellín: valle, sectores, vistas, creciente, cine (se puede omitir con --sin-medellin)
+            if not SIN_MEDELLIN:
+                mode(pg, 'Medellín: laboratorio de lluvia')
+                pg.wait_for_selector('.city-pick', timeout=60000); pg.wait_for_timeout(2500)
+                check(pg, screen, 'valle', shots, report)
+                for sector in ['Calle de prueba', 'Ladera con quebrada', 'La Iguaná · El Pesebre']:
+                    pg.locator('.city-pick button', has_text=sector).first.evaluate('e => e.click()')
+                    pg.wait_for_selector('.city-simbar', timeout=90000); pg.wait_for_timeout(3500)
+                    pg.evaluate("() => { const b = document.querySelector('.city-coach button'); if (b) b.click(); }")
+                    tag = sector.split(' ')[0].lower()
+                    check(pg, screen, f'{tag}-general', shots, report)
+                    pg.evaluate("() => window.__cityDebug?.controller?.camera('calle')"); pg.wait_for_timeout(2000)
+                    check(pg, screen, f'{tag}-calle', shots, report)
+                    pg.evaluate("() => window.__cityDebug?.controller?.camera('general')"); pg.wait_for_timeout(1500)
+                    for v in ['peligro', 'resultados']:
+                        pg.evaluate(f"() => window.__cityDebug?.controller?.setView('{v}')"); pg.wait_for_timeout(1200)
+                        check(pg, screen, f'{tag}-{v}', shots, report)
+                    pg.evaluate("() => window.__cityDebug?.controller?.setView('realista')")
+                    if sector == 'Ladera con quebrada':
+                        pg.evaluate("""() => { const c = window.__cityDebug.controller; c.update({ shared: { creek: { source: 'ejemplo', peakM3s: 120, timeToPeakMin: 3, startMin: 0, sedimentCv: 0.2 }, simMinutes: 20 } }); c.reset(); c.speed = 240; c.start(); c.setAmplify(5); }""")
+                        pg.wait_for_timeout(25000)
+                        check(pg, screen, 'ladera-creciente', shots, report)
+                        pg.evaluate("() => window.__cityDebug.controller.setCinema(true)"); pg.wait_for_timeout(2500)
+                        check(pg, screen, 'ladera-cine', shots, report)
+                        pg.evaluate("() => { const c = window.__cityDebug.controller; c.setCinema(false); c.setAmplify(1); c.reset(); }")
+                    pg.evaluate("() => window.__cityDebug.controller.showValley()"); pg.wait_for_timeout(3500)
             # Calidad del agua: las cuatro partes (en el teléfono la escena queda arriba del panel: se vuelve arriba
             # antes de medir, para que se midan sus rótulos y tarjetas)
             mode(pg, 'Calidad del agua'); pg.wait_for_timeout(6000)

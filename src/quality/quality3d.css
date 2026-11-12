@@ -12,7 +12,10 @@
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  /* la escena conserva una altura útil aunque los instrumentos y controles crezcan: en pantallas bajas la columna
+     se desplaza en vez de aplastar la maqueta */
+  grid-template-rows: minmax(clamp(280px, 50vh, 520px), 1fr) auto;
+  overflow-y: auto;
 }
 .q3-view {
   position: relative;
@@ -751,7 +754,7 @@
     max-width: calc(100% - 24px);
   }
   /* y el aviso de la bitácora, que en la aplicación va al pie de la pantalla, taparía la pregunta: aquí va arriba */
-  :is(.mode-quality, .mode-canals, .mode-basins, .mode-supply, .mode-ground, .mode-dams) .toast-region {
+  :is(.mode-quality, .mode-canals, .mode-basins, .mode-supply, .mode-ground, .mode-dams, .mode-slopes, .mode-pumps, .mode-measure, .mode-house) .toast-region {
     top: 10px;
     bottom: auto;
   }

@@ -28,6 +28,7 @@ npm run test:slopes  # pruebas de la sala de laderas (escribe docs/laderas/PRUEB
 npm run test:pumps   # pruebas de la sala de bombas (escribe docs/bombas/PRUEBAS_BOMBAS.md)
 npm run test:measure # pruebas de la sala de medición (escribe docs/medir/PRUEBAS_MEDIR.md)
 npm run test:house   # pruebas de la sala del agua en casa (escribe docs/casa/PRUEBAS_CASA.md)
+python3 tools/verificacion/superposiciones.py --pantallas escritorio --sin-medellin   # superposiciones sin la ciudad (más rápido)
 ```
 
 La versión `dist-single/index.html` incluye en un solo archivo el código, los estilos y las fuentes. Se abre directamente en el navegador, sin servidor y sin conexión a internet. La carpeta `dist/` puede publicarse en cualquier servidor web estático.

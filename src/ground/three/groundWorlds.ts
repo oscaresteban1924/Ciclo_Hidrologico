@@ -37,7 +37,7 @@ export class AquiferWorld {
   daysPerSecond = 1;
   private m4 = new THREE.Matrix4();
   readonly views: Record<'general' | 'pozos' | 'rio', StageView> = {
-    general: { eye: [-330, 85, 230], target: [-10, 12, -30], portrait: { eye: [-420, 160, 520], target: [0, 12, -30] } },
+    general: { eye: [-400, 125, 250], target: [40, 2, -30], fit: 520, portrait: { eye: [-420, 200, 560], target: [20, 8, -30] } },
     pozos: { eye: [-60, 35, 120], target: [-20, 20, 0], fit: 200 },
     rio: { eye: [330, 40, 110], target: [270, 18, 0], fit: 140 },
   };
