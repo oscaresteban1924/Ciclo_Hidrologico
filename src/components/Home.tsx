@@ -151,6 +151,22 @@ const ART = {
       <path d="M146 44l-6 10h6l-6 10" fill="none" stroke="#e0a526" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   ),
+  measure: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 62 L40 58 L52 82 Q76 92 100 82 L112 58 L160 62 V96 H0z" fill="#8f8573" />
+      <path d="M44 64 Q76 74 108 64 L104 76 Q76 88 48 76z" fill="#4f9bd0" />
+      <path d="M28 20 L132 20" stroke="#3b4148" strokeWidth="1.2" />
+      <path d="M28 20 L22 62 M28 20 L34 62 M132 20 L126 62 M132 20 L138 62" stroke="#8b949b" strokeWidth="2" />
+      <path d="M86 20 V70" stroke="#2b2f33" strokeWidth="0.9" />
+      <rect x="80" y="17" width="12" height="6" rx="1" fill="#e0a526" />
+      <ellipse cx="86" cy="71" rx="5" ry="2.4" fill="#9aa3ab" />
+      <rect x="40" y="40" width="4" height="26" fill="#ffffff" stroke="#9fb3c2" strokeWidth="0.6" />
+      <path d="M40 44h3M40 50h3M40 56h3M40 62h3" stroke="#c0392b" strokeWidth="1.2" />
+      <path d="M140 6v8M146 4v8M152 6v8" stroke="#4fa3d8" strokeWidth="1.6" strokeLinecap="round" />
+      <rect x="140" y="20" width="10" height="16" rx="2" fill="#d9dde0" stroke="#7a8a97" strokeWidth="0.8" />
+    </svg>
+  ),
   canals: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
@@ -249,6 +265,15 @@ const CARDS: RoomCard[] = [
     enter: [{ mode: 'pumps', label: 'Entrar' }],
     art: ART.pumps,
     tone: 'ink',
+  },
+  {
+    room: 'measure',
+    title: UI.rooms.measure,
+    lead: 'Cómo se mide el agua: cuánto llovió según un pluviómetro y un radar, cuánta agua lleva un río aforado con molinete, y cuánta pasa por una tubería con un Venturi o una placa de orificio.',
+    items: ['Pluviómetro de balancín y radar Z-R', 'Aforo con molinete y curva de gasto', 'Venturi y placa con sus piezómetros', 'Calculadoras y memoria de cálculo'],
+    enter: [{ mode: 'measure', label: 'Entrar' }],
+    art: ART.measure,
+    tone: 'water',
   },
   {
     room: 'slopes',

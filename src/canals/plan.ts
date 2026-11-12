@@ -25,7 +25,7 @@ export interface Chart {
   title: string;
   xLabel: string;
   yLabel: string;
-  series: { name: string; pts: XY[]; dash?: boolean }[];
+  series: { name: string; pts: XY[]; dash?: boolean; /** Puntos sueltos (mediciones) en vez de una línea. */ dots?: boolean }[];
   /** Punto de diseño y líneas horizontales de referencia. */
   mark?: { at: XY; text: string };
   hlines?: { y: number; text: string }[];
@@ -164,6 +164,10 @@ export function chartSVG(c: Chart, W = 560, H = 260): string {
   for (const h of c.hlines ?? []) o.push(`<line x1="${L}" x2="${W - R}" y1="${Y(h.y).toFixed(1)}" y2="${Y(h.y).toFixed(1)}" stroke="#c0392b" stroke-dasharray="5 3"/><text x="${W - R - 4}" y="${(Y(h.y) - 4).toFixed(1)}" font-size="10" fill="#9b2c22" text-anchor="end">${esc(h.text)}</text>`);
   c.series.forEach((s, k) => {
     const p = s.pts.filter((q) => Number.isFinite(q[1]) && (!c.logY || q[1] > 0));
+    if (s.dots) {
+      for (const q of p) o.push(`<circle cx="${X(q[0]).toFixed(1)}" cy="${Y(q[1]).toFixed(1)}" r="3.6" fill="#ffffff" stroke="${COLORS[k % 4]}" stroke-width="2"/>`);
+      return;
+    }
     if (p.length < 2) return;
     o.push(`<polyline points="${p.map((q) => `${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)}`).join(' ')}" fill="none" stroke="${COLORS[k % 4]}" stroke-width="2"${s.dash ? ' stroke-dasharray="6 4"' : ''}/>`);
   });

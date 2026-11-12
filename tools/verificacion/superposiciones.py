@@ -214,6 +214,25 @@ def bombas(pg, screen, shots, report):
             top(pg); check(pg, screen, 'bombas-diseno', shots, report)
 
 
+def medir(pg, screen, shots, report):
+    """Sala de medición: las tres partes, el aguacero, el aforo en curso y la pestaña Diseño."""
+    mode(pg, 'Medir el agua'); pg.wait_for_timeout(4000)
+    for part, tag in [('Medir la lluvia', 'lluvia'), ('Aforar un río', 'aforo'), ('El medidor en la tubería', 'medidor')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'medir-{tag}', shots, report)
+        if tag == 'lluvia':
+            pg.evaluate(BTN, 'Que llueva'); pg.wait_for_timeout(5000)
+            top(pg); check(pg, screen, 'medir-aguacero', shots, report)
+        if tag == 'aforo':
+            pg.evaluate(BTN, 'Aforar'); pg.wait_for_timeout(4000)
+            top(pg); check(pg, screen, 'medir-aforando', shots, report)
+        if tag == 'medidor':
+            pg.evaluate(RANGE, ['Caudal', '19']); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'medir-caudal-alto', shots, report)
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'medir-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -303,6 +322,7 @@ def run(screens, shots):
             presas(pg, screen, shots, report)
             laderas(pg, screen, shots, report)
             bombas(pg, screen, shots, report)
+            medir(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

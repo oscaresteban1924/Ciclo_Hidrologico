@@ -800,6 +800,19 @@ Doce retos (ninguno se cumple con los datos de partida), experimentos contra la 
 - La vista del rodete miraba desde el lado del motor y el disco tapaba las burbujas: ahora mira desde la succión.
 - Las flechas del flujo eran demasiado fuertes sobre tubos oscuros: ahora son azules y suaves sobre PVC claro.
 
+## 4 sexquatricies. Sala «Medir el agua» (ejecutada)
+
+**La sala.** Tres partes (medir la lluvia, aforar un río, el medidor en la tubería), doce retos que no se cumplen con los datos de partida, experimentos contra la teoría y siete herramientas de diseño (una solo para universitarios). Modelo en `docs/medir/MODELO_MEDIR.md`. Las gráficas de la memoria ahora pueden dibujar mediciones como puntos sueltos (los aforos de la curva de gasto).
+
+**Comprobado.**
+- Pruebas de la sala: 10 de 10 (`npm run test:measure`): Marshall-Palmer con valores de tabla, la fórmula del balancín contra una simulación vuelco a vuelco, las reglas de 0,6 y de 0,2 y 0,8 con sus valores cerrados, y el Venturi contra Bernoulli.
+- Superposiciones de la sala: 28 de 28 estados en las cuatro pantallas (incluye el aguacero, el aforo en curso, el caudal alto y la pestaña Diseño), sin errores en la consola.
+- Los paneles de las seis pestañas de cada parte no muestran valores raros (también en la sala de bombas).
+
+**Ajustes durante la verificación.**
+- El corte de velocidades quedaba bajo la lámina de agua: la maqueta del río ahora termina en la línea de aforo y el corte es su cara.
+- La regla de los piezómetros se veía estirada y las columnas eran muy delgadas: se rehízo con su proporción y las columnas son más gruesas.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

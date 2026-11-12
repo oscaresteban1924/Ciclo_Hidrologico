@@ -18,7 +18,8 @@
     "test:ground": "tsx tests/ground/aquifer.test.ts",
     "test:dams": "tsx tests/dams/dam.test.ts",
     "test:slopes": "tsx tests/slopes/slope.test.ts",
-    "test:pumps": "tsx tests/pumps/pump.test.ts"
+    "test:pumps": "tsx tests/pumps/pump.test.ts",
+    "test:measure": "tsx tests/measure/measure.test.ts"
   },
   "dependencies": {
     "n8ao": "^2.0.1",

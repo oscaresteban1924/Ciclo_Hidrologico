@@ -235,6 +235,14 @@ export function Help({ onClose }: { onClose: () => void }) {
             </dd>
           </>
         )}
+        {roomOpen('measure') && (
+          <>
+            <dt>Medir el agua</dt>
+            <dd>
+              Tres partes en 3D: una estación meteorológica con un pluviómetro de balancín que se vuelca con cada 0,2 mm y un radar que barre el aguacero; una estación de aforo donde el molinete baja por cada vertical sobre el corte de velocidades, con la curva de gasto; y un banco de tuberías con un Venturi y una placa de orificio frente a sus piezómetros. La estación, el río y el banco son ilustrativos.
+            </dd>
+          </>
+        )}
         <dt>Bitácora</dt>
         <dd>Guarda tus observaciones, predicciones, comparaciones y explicaciones de todas las salas. Solo queda en este dispositivo.</dd>
       </dl>
