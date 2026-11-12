@@ -10,6 +10,7 @@ import { ActiveTab } from '../quality/ui';
 import '../quality/quality.css';
 import '../quality/quality3d.css';
 import '../canals/canals.css';
+import './rooms.css';
 
 export interface RoomPart {
   id: string;

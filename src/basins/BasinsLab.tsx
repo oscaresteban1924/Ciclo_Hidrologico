@@ -6,7 +6,6 @@ import { RoomLab, type RoomPart } from '../rooms/RoomLab';
 import { CuencaLab } from './CuencaLab';
 import { FrecuenciaLab } from './FrecuenciaLab';
 import { HidroLab } from './HidroLab';
-import './basins.css';
 
 const PARTS: RoomPart[] = [
   { id: 'cuenca', name: 'La cuenca y su respuesta', short: 'La cuenca', icon: 'M2 15c2-6 5-10 8-10s6 4 8 10M10 5v4M7 9l3 3 3-3M10 12v5', C: CuencaLab },

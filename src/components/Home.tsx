@@ -73,6 +73,24 @@ const ART = {
       <path d="M122 30h32" stroke="#17324d" strokeWidth="1" />
     </svg>
   ),
+  supply: (
+    <svg viewBox="0 0 160 96" aria-hidden="true">
+      <rect width="160" height="96" fill="#e8eff4" />
+      <path d="M0 40c20-6 34-14 48-14v70H0z" fill="#8fbf6a" />
+      <path d="M48 96V26c40 10 70 30 112 36v34z" fill="#b9d39a" />
+      <rect x="14" y="12" width="20" height="22" rx="2" fill="#d4d0c6" />
+      <rect x="16" y="18" width="16" height="14" fill="#2f84b5" />
+      <path d="M24 34v10c0 6 6 10 14 12l100 18" fill="none" stroke="#e8e2d2" strokeWidth="5" strokeLinecap="round" />
+      <path d="M24 34v10c0 6 6 10 14 12l100 18" fill="none" stroke="#7d6a52" strokeWidth="1.2" />
+      {[60, 92, 124].map((x, i) => (
+        <g key={x}>
+          <rect x={x - 2} y={18 + i * 8} width="4" height={44 - i * 4} fill="#ffffff" stroke="#9fb3c2" strokeWidth="0.8" />
+          <rect x={x - 1.4} y={26 + i * 10} width="2.8" height={36 - i * 6} fill="#2f84b5" />
+        </g>
+      ))}
+      <path d="M20 22L140 40" stroke="#1f78b4" strokeWidth="1.6" strokeDasharray="4 3" />
+    </svg>
+  ),
   canals: (
     <svg viewBox="0 0 160 96" aria-hidden="true">
       <rect width="160" height="96" fill="#eef1f3" />
@@ -128,6 +146,15 @@ const CARDS: RoomCard[] = [
     tone: 'moss',
   },
   {
+    room: 'supply',
+    title: UI.rooms.supply,
+    lead: 'Cómo llega el agua a presión desde el tanque hasta las casas: la energía que se gasta en el tubo, la red de un barrio a toda hora y el golpe de ariete.',
+    items: ['Piezómetros y líneas de energía', 'Red con Hardy Cross y el método del gradiente', 'Presiones del RAS a lo largo del día', 'Golpe de ariete en cámara lenta'],
+    enter: [{ mode: 'supply', label: 'Entrar' }],
+    art: ART.supply,
+    tone: 'water',
+  },
+  {
     room: 'canals',
     title: UI.rooms.canals,
     lead: 'Cómo se mueve el agua en canales, caídas, puentes y alcantarillas, con cálculos verificados y herramientas para prediseñar.',
@@ -181,7 +208,7 @@ export function Home() {
         <p className="home-kicker">{UI.appSubtitle}</p>
         <h2>{UI.appTitle}</h2>
         <p className="home-lead">
-          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta y por una cuenca, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana y cómo se mueve en canales, puentes y alcantarillas.
+          {NUM[open.length] ?? open.length} salas para entender el agua: cómo viaja por el planeta y por una cuenca, qué hace la lluvia en una ciudad como Medellín, cómo saber si está sana, cómo llega a presión a las casas y cómo se mueve en canales, puentes y alcantarillas.
         </p>
       </section>
       {groups.map((g) => (

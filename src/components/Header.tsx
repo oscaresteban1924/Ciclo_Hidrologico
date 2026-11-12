@@ -130,6 +130,14 @@ export function Help({ onClose }: { onClose: () => void }) {
         <dd>
           Mide la salud de una quebrada con una sonda y con los bichos que viven debajo de las piedras, sigue el agua del río hasta la llave, mira qué arrastra la lluvia de las calles y recorre una planta de aguas residuales. Los valores son típicos de la literatura: no es un monitoreo de una quebrada real.
         </dd>
+        {roomOpen('supply') && (
+          <>
+            <dt>Acueducto: el agua a presión</dt>
+            <dd>
+              Tres partes en 3D: la tubería desde el tanque, con piezómetros y las líneas de energía y piezométrica; la red de un barrio a lo largo del día, con las presiones del RAS y Hardy Cross paso a paso; y el golpe de ariete, con la onda de presión en cámara lenta. La conducción, el barrio y la tubería son ilustrativos.
+            </dd>
+          </>
+        )}
         <dt>Hidráulica de canales</dt>
         <dd>
           Siete partes con escenas 3D, retos, instrumentos en vivo y una pestaña de diseño con calculadoras, prediseñadores y memoria de cálculo: el canal, el resalto, el puente, las alcantarillas, los sedimentos, la medición del caudal y las ondas y crecientes. Son prediseños académicos, no diseños de ingeniería.

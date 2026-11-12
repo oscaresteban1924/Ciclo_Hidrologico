@@ -127,6 +127,25 @@ def cuencas(pg, screen, shots, report):
             top(pg); check(pg, screen, 'cuencas-diseno', shots, report)
 
 
+def acueducto(pg, screen, shots, report):
+    """Sala del acueducto: las tres partes, la válvula abierta, una tubería cerrada en la red, el golpe de ariete y Diseño."""
+    mode(pg, 'Acueducto: el agua a presión'); pg.wait_for_timeout(4000)
+    for part, tag in [('La tubería y su energía', 'tuberia'), ('La red del barrio', 'red'), ('El golpe de ariete', 'ariete')]:
+        pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
+        top(pg); check(pg, screen, f'acueducto-{tag}', shots, report)
+        if tag == 'tuberia':
+            pg.evaluate(RANGE, ['Apertura de la válvula', '100']); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'acueducto-tuberia-abierta', shots, report)
+        if tag == 'red':
+            pg.evaluate(BTN, 'Carrera oeste'); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'acueducto-red-valvula', shots, report)
+        if tag == 'ariete':
+            pg.evaluate(BTN, 'Cerrar la válvula'); pg.wait_for_timeout(8000)
+            top(pg); check(pg, screen, 'acueducto-ariete-onda', shots, report)
+            pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
+            top(pg); check(pg, screen, 'acueducto-diseno', shots, report)
+
+
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
@@ -211,6 +230,7 @@ def run(screens, shots):
                     pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
                     top(pg); check(pg, screen, 'canales-diseno', shots, report)
             cuencas(pg, screen, shots, report)
+            acueducto(pg, screen, shots, report)
             ctx.close()
           except Exception as e:
             report.append({'pantalla': screen, 'estado': 'recorrido interrumpido', 'error': str(e)[:300], 'choques': [{'a': 'error', 'sa': '', 'b': str(e)[:120], 'sb': '', 'area': 0, 'box': [0, 0, 0, 0]}], 'cortados': []})

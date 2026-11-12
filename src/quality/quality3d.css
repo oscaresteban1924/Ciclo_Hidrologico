@@ -257,12 +257,12 @@
   pointer-events: none;
 }
 .q3-toast {
-  /* abajo y al centro de la escena: arriba están la pregunta y los lugares para mirar */
+  /* abajo, entre la columna de la pregunta (a la izquierda, puede ser alta en pantallas bajas) y la de la cámara */
   position: absolute;
   bottom: 14px;
-  left: 50%;
+  left: calc(min(440px, 100% - 380px) + 26px);
+  max-width: calc(100% - min(440px, 100% - 380px) - 96px);
   z-index: 6;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -289,14 +289,17 @@
 }
 @keyframes q3-pop {
   from {
-    transform: translate(-50%, 14px) scale(0.92);
+    translate: 0 14px;
+    scale: 0.92;
     opacity: 0;
   }
   to {
-    transform: translate(-50%, 0) scale(1);
+    translate: 0 0;
+    scale: 1;
     opacity: 1;
   }
 }
+
 
 /* controles al pie de la escena */
 .q3-dock {
@@ -695,6 +698,9 @@
   /* la pregunta está abajo: el aviso de medalla va justo encima de ella */
   .q3-toast {
     bottom: calc(var(--q3-qh, 64px) + 18px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     max-width: calc(100% - 24px);
   }
   /* y el aviso de la bitácora, que en la aplicación va al pie de la pantalla, taparía la pregunta: aquí va arriba */

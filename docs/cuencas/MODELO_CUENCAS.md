@@ -1,6 +1,6 @@
 # Sala «Cuencas: de la lluvia al caudal»: modelo, supuestos y fuentes
 
-Séptima sala de la aplicación (`src/basins/`, enlace directo `#cuencas`). Tiene tres partes con la misma distribución que «Hidráulica de canales»: escena 3D con una pregunta, instrumentos en vivo y controles al pie, y un panel con las pestañas Esquema, Retos, Experimentos, Diseño, Datos y Docente. Sin WebGL, cada parte muestra su esquema plano con el mismo cálculo. El marco común de las salas nuevas está en `src/rooms/RoomLab.tsx`.
+Sala de la aplicación (`src/basins/`, enlace directo `#cuencas`). Tiene tres partes con la misma distribución que «Hidráulica de canales»: escena 3D con una pregunta, instrumentos en vivo y controles al pie, y un panel con las pestañas Esquema, Retos, Experimentos, Diseño, Datos y Docente. Sin WebGL, cada parte muestra su esquema plano con el mismo cálculo. El marco común de las salas nuevas está en `src/rooms/RoomLab.tsx`.
 
 El cálculo está en módulos sin interfaz: `hydrology.ts` (lluvia, pérdidas, tiempos de concentración, hidrograma unitario, Gumbel y riesgo), `scene.ts` (la cuenca de la escena, el tanque de retención y las simulaciones), `river.ts` (el tramo de río con llanuras y sus casas) y `design.ts` (las herramientas de diseño y sus gráficas). Se prueba en `tests/basins/hydrology.test.ts` (`npm run test:basins`; informe en `PRUEBAS_CUENCAS.md`).
 

@@ -692,6 +692,28 @@ Cada parte tiene retos (doce en total; ninguno se cumple solo con los datos de p
 
 **Límites declarados.** La curva IDF, la cuenca, el río y las series son ilustrativos. El tanque es un primer tanteo con salida limitada, no un tránsito con la curva de su descarga. El hidrograma no incluye caudal base ni se transita por los cauces.
 
+## 4 untricies. Sala «Acueducto: el agua a presión» (ejecutada)
+
+**Pedido.** Segunda de las cuatro salas nuevas («Implementa todos porfavor. Ya sabes el nivel que quiero»). Modelo, supuestos, normas y fuentes en `docs/acueducto/MODELO_ACUEDUCTO.md`.
+
+**La sala.** Tres partes:
+- **La tubería y su energía.** Maqueta de ladera cortada a lo largo de una conducción: tanque en la loma, tubo enterrado visible en el corte, seis piezómetros de vidrio con la columna de agua a escala, línea piezométrica, línea de energía y nivel estático; partículas que viajan a la velocidad del agua y el chorro de la válvula. Con la válvula abierta, la loma pequeña queda con presión negativa.
+- **La red del barrio.** Nueve esquinas en una ladera y un tanque en la loma; tubos con el color de su velocidad y flechas en el sentido del caudal; columnas de presión a escala en cada esquina con los colores de los Arts. 61 y 62. Instrumento: la presión más baja de la red hora a hora.
+- **El golpe de ariete.** Tubería de 600 m con la onda de presión en colores y la línea piezométrica a escala, en una reproducción de 24 s que dice si va en cámara lenta o acelerada.
+
+Doce retos (ninguno se cumple con los datos de partida), experimentos contra la teoría (factor de fricción medido con dos piezómetros sobre el diagrama de Moody; Hardy Cross paso a paso contra el gradiente; periodo medido contra 4L/a; Joukowsky, Michaud y Allievi contra el cálculo en el tiempo) y siete herramientas de diseño con gráfica y memoria.
+
+**Normas.** Arts. 56, 58, 61 y 62 de la Res. 0330 de 2017, verificados en textos que los transcriben (concepto de la Superintendencia de Servicios Públicos y anexo del Ministerio de Vivienda sobre la Res. 799 de 2021). El texto oficial completo no se pudo abrir en esta sesión (la página pidió una aprobación que no se respondió); por eso no se citan el Art. 63 (diámetro mínimo), los factores de mayoración de la demanda ni artículos sobre golpe de ariete.
+
+**Comprobado.**
+- Pruebas de la sala: 12 de 12 (`npm run test:supply`): Colebrook a 0,5 % del diagrama de Moody; cierre de la ecuación de energía menor de 1e-9 m; gradiente y Hardy Cross a 1e-5 L/s; continuidad 1e-12 L/s; Joukowsky exacto al 0,1 % y periodo 4L/a al 2 %; cierre lento entre Allievi y Michaud; independencia de la malla al 1 %; robustez de las herramientas. Cuencas 12 de 12, canales 33 de 33 y calidad 26 de 26.
+- Superposiciones de la sala: 28 de 28 estados sin choques ni cortes en las cuatro pantallas (las tres partes, la válvula abierta, un tubo cerrado en la red, la onda del golpe de ariete y la pestaña Diseño). `superposiciones.py` incluye ahora la sala.
+- Sin errores en la consola.
+
+**Ajustes durante la verificación.** La medalla de los retos salía al centro, abajo, y en el portátil (1280 × 720) se montaba sobre la pregunta; luego, a la derecha, sobre los controles de la cámara: ahora va entre las dos columnas (también en calidad, canales y cuencas). En el teléfono, la vista general de la tubería quedaba muy cerca: se ajusta al ancho. El esquema de la red cortaba los rótulos de los bordes. La gráfica del ariete escribía «−0». El golpe de ariete empezaba con acero a 1 m/s, que llega a la presión de vapor: ahora empieza a 0,5 m/s, y el caso con vapor queda para explorarlo.
+
+**Límites declarados.** Escenas ilustrativas. Tubos dibujados más gruesos y flechas de la red seis veces más rápidas (se dice en cada parte). No se modelan la entrada de aire con presión negativa, la separación de columna ni la fricción no permanente.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
