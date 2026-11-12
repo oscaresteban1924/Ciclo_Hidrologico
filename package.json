@@ -19,6 +19,7 @@
     "test:dams": "tsx tests/dams/dam.test.ts"
   },
   "dependencies": {
+    "n8ao": "^2.0.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "three": "^0.187.0"

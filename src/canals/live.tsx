@@ -3,7 +3,7 @@
 // magnitudes que importan en cada parte (los últimos 40 s), con su valor de referencia. Al «Simular una creciente»
 // se ve cómo responde la estructura. Los datos son los del cálculo de cada parte: el dibujo no agrega nada.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { es } from './common';
 
 export interface LivePt {
@@ -33,6 +33,7 @@ const C = { water: '#9ccbe6', waterLine: '#1f78b4', bed: '#6d5a3e', egl: '#c0392
 
 /** Perfil longitudinal: x en m, cota en m, con la escala vertical exagerada para que se lea (lo dice el rótulo). */
 export function LiveProfile({ d, W = 560, H = 160, label }: { d: LiveProfileData; W?: number; H?: number; label: string }) {
+  const uid = useId().replace(/:/g, '');
   const pts = d.pts.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z) && Number.isFinite(p.zb));
   if (pts.length < 2) return null;
   const L = 40, R = 10, T = 18, B = 22;
@@ -59,14 +60,32 @@ export function LiveProfile({ d, W = 560, H = 160, label }: { d: LiveProfileData
   const step = [1, 2, 5, 10, 20, 25, 50, 100, 200].find((s) => span / s <= 6) ?? 500;
   const ticks: number[] = [];
   for (let t = Math.ceil(x0 / step) * step; t <= x1 + 1e-9; t += step) ticks.push(t);
+  const soil = `${pts.map((p) => `${X(p.x).toFixed(1)},${Y(p.zb).toFixed(1)}`).join(' ')} ${X(x1).toFixed(1)},${H - B} ${X(x0).toFixed(1)},${H - B}`;
+  const gy: number[] = [];
+  for (let k = 1; k < 4; k++) gy.push(T + ((H - T - B) * k) / 4);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="hc-hud-svg" role="img" aria-label={label}>
-      <rect x={L} y={T} width={W - L - R} height={H - T - B} fill="#f7fafc" />
+      <defs>
+        <linearGradient id={`${uid}w`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#7cc0e8" />
+          <stop offset="1" stopColor="#2f86bf" />
+        </linearGradient>
+        <linearGradient id={`${uid}s`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#b08a5e" />
+          <stop offset="1" stopColor="#e4d6c2" />
+        </linearGradient>
+      </defs>
+      <rect x={L} y={T} width={W - L - R} height={H - T - B} rx="4" fill="#f5f8fb" />
+      {gy.map((y) => (
+        <line key={y} x1={L} x2={W - R} y1={y} y2={y} stroke="#e3eaf0" />
+      ))}
+      <polygon points={soil} fill={`url(#${uid}s)`} opacity="0.85" />
       {(d.blocks ?? []).map((b, k) => (
         <polygon key={k} points={b.pts.map(([x, z]) => `${X(x).toFixed(1)},${Y(z).toFixed(1)}`).join(' ')} fill={b.fill ?? C.block} stroke="#7d868d" strokeWidth="0.8" />
       ))}
-      <polygon points={water} fill={C.water} stroke={C.waterLine} strokeWidth="1.2" />
-      <polyline points={line(pts.map((p) => ({ x: p.x, z: p.zb })))} fill="none" stroke={C.bed} strokeWidth="1.6" />
+      <polygon points={water} fill={`url(#${uid}w)`} fillOpacity="0.78" stroke="none" />
+      <polyline points={line(pts)} fill="none" stroke={C.waterLine} strokeWidth="1.6" strokeLinejoin="round" />
+      <polyline points={line(pts.map((p) => ({ x: p.x, z: p.zb })))} fill="none" stroke={C.bed} strokeWidth="1.8" strokeLinejoin="round" />
       {d.top && <polyline points={line(d.top)} fill="none" stroke={C.top} strokeWidth="1" />}
       {d.normal && <polyline points={line(d.normal)} fill="none" stroke={C.normal} strokeWidth="1" strokeDasharray="6 3" />}
       {d.crit && <polyline points={line(d.crit)} fill="none" stroke={C.crit} strokeWidth="1.1" strokeDasharray="2 2" />}
@@ -115,8 +134,12 @@ const WINDOW = 40;
 /** Sin «−0»: lo que se redondea a cero se escribe 0. */
 const nz = (v: number, d: number) => (Math.abs(v) < 0.5 * Math.pow(10, -d) ? 0 : v);
 
-/** Registros en el tiempo: una gráfica pequeña por magnitud, cada una con su eje (sin ejes dobles). */
-export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number }) {
+/**
+ * Medidores: cada magnitud en una tarjeta con su valor grande, su referencia (el borde, el bajo del puente, el
+ * mínimo) y el registro de los últimos 40 s debajo, cada uno con su propio eje (sin ejes dobles).
+ */
+export function LiveTraces({ specs, W = 300 }: { specs: TraceSpec[]; W?: number }) {
+  const uid = useId().replace(/:/g, '');
   const hist = useRef<{ t: number; v: Record<string, number> }[]>([]);
   const latest = useRef(specs);
   latest.current = specs;
@@ -135,15 +158,14 @@ export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number 
   }, []);
   const h = hist.current;
   const now = h.length ? h[h.length - 1].t : 0;
-  const Hc = 70, L = 40, R = 10, T = 14, B = 10;
+  const Hc = 34, T = 3, B = 3;
   return (
     <div className="hc-traces">
-      {specs.map((s) => {
+      {specs.map((s, si) => {
         const vals = h.map((p) => p.v[s.key]).filter((x) => Number.isFinite(x));
         const all = s.ref && Number.isFinite(s.ref.value) ? [...vals, s.ref.value] : vals;
         let lo = all.length ? Math.min(...all) : 0, hi = all.length ? Math.max(...all) : 1;
         if (hi - lo < 1e-6) {
-          // valor constante: si es cero, el eje empieza en cero (sin «−0,1» de relleno)
           const flat = lo;
           lo = Math.abs(flat) < 1e-9 ? 0 : flat - Math.max(0.05, Math.abs(flat) * 0.1);
           hi = flat + Math.max(0.05, Math.abs(flat) * 0.1);
@@ -151,29 +173,49 @@ export function LiveTraces({ specs, W = 360 }: { specs: TraceSpec[]; W?: number 
         const pad = (hi - lo) * 0.12;
         lo -= pad;
         hi += pad;
-        const X = (t: number) => L + ((t - (now - WINDOW)) / WINDOW) * (W - L - R);
+        const X = (t: number) => ((t - (now - WINDOW)) / WINDOW) * W;
         const Y = (v: number) => Hc - B - ((v - lo) / (hi - lo)) * (Hc - T - B);
-        const pts = h.filter((p) => Number.isFinite(p.v[s.key])).map((p) => `${X(p.t).toFixed(1)},${Y(p.v[s.key]).toFixed(1)}`).join(' ');
+        const pp = h.filter((p) => Number.isFinite(p.v[s.key]));
+        const pts = pp.map((p) => `${X(p.t).toFixed(1)},${Y(p.v[s.key]).toFixed(1)}`).join(' ');
+        const area = pp.length > 1 ? `${pts} ${X(pp[pp.length - 1].t).toFixed(1)},${Hc} ${X(pp[0].t).toFixed(1)},${Hc}` : '';
         const d = s.digits ?? 2;
+        const hasRef = !!s.ref && Number.isFinite(s.ref.value);
+        // estado frente a la referencia: la barra muestra qué fracción de la referencia se usa
+        const frac = hasRef && Math.abs(s.ref!.value) > 1e-9 ? s.value / s.ref!.value : null;
         return (
-          <svg key={s.key} viewBox={`0 0 ${W} ${Hc}`} className="hc-hud-svg" role="img" aria-label={`${s.label}: ${es(s.value, d)} ${s.unit}`}>
-            <rect x={L} y={T} width={W - L - R} height={Hc - T - B} fill="#f7fafc" />
-            {s.ref && Number.isFinite(s.ref.value) && (
-              <g>
-                <line x1={L} x2={W - R} y1={Y(s.ref.value)} y2={Y(s.ref.value)} stroke="#c0632b" strokeDasharray="5 3" />
-                <text x={W - R - 3} y={Y(s.ref.value) - 3} className="hc-hud-t" textAnchor="end" fill="#9b4a1c">{s.ref.label}</text>
-              </g>
+          <div key={s.key} className="hc-gauge" role="img" aria-label={`${s.label}: ${es(nz(s.value, d), d)} ${s.unit}${hasRef ? `; ${s.ref!.label}: ${es(s.ref!.value, d)}` : ''}`}>
+            <div className="hc-gauge-top">
+              <span className="hc-gauge-l">{s.label}</span>
+              <span className="hc-gauge-v">
+                {Number.isFinite(s.value) ? es(nz(s.value, d), d) : '—'}
+                {s.unit && <small>{s.unit}</small>}
+              </span>
+            </div>
+            {hasRef && (
+              <div className="hc-gauge-ref">
+                <span className="hc-gauge-bar">
+                  <i style={{ width: `${Math.max(0, Math.min(1, frac ?? 0)) * 100}%` }} className={frac !== null && frac > 1 ? 'is-over' : ''} />
+                </span>
+                <span>
+                  {s.ref!.label} {es(s.ref!.value, d)}
+                </span>
+              </div>
             )}
-            {pts && <polyline points={pts} fill="none" stroke="#2f7fb0" strokeWidth="1.8" />}
-            <text x={4} y={10} className="hc-hud-t" fill="#3c4b57">
-              {s.label}: <tspan fontWeight="700">{es(s.value, d)} {s.unit}</tspan>
-            </text>
-            <text x={L - 4} y={Y(hi - pad) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(nz(hi - pad, d), d)}</text>
-            <text x={L - 4} y={Y(lo + pad) + 3} className="hc-hud-t" textAnchor="end" fill="#5b6b78">{es(nz(lo + pad, d), d)}</text>
-          </svg>
+            <svg viewBox={`0 0 ${W} ${Hc}`} preserveAspectRatio="none" className="hc-gauge-svg" aria-hidden="true">
+              <defs>
+                <linearGradient id={`${uid}g${si}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#2f7fb0" stopOpacity="0.28" />
+                  <stop offset="1" stopColor="#2f7fb0" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {hasRef && <line x1={0} x2={W} y1={Y(s.ref!.value)} y2={Y(s.ref!.value)} stroke="#c0632b" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />}
+              {area && <polygon points={area} fill={`url(#${uid}g${si})`} />}
+              {pts && <polyline points={pts} fill="none" stroke="#2f7fb0" strokeWidth="1.8" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />}
+            </svg>
+          </div>
         );
       })}
-      <p className="hc-traces-foot">últimos {WINDOW} s</p>
+      <p className="hc-traces-foot">registro de los últimos {WINDOW} s</p>
     </div>
   );
 }
@@ -185,7 +227,9 @@ export function LiveHud({ head, profile, profileLabel, chart, traces }: { head: 
       <div className="hc-hud-head">
         <b>Instrumentos</b>
         {head.map((h, i) => (
-          <span key={i}>{h}</span>
+          <span key={i} className="hc-chip">
+            {h}
+          </span>
         ))}
       </div>
       <div className={`hc-hud-row${profile || chart ? '' : ' is-single'}`}>

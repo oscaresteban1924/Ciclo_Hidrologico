@@ -4,6 +4,7 @@
 // reproduce el hietograma y el hidrograma calculados en tiempo comprimido (unos 24 s).
 
 import * as THREE from 'three';
+import { lookWater } from '../../three/look';
 import { houses, noise2, rng, trees, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { staffGauge } from '../../canals/three/canalKit';
@@ -110,7 +111,7 @@ export class BasinWorld {
     }
     const floor = new THREE.Mesh(new THREE.BoxGeometry(TW, 0.3, TD), wall);
     floor.position.y = 0.15;
-    this.tankWater = new THREE.Mesh(new THREE.BoxGeometry(TW - 0.2, 1, TD - 0.2), new THREE.MeshStandardMaterial({ color: '#3b8fc4', roughness: 0.15, transparent: true, opacity: 0.85 }));
+    this.tankWater = new THREE.Mesh(new THREE.BoxGeometry(TW - 0.2, 1, TD - 0.2), lookWater(new THREE.MeshStandardMaterial({ color: '#3b8fc4', roughness: 0.1, transparent: true, opacity: 0.85 }), [0.05, 0.03], 0.35));
     this.tankWater.position.y = 0.3;
     this.tankWater.scale.y = 0.001;
     this.tankWater.userData.max = TH - 0.4;

@@ -3,6 +3,7 @@
 // (planta, con la zona de captura). Todas son maquetas ilustrativas; donde una escala se exagera, el rótulo lo dice.
 
 import * as THREE from 'three';
+import { lookWater } from '../../three/look';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { houses, noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { polyline, setPolyline } from '../../canals/three/canalKit';
@@ -55,7 +56,7 @@ export class AquiferWorld {
     this.water.position.z = 0.35;
     this.shapeSection();
     // río
-    const river = new THREE.Mesh(new THREE.BoxGeometry(50, 3, 90), new THREE.MeshStandardMaterial({ color: '#2f84b5', transparent: true, opacity: 0.85, roughness: 0.15 }));
+    const river = new THREE.Mesh(new THREE.BoxGeometry(50, 3, 90), lookWater(new THREE.MeshStandardMaterial({ color: '#2f84b5', transparent: true, opacity: 0.85, roughness: 0.1 }), [0, 0.6], 0.5));
     river.position.set(AX(615), AQ.h2 - 1.5, -45);
     sc.add(this.section, this.water, river, this.table);
     // pozos de observación en el corte

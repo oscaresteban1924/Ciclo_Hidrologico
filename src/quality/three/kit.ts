@@ -2,7 +2,8 @@
 // vetas que avanzan y espuma) y colores del agua según su calidad.
 
 import * as THREE from 'three';
-import { crownGeometry } from '../../city/render/backdrop';
+import { lookWater } from '../../three/look';
+import { trees as sceneryTrees } from '../../three/scenery';
 
 /** Ruido de valor 2D suave y determinista (0..1). */
 export function noise2(x: number, y: number): number {
@@ -41,29 +42,9 @@ export interface TreeSpot {
   color?: string;
 }
 
-/** Árboles de copa facetada (la misma copa de la maqueta de Medellín) con tronco. */
+/** Árboles de varias especies con viento en las copas (ver src/three/scenery.ts). */
 export function trees(spots: TreeSpot[], seed = 3): THREE.Group {
-  const g = new THREE.Group();
-  if (!spots.length) return g;
-  const R = rng(seed);
-  const crown = crownGeometry(0, seed, 5);
-  const trunk = new THREE.CylinderGeometry(0.12, 0.2, 1, 6);
-  trunk.translate(0, 0.5, 0);
-  const cm = new THREE.InstancedMesh(crown, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, flatShading: true }), spots.length);
-  const tm = new THREE.InstancedMesh(trunk, new THREE.MeshStandardMaterial({ color: '#6b4a32', roughness: 1 }), spots.length);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  const greens = ['#4f8a3a', '#5d9a45', '#3f7a34', '#6aa64e', '#47823a'];
-  spots.forEach((t, i) => {
-    const th = 1.2 + t.r * 0.55;
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), R() * 6.28);
-    cm.setMatrixAt(i, m.compose(p.set(t.x, t.y + th + t.r * 0.6, t.z), q, s.set(t.r, t.r * (0.85 + R() * 0.3), t.r)));
-    cm.setColorAt(i, new THREE.Color(t.color ?? greens[Math.floor(R() * greens.length)]).multiplyScalar(0.9 + R() * 0.2));
-    tm.setMatrixAt(i, m.compose(p.set(t.x, t.y - 0.2, t.z), new THREE.Quaternion(), s.set(1 + t.r * 0.12, th + t.r * 0.3, 1 + t.r * 0.12)));
-  });
-  cm.castShadow = true;
-  tm.castShadow = true;
-  g.add(cm, tm);
-  return g;
+  return sceneryTrees(spots, seed);
 }
 
 export interface HouseSpot {
@@ -161,7 +142,8 @@ export function waterMaterial(time: { value: number }, opts: { opacity?: number;
         diffuseColor.a = max(diffuseColor.a, foam * 0.9);`,
       );
   };
-  return m;
+  // ondas finas y brillos del sol encima de las vetas (src/three/look.ts)
+  return lookWater(m, [0.18, 0.06], 0.45);
 }
 
 /** Color natural del agua de una quebrada según turbiedad [UNT] y materia orgánica (DBO5) [mg/L]. */

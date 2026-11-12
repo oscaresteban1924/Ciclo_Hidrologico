@@ -2,6 +2,7 @@
 // con pestañas (Retos, Experimentos, Datos, Docente; la planta agrega Procesos). También el puente React ↔ escena 3D y los retos con medalla.
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import type { CSSProperties } from 'react';
 import { useStore } from '../state/store';
 import { QStage, type StageView } from './three/stage';
 
@@ -317,7 +318,16 @@ export function DockRange({ label, value, min, max, step, show, onChange }: { la
         <span className="q3-dlabel">{label}</span>
         <output htmlFor={id}>{show}</output>
       </label>
-      <input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input
+        id={id}
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        style={{ '--p': `${(Math.max(0, Math.min(1, (value - min) / Math.max(1e-9, max - min))) * 100).toFixed(1)}%` } as CSSProperties}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
     </div>
   );
 }

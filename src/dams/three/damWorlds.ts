@@ -3,6 +3,7 @@
 // Maquetas ilustrativas; las alturas y las fuerzas van a escala (las flechas, proporcionales a su valor).
 
 import * as THREE from 'three';
+import { lookWater } from '../../three/look';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { diorama } from '../../supply/three/supplyKit';
@@ -14,7 +15,7 @@ const seeded = (seed: number) => {
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
 };
 const concrete = () => new THREE.MeshStandardMaterial({ color: '#cfcac0', roughness: 0.85 });
-const waterMat = (opacity = 0.82) => new THREE.MeshStandardMaterial({ color: '#2f84b5', roughness: 0.12, metalness: 0.05, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide });
+const waterMat = (opacity = 0.82) => lookWater(new THREE.MeshStandardMaterial({ color: '#2a7fb0', roughness: 0.08, metalness: 0.05, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }), [0.3, 0.05], 0.55);
 
 /** Perfil de una presa de gravedad con cresta WES: corona en y = top; devuelve puntos (x, y) del contorno. */
 function spillwayOutline(top: number, Hd: number, m: number, base: number): [number, number][] {

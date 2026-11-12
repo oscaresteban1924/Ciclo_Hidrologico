@@ -5,6 +5,8 @@
 // El agua que sale del canal se dibuja solo para mostrar que se desborda (el cálculo no la sigue afuera).
 
 import * as THREE from 'three';
+import { lookMaterial } from '../../three/look';
+import { meadow, strataWall } from '../../three/scenery';
 import { MATERIALS, SHAPES, geom, type Material, type Section, type UniformInput, type UniformResult } from '../hydraulics';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
@@ -146,6 +148,8 @@ export class UniformWorld {
   private time = { value: 0 };
   private built = '';
   private dyn = new THREE.Group();
+  /** Pradera y árboles alrededor del canal: el suelo llega a la cota de la corona del canal. */
+  private land = new THREE.Group();
   private water: WaterBody;
   private flood: WaterBody;
   private cut: THREE.Mesh;
@@ -159,7 +163,7 @@ export class UniformWorld {
   private bars: THREE.InstancedMesh;
   private v: UniformView | null = null;
   readonly views: Record<'general' | 'corte' | 'arriba', StageView> = {
-    general: { eye: [44, 10, 20], target: [8, 0.4, 0], fit: 40 },
+    general: { eye: [30, 8.5, 21], target: [3, 0.5, 0], fit: 32 },
     corte: { eye: [37, 1.6, 4.2], target: [30, 0.7, 0], fit: 9 },
     arriba: { eye: [6, 26, 14], target: [0, 0, 0], fit: 46 },
   };
@@ -170,18 +174,8 @@ export class UniformWorld {
     stage.setShadowSpan(40);
     stage.controls.minDistance = 2;
     const R = rng(21);
-    // terreno lejano y árboles
-    const far = new THREE.Mesh(new THREE.PlaneGeometry(400, 300), new THREE.MeshStandardMaterial({ color: '#6c9a4a', roughness: 1 }));
-    far.rotation.x = -Math.PI / 2;
-    far.position.y = -2.6;
-    far.receiveShadow = true;
-    sc.add(far);
-    const ts: TreeSpot[] = [];
-    for (let k = 0; k < 60; k++) {
-      const x = -90 + R() * 150, z = (R() < 0.5 ? -1 : 1) * (14 + R() * 50);
-      ts.push({ x, y: 1.5, z, r: 1.4 + R() * 1.6 });
-    }
-    sc.add(trees(ts, 5));
+    void R;
+    sc.add(this.land);
     sc.add(this.dyn);
     this.water = new WaterBody(this.time, { side: false });
     this.flood = new WaterBody(this.time, { side: false, opacity: 0.7 });
@@ -214,15 +208,49 @@ export class UniformWorld {
     stage.view(this.views.general, false);
   }
 
+  /** Pradera a la cota de la corona, con un foso al frente para ver el corte, lomas lejanas y árboles. */
+  private landscape(top: number): void {
+    for (const c of [...this.land.children]) {
+      this.land.remove(c);
+      c.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
+    }
+    const pit: [number, number, number, number, number] = [L / 2 - 0.5, L / 2 + 35.5, -W - 1, W + 1, -2.6];
+    // bajo el canal la pradera se hunde (la tapa el bloque del canal); al frente queda el foso
+    const under: [number, number, number, number, number] = [-L / 2 + 2.6, L / 2, -W + 2.6, W - 2.6, -2.6];
+    const { mesh, height } = meadow({ keep: [-L / 2 - 10, L / 2 + 40, -W - 6, W + 6], extent: [-240, 220, -200, 200], y0: top, hills: 14, ramp: 70, cell: 2.5, seed: 4, cuts: [under, pit] });
+    this.land.add(mesh);
+    // foso para ver el corte: paredes con las capas del suelo y piso de grava
+    const fx0 = L / 2, fx1 = L / 2 + 34, steps = 24;
+    const rim: [number, number][] = [];
+    for (let k = 0; k <= steps; k++) rim.push([fx0 + ((fx1 - fx0) * k) / steps, -W]);
+    for (let k = 1; k <= steps; k++) rim.push([fx1, -W + (2 * W * k) / steps]);
+    for (let k = 1; k <= steps; k++) rim.push([fx1 - ((fx1 - fx0) * k) / steps, W]);
+    this.land.add(strataWall(rim, () => top, -2.6));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(34, 2 * W), lookMaterial(new THREE.MeshStandardMaterial({ color: '#8c7a60', roughness: 1 }), { detail: 0.22, patches: 0.08, scale: 2 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(L / 2 + 17, -2.59, 0);
+    floor.receiveShadow = true;
+    this.land.add(floor);
+    const R = rng(5);
+    const ts: TreeSpot[] = [];
+    for (let k = 0; k < 140; k++) {
+      const x = -200 + R() * 400, z = (R() < 0.5 ? -1 : 1) * (W + 6 + R() * 170);
+      if (x > L / 2 - 4 && x < L / 2 + 40 && Math.abs(z) < W + 12) continue;
+      ts.push({ x, y: height(x, z), z, r: 1.4 + R() * 1.8 });
+    }
+    this.land.add(trees(ts, 5));
+  }
+
   private build(s: Section, mat: Material): void {
     for (const c of [...this.dyn.children]) {
       this.dyn.remove(c);
       (c as THREE.Mesh).geometry?.dispose();
     }
+    this.landscape(s.shape === 'circ' ? -T_LINE - 0.5 : s.H);
     const R = rng(4);
     const linMat = mat === 'concreto' ? concreteMaterial(LINING.concreto) : mat === 'piedra' ? concreteMaterial(LINING.piedra) : new THREE.MeshStandardMaterial({ color: LINING[mat], roughness: 1 });
     const soil = new THREE.MeshStandardMaterial({ color: '#7a5a3c', roughness: 1 });
-    const grass = new THREE.MeshStandardMaterial({ color: '#6a9a48', roughness: 1 });
+    const grass = lookMaterial(new THREE.MeshStandardMaterial({ color: '#5c9443', roughness: 0.97 }), { detail: 0.16, patches: 0.1 });
     if (s.shape === 'circ') {
       // tubo: mitad de abajo de concreto, mitad de arriba de vidrio para ver el agua
       const r = s.D / 2;

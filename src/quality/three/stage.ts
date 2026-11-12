@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { Finisher, LOOK_TIME, SkyDome, lookScene } from '../../three/look';
 
 export interface StageLabel {
   id: string;
@@ -61,7 +62,7 @@ export class QStage {
   private last = 0;
   private time = 0;
   private update: ((dt: number, t: number) => void) | null = null;
-  private tween: { from: StageView; to: StageView; t0: number; dur: number } | null = null;
+  private tween: { from: StageView; to: StageView; t0: number; dur: number; ease?: 'out' } | null = null;
   private down: { x: number; y: number; t: number } | null = null;
   private ro: ResizeObserver;
   private disposed = false;
@@ -69,6 +70,13 @@ export class QStage {
   readonly sun: THREE.DirectionalLight;
   readonly hemi: THREE.HemisphereLight;
   private envRT: THREE.WebGLRenderTarget | null = null;
+  readonly sky: SkyDome;
+  private finisher: Finisher;
+  private looked = new WeakSet<THREE.Material>();
+  private frames = 0;
+  private introDone = false;
+  /** Posición del sol respecto al punto de mira. */
+  private sunOffset = new THREE.Vector3(-95, 82, 62);
   /** Se llama con el texto de ayuda del objeto bajo el puntero (o null). */
   onHover: ((hint: string | null) => void) | null = null;
 
@@ -78,8 +86,9 @@ export class QStage {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.92;
+    // tono neutro (Khronos PBR Neutral): conserva los colores de base sin lavarlos, con altas luces suaves
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.04;
     const cv = this.renderer.domElement;
     cv.className = 'q3-canvas';
     cv.tabIndex = 0;
@@ -103,15 +112,19 @@ export class QStage {
 
     const sky = new THREE.Color(opts.sky ?? '#cfe3ee');
     this.scene.background = sky;
+    // cielo con sol y nubes; la niebla toma el color del horizonte para que el fondo y la escena se fundan
+    this.sky = new SkyDome({ horizon: '#' + sky.clone().lerp(new THREE.Color('#ffffff'), 0.25).getHexString() });
+    this.sky.setSun(this.sunOffset);
+    this.scene.add(this.sky.mesh);
     const [fn, ff] = opts.fog ?? [260, 900];
-    this.scene.fog = new THREE.Fog(sky, fn, ff);
-    this.hemi = new THREE.HemisphereLight('#eef5ff', '#6f6450', 0.8);
+    this.scene.fog = new THREE.Fog(this.sky.horizon.clone(), fn, ff);
+    this.hemi = new THREE.HemisphereLight('#dfeeff', '#5f5646', 0.62);
     this.scene.add(this.hemi);
     // reflejos suaves del cielo (agua, metal, vidrio): un cielo de degradé prefiltrado, sin texturas descargadas
     this.envRT = skyEnvironment(this.renderer, sky);
     this.scene.environment = this.envRT.texture;
     this.scene.environmentIntensity = 0.38;
-    this.sun = new THREE.DirectionalLight('#fff1dc', 1.9);
+    this.sun = new THREE.DirectionalLight('#fff0d8', 2.25);
     this.sun.position.set(-60, 120, 80);
     this.scene.add(this.sun, this.sun.target);
     // sombras del sol cerca de lo que se mira (el sol sigue al punto de mira para no perder resolución)
@@ -121,7 +134,9 @@ export class QStage {
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0005;
     this.sun.shadow.normalBias = 0.4;
+    this.sun.shadow.radius = 3;
     this.setShadowSpan(90);
+    this.finisher = new Finisher(this.renderer, this.scene, this.camera);
 
     cv.addEventListener('pointerdown', this.onDown);
     cv.addEventListener('pointerup', this.onUp);
@@ -141,9 +156,9 @@ export class QStage {
     const bg = this.scene.background as THREE.Color;
     if (!this.skyClear) this.skyClear = bg.clone();
     bg.copy(this.skyClear).lerp(new THREE.Color('#8f9aa3'), 0.75 * k);
-    (this.scene.fog as THREE.Fog).color.copy(bg);
-    this.sun.intensity = 1.9 * (1 - 0.6 * k);
-    this.hemi.intensity = 0.95 * (1 - 0.2 * k);
+    (this.scene.fog as THREE.Fog).color.copy(this.sky.storm(k));
+    this.sun.intensity = 2.25 * (1 - 0.6 * k);
+    this.hemi.intensity = 0.62 * (1 + 0.3 * k);
   }
 
   /** Medio lado del área con sombras alrededor del punto de mira [unidades del mundo]. */
@@ -183,7 +198,7 @@ export class QStage {
   private frame(dt: number): void {
     if (this.tween) {
       const k = Math.min(1, (performance.now() - this.tween.t0) / this.tween.dur);
-      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      const e = this.tween.ease === 'out' ? 1 - Math.pow(1 - k, 3) : k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
       const { from, to } = this.tween;
       this.camera.position.set(...(from.eye.map((v, i) => v + (to.eye[i] - v) * e) as [number, number, number]));
       this.controls.target.set(...(from.target.map((v, i) => v + (to.target[i] - v) * e) as [number, number, number]));
@@ -192,9 +207,19 @@ export class QStage {
     this.controls.update();
     const tg = this.controls.target;
     this.sun.target.position.copy(tg);
-    this.sun.position.set(tg.x - 60, tg.y + 120, tg.z + 80);
+    // luz principal desde atrás y a un lado de la cámara (como en una foto de estudio): las caras que se miran
+    // quedan iluminadas y las sombras caen hacia un lado, marcando el relieve
+    const az = Math.atan2(this.camera.position.x - tg.x, this.camera.position.z - tg.z) + 0.95;
+    const el = 0.72;
+    this.sunOffset.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(150);
+    this.sun.position.copy(tg).add(this.sunOffset);
+    this.sky.setSun(this.sunOffset);
+    LOOK_TIME.value = this.time;
     this.update?.(this.reducedMotion ? 0 : dt, this.time);
-    this.renderer.render(this.scene, this.camera);
+    // el acabado llega a lo que el mundo agregó (se revisa cada medio segundo, más seguido al empezar)
+    if (this.frames++ % (this.frames < 120 ? 5 : 30) === 0) lookScene(this.scene, this.looked);
+    this.sky.follow(this.camera);
+    this.finisher.render();
     this.layoutLabels();
   }
 
@@ -220,6 +245,21 @@ export class QStage {
 
   view(input: StageView, animate = true): void {
     const v = this.fitted(input);
+    this.finisher.setScale(input.fit ?? new THREE.Vector3(...v.eye).distanceTo(new THREE.Vector3(...v.target)) * 0.9);
+    // la primera vista entra con un acercamiento suave desde más lejos y más alto
+    if (!this.introDone && !animate && !this.reducedMotion) {
+      this.introDone = true;
+      const e = new THREE.Vector3(...v.eye), t = new THREE.Vector3(...v.target);
+      const off = e.clone().sub(t);
+      const from = t.clone().add(off.multiplyScalar(1.45)).add(new THREE.Vector3(0, off.length() * 0.12, 0)).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0);
+      this.camera.position.copy(from.clone().sub(t).applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.32).add(t));
+      this.controls.target.copy(t);
+      this.controls.update();
+      const p = this.camera.position;
+      this.tween = { from: { eye: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }, to: v, t0: performance.now(), dur: 2200, ease: 'out' };
+      return;
+    }
+    this.introDone = true;
     if (!animate || this.reducedMotion) {
       this.camera.position.set(...v.eye);
       this.controls.target.set(...v.target);
@@ -228,7 +268,7 @@ export class QStage {
       return;
     }
     const p = this.camera.position, t = this.controls.target;
-    this.tween = { from: { eye: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }, to: v, t0: performance.now(), dur: 1000 };
+    this.tween = { from: { eye: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }, to: v, t0: performance.now(), dur: 1200 };
   }
 
   orbit(deg: number): void {
@@ -361,6 +401,7 @@ export class QStage {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
+    this.finisher?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     for (const el of this.labelEls.values()) el.dataset.w = '';
@@ -379,6 +420,7 @@ export class QStage {
       else mat?.dispose();
     });
     this.envRT?.dispose();
+    this.finisher.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();

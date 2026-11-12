@@ -2,59 +2,16 @@
 // tubos y piezómetros de vidrio con la columna de agua a escala.
 
 import * as THREE from 'three';
+import { lookWater } from '../../three/look';
 import { glassMaterial } from '../../canals/three/canalKit';
+import { terrainBlock } from '../../three/scenery';
 
 /**
  * Maqueta de terreno: superficie con alturas `h(x, z)` en el rectángulo dado y paredes de suelo hasta `base` en los
- * cuatro lados (el corte del frente deja ver lo que va enterrado).
+ * cuatro lados (el corte del frente deja ver lo que va enterrado). El acabado está en src/three/scenery.ts.
  */
 export function diorama(h: (x: number, z: number) => number, x0: number, x1: number, z0: number, z1: number, nx: number, nz: number, color: (x: number, z: number, y: number) => THREE.Color, base: number): THREE.Group {
-  const g = new THREE.Group();
-  const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0, nx, nz);
-  geo.rotateX(-Math.PI / 2);
-  geo.translate((x0 + x1) / 2, 0, (z0 + z1) / 2);
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  const col = new Float32Array(pos.count * 3);
-  for (let k = 0; k < pos.count; k++) {
-    const x = pos.getX(k), z = pos.getZ(k), y = h(x, z);
-    pos.setY(k, y);
-    const c = color(x, z, y);
-    col.set([c.r, c.g, c.b], 3 * k);
-  }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  geo.computeVertexNormals();
-  const top = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
-  top.receiveShadow = true;
-  // paredes: el contorno del rectángulo, de la superficie a la base, con capas de suelo
-  const edge: [number, number][] = [];
-  for (let i = 0; i <= nx; i++) edge.push([x0 + ((x1 - x0) * i) / nx, z1]);
-  for (let j = nz - 1; j >= 0; j--) edge.push([x1, z0 + ((z1 - z0) * j) / nz]);
-  for (let i = nx - 1; i >= 0; i--) edge.push([x0 + ((x1 - x0) * i) / nx, z0]);
-  for (let j = 1; j <= nz; j++) edge.push([x0, z0 + ((z1 - z0) * j) / nz]);
-  const p: number[] = [], c: number[] = [], idx: number[] = [];
-  const topC = new THREE.Color('#9a7752'), midC = new THREE.Color('#7f5f40'), botC = new THREE.Color('#5b4630');
-  edge.forEach(([x, z], k) => {
-    const y = h(x, z);
-    const ym = Math.max(base, y - 2.2);
-    p.push(x, y, z, x, ym, z, x, base, z);
-    c.push(topC.r, topC.g, topC.b, midC.r, midC.g, midC.b, botC.r, botC.g, botC.b);
-    if (k < edge.length - 1) {
-      const a = 3 * k;
-      idx.push(a, a + 1, a + 3, a + 3, a + 1, a + 4, a + 1, a + 2, a + 4, a + 4, a + 2, a + 5);
-    }
-  });
-  const wg = new THREE.BufferGeometry();
-  wg.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
-  wg.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
-  wg.setIndex(idx);
-  wg.computeVertexNormals();
-  const walls = new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide }));
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0 + 80, z1 - z0 + 80), new THREE.MeshStandardMaterial({ color: '#cbd8d1', roughness: 1 }));
-  floor.rotateX(-Math.PI / 2);
-  floor.position.set((x0 + x1) / 2, base - 0.05, (z0 + z1) / 2);
-  floor.receiveShadow = true;
-  g.add(top, walls, floor);
-  return g;
+  return terrainBlock(h, x0, x1, z0, z1, nx, nz, color, base);
 }
 
 /** Tanque cilíndrico de concreto con el agua adentro (se ve por una ventana de vidrio al frente). */
@@ -78,7 +35,7 @@ export class StorageTank {
     roof.position.y = top + 0.25;
     const floor = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 0.4, 40), conc);
     floor.position.y = base + 0.2;
-    this.water = new THREE.Mesh(new THREE.CylinderGeometry(radius - 0.25, radius - 0.25, 1, 40), new THREE.MeshStandardMaterial({ color: '#2f84b5', roughness: 0.15, transparent: true, opacity: 0.88 }));
+    this.water = new THREE.Mesh(new THREE.CylinderGeometry(radius - 0.25, radius - 0.25, 1, 40), lookWater(new THREE.MeshStandardMaterial({ color: '#2f84b5', roughness: 0.1, transparent: true, opacity: 0.88 }), [0.04, 0.02], 0.3));
     this.group.add(wall, glass, roof, floor, this.water);
   }
   /** Cota del agua (m). */
