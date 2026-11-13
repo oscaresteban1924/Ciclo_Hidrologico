@@ -2,7 +2,7 @@
 // gráficas de cada parte: el corte del terreno, la capacidad del cauce según el píxel, la curva cota-volumen de una
 // celda y la conducción de sus caras, Gumbel, los hidrogramas, la rotura de presa y la amenaza del barrio.
 
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import { es } from '../canals/common';
 import { yc, type Raster } from './terrain';
 import { cellVolume, faceProps, type Geometry } from './solver';
@@ -50,6 +50,8 @@ export function XYChart({
   hlines = [],
   cls = 'hc-hud-svg',
   label,
+  onScrub,
+  tipFmt,
 }: {
   series: Series[];
   W?: number;
@@ -65,8 +67,15 @@ export function XYChart({
   hlines?: { y: number; text: string }[];
   cls?: string;
   label: string;
+  /** Clic o arrastre sobre la gráfica: el valor de x (por ejemplo, para mover el tiempo de la reproducción). */
+  onScrub?: (x: number) => void;
+  /** Formato de x en el recuadro de valores (si no, el de los ejes). */
+  tipFmt?: (x: number) => string;
 }) {
   const uid = useId().replace(/:/g, '');
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hx, setHx] = useState<number | null>(null);
+  const drag = useRef(false);
   const all = series.flatMap((s) => s.pts).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
   let [x0, x1] = xRange ?? [Math.min(...all.map((p) => p[0])), Math.max(...all.map((p) => p[0]))];
   let [y0, y1] = yRange ?? [Math.min(...all.map((p) => p[1]), ...hlines.map((h) => h.y)), Math.max(...all.map((p) => p[1]), ...hlines.map((h) => h.y))];
@@ -92,8 +101,63 @@ export function XYChart({
   const path = (pts: XY[]) => pts.filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y)).map(([x, y], k) => `${k ? 'L' : 'M'}${X(x).toFixed(1)},${Y(Math.max(y0, Math.min(y1, y))).toFixed(1)}`).join('');
   const yt = nice(y0, y1, 4);
   const xt = xTicks ?? nice(x0, x1, 5).map((v) => ({ v, t: xFmt(v) }));
+  // cursor: de la posición del puntero al valor de x, y el valor de cada serie en ese x
+  const toX = (clientX: number) => {
+    const svg = svgRef.current;
+    const m = svg?.getScreenCTM();
+    if (!svg || !m) return null;
+    const p = svg.createSVGPoint();
+    p.x = clientX;
+    p.y = 0;
+    const q = p.matrixTransform(m.inverse());
+    if (q.x < L - 2 || q.x > W - R + 2) return null;
+    return x0 + ((Math.max(L, Math.min(W - R, q.x)) - L) / (W - L - R)) * (x1 - x0);
+  };
+  const valueAt = (pts: XY[], x: number, dots?: boolean): number => {
+    const ok = pts.filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b));
+    if (!ok.length) return NaN;
+    if (dots) return ok.reduce((b, p) => (Math.abs(p[0] - x) < Math.abs(b[0] - x) ? p : b), ok[0])[1];
+    for (let k = 0; k + 1 < ok.length; k++) {
+      const [xa, ya] = ok[k], [xb, yb] = ok[k + 1];
+      if ((x >= xa && x <= xb) || (x <= xa && x >= xb)) return xb === xa ? ya : ya + ((x - xa) / (xb - xa)) * (yb - ya);
+    }
+    return NaN;
+  };
+  const tip =
+    hx === null
+      ? null
+      : series
+          .map((q) => ({ name: q.name, color: q.color, v: valueAt(q.pts, hx, q.dots) }))
+          .filter((q) => Number.isFinite(q.v));
+  const tipW = 168, tipH = 18 + (tip?.length ?? 0) * 15;
+  const hX = hx === null ? 0 : X(hx);
+  const tipX = hX + 10 + tipW > W - R ? hX - tipW - 10 : hX + 10;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={cls} role="img" aria-label={label}>
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      className={`${cls}${onScrub ? ' is-scrub' : ''}`}
+      role="img"
+      aria-label={label}
+      onPointerMove={(e) => {
+        const x = toX(e.clientX);
+        setHx(x);
+        if (drag.current && x !== null) onScrub?.(x);
+      }}
+      onPointerLeave={() => {
+        setHx(null);
+        drag.current = false;
+      }}
+      onPointerDown={(e) => {
+        if (!onScrub) return;
+        const x = toX(e.clientX);
+        if (x === null) return;
+        drag.current = true;
+        (e.currentTarget as SVGSVGElement).setPointerCapture?.(e.pointerId);
+        onScrub(x);
+      }}
+      onPointerUp={() => (drag.current = false)}
+    >
       <defs>
         <clipPath id={`${uid}c`}>
           <rect x={L} y={T} width={W - L - R} height={H - T - B} />
@@ -170,6 +234,27 @@ export function XYChart({
               </g>
             );
           })}
+        </g>
+      )}
+      {hx !== null && tip && tip.length > 0 && (
+        <g pointerEvents="none">
+          <line x1={hX} x2={hX} y1={T} y2={H - B} stroke={ink.strong} strokeWidth="1" strokeDasharray="3 3" />
+          {series.map((q) => {
+            const v = valueAt(q.pts, hx, q.dots);
+            return Number.isFinite(v) && v >= y0 && v <= y1 ? <circle key={`h${q.name}`} cx={hX} cy={Y(v)} r="3.6" fill="#fff" stroke={q.color} strokeWidth="2" /> : null;
+          })}
+          <rect x={tipX} y={T + 4} width={tipW} height={tipH} rx="6" fill="#ffffff" fillOpacity="0.95" stroke="#cdd8e1" />
+          <text x={tipX + 8} y={T + 18} className="hc-hud-t" fill={ink.strong} fontWeight="700">
+            {xLabel.replace(/\s*\(.*\)$/, '')} {(tipFmt ?? xFmt)(hx)}
+          </text>
+          {tip.map((q, k) => (
+            <g key={`t${q.name}`}>
+              <rect x={tipX + 8} y={T + 26 + k * 15} width="8" height="8" rx="2" fill={q.color} />
+              <text x={tipX + 20} y={T + 33 + k * 15} className="hc-hud-t" fill={ink.mid}>
+                {q.name.length > 18 ? q.name.slice(0, 17) + '…' : q.name}: {yFmt(q.v)}
+              </text>
+            </g>
+          ))}
         </g>
       )}
     </svg>
@@ -324,7 +409,7 @@ export function GumbelChart({ Q, fit, T, W = 560, H = 210, cls }: { Q: number[];
 }
 
 /** Hidrogramas: lo que entra, lo que pasa bajo el puente y lo que sale. */
-export function HydroChart({ t, qin, qBridge, qout, now, W = 560, H = 200, cls }: { t: number[]; qin: number[]; qBridge: number[]; qout: number[]; now?: number | null; W?: number; H?: number; cls?: string }) {
+export function HydroChart({ t, qin, qBridge, qout, now, W = 560, H = 200, cls, onScrub }: { t: number[]; qin: number[]; qBridge: number[]; qout: number[]; now?: number | null; W?: number; H?: number; cls?: string; onScrub?: (min: number) => void }) {
   const s = (arr: number[]) => t.map((v, i) => [v / 60, arr[i]] as XY);
   return (
     <XYChart
@@ -340,6 +425,8 @@ export function HydroChart({ t, qin, qBridge, qout, now, W = 560, H = 200, cls }
       xLabel="tiempo (min)"
       yLabel="caudal (m³/s)"
       yFmt={(v) => es(v, 0)}
+      tipFmt={(v) => `${es(v, 0)} min`}
+      onScrub={onScrub}
       vlines={now !== undefined && now !== null ? [{ x: now / 60, text: `${es(now / 60, 0)} min` }] : []}
       label={qBridge.some(Number.isFinite) ? 'Hidrogramas de entrada, bajo el puente y de salida.' : 'Hidrogramas de entrada y de salida.'}
     />
@@ -347,13 +434,16 @@ export function HydroChart({ t, qin, qBridge, qout, now, W = 560, H = 200, cls }
 }
 
 /** Nivel del agua aguas arriba del puente en el tiempo. */
-export function StageChart({ t, wse, ref, W = 560, H = 170, cls }: { t: number[]; wse: number[]; ref?: { y: number; text: string }; W?: number; H?: number; cls?: string }) {
+export function StageChart({ t, wse, ref, W = 560, H = 170, cls, now, onScrub }: { t: number[]; wse: number[]; ref?: { y: number; text: string }; W?: number; H?: number; cls?: string; now?: number | null; onScrub?: (min: number) => void }) {
   return (
     <XYChart
       series={[{ name: 'nivel', pts: t.map((v, i) => [v / 60, wse[i]] as XY), color: SER.a, area: false }]}
       W={W}
       H={H}
       cls={cls}
+      onScrub={onScrub}
+      tipFmt={(v) => `${es(v, 0)} min`}
+      vlines={now !== undefined && now !== null ? [{ x: now / 60, text: `${es(now / 60, 0)} min` }] : []}
       xLabel="tiempo (min)"
       yLabel="cota del agua aguas arriba del puente (m)"
       yFmt={(v) => es(v, 2)}
@@ -387,6 +477,17 @@ export function HazardBars({ areas }: { areas: number[] }) {
 
 /** Leyenda de la capa de resultados. */
 export function LayerLegend({ layer, maxT, eq }: { layer: Layer; maxT?: number; eq?: string }) {
+  if (layer === 'natural')
+    return (
+      <>
+        <div className="m2-legend is-ramp">
+          <span>poca</span>
+          <i style={{ background: `linear-gradient(90deg, ${LAYER_RAMPS.natural.join(',')})` }} />
+          <span>3 m o más</span>
+        </div>
+        <p className="m2-legend-note">Agua turbia de creciente; espuma donde corre rápido y en la orilla; barro donde ya bajó.</p>
+      </>
+    );
   if (layer === 'amenaza' || layer === 'zonas') {
     const list = layer === 'amenaza' ? LAYER_RAMPS.hazard.slice(1).map((c, k) => [c, `H${k + 1}`]) : LAYER_RAMPS.zones.slice(1).map((c, k) => [c, ['Baja', 'Media', 'Alta'][k]]);
     return (
@@ -400,7 +501,7 @@ export function LayerLegend({ layer, maxT, eq }: { layer: Layer; maxT?: number; 
       </div>
     );
   }
-  const map: Record<Exclude<Layer, 'amenaza' | 'zonas'>, [readonly string[], string, string]> = {
+  const map: Record<Exclude<Layer, 'amenaza' | 'zonas' | 'natural'>, [readonly string[], string, string]> = {
     profundidad: [LAYER_RAMPS.depth, '0', '2,5 m o más'],
     velocidad: [LAYER_RAMPS.vel, '0', '3 m/s o más'],
     cota: [LAYER_RAMPS.wse, 'más baja', 'más alta'],
@@ -420,17 +521,31 @@ export function LayerLegend({ layer, maxT, eq }: { layer: Layer; maxT?: number; 
 }
 
 /** Lluvia y escorrentía acumuladas [mm] y el hietograma en bloques. */
-export function RainChart({ blocks, t, rain, excess, W = 560, H = 190, cls }: { blocks: number[]; t?: number[]; rain?: number[]; excess?: number[]; W?: number; H?: number; cls?: string }) {
+export function RainChart({ blocks, t, rain, excess, W = 560, H = 190, cls, now, onScrub }: { blocks: number[]; t?: number[]; rain?: number[]; excess?: number[]; W?: number; H?: number; cls?: string; now?: number | null; onScrub?: (min: number) => void }) {
   const cum: XY[] = [[0, 0]];
   blocks.forEach((b, k) => cum.push([(k + 1) * 5, cum[k][1] + b]));
   const series: Series[] = [{ name: 'lluvia acumulada', pts: cum, color: SER.a, width: 2 }];
   if (t && excess && excess.length) series.push({ name: 'escorrentía (modelo)', pts: t.map((x, k) => [x / 60, excess[k]] as XY).filter(([x]) => x >= 0), color: SER.b, width: 2.4 });
   void rain;
-  return <XYChart series={series} W={W} H={H} cls={cls} xLabel="tiempo (min)" yLabel="mm" label="Lluvia acumulada del hietograma de bloques alternos y la escorrentía que entra al modelo con el número de curva." />;
+  return (
+    <XYChart
+      series={series}
+      W={W}
+      H={H}
+      cls={cls}
+      xLabel="tiempo (min)"
+      yLabel="mm"
+      yFmt={(v) => es(v, 1)}
+      tipFmt={(v) => `${es(v, 0)} min`}
+      onScrub={onScrub}
+      vlines={now !== undefined && now !== null ? [{ x: now / 60, text: `${es(now / 60, 0)} min` }] : []}
+      label="Lluvia acumulada del hietograma de bloques alternos y la escorrentía que entra al modelo con el número de curva."
+    />
+  );
 }
 
 /** Perfil longitudinal por el eje del cauce: fondo, orillas, corona del jarillón y agua máxima. */
-export function ProfileChart({ x, bed, bank, wse, crest, other, W = 560, H = 200, cls }: { x: number[]; bed: number[]; bank: number[]; wse: number[]; crest?: (number | null)[]; other?: { name: string; wse: number[] }; W?: number; H?: number; cls?: string }) {
+export function ProfileChart({ x, bed, bank, wse, crest, other, now, W = 560, H = 200, cls }: { x: number[]; bed: number[]; bank: number[]; wse: number[]; crest?: (number | null)[]; other?: { name: string; wse: number[] }; now?: { text: string; wse: number[] } | null; W?: number; H?: number; cls?: string }) {
   const series: Series[] = [
     { name: 'agua máxima', pts: x.map((v, k) => [v, wse[k]] as XY), color: SER.a, width: 2.4 },
     { name: 'orilla', pts: x.map((v, k) => [v, bank[k]] as XY), color: SER.soft, dash: true },
@@ -438,6 +553,7 @@ export function ProfileChart({ x, bed, bank, wse, crest, other, W = 560, H = 200
   ];
   if (crest) series.splice(1, 0, { name: 'corona del jarillón', pts: x.map((v, k) => [v, crest[k] ?? NaN] as XY).filter(([, y]) => Number.isFinite(y)), color: SER.b, dash: true });
   if (other) series.splice(1, 0, { name: other.name, pts: x.map((v, k) => [v, other.wse[k]] as XY), color: SER.c, width: 2 });
+  if (now) series.splice(1, 0, { name: now.text, pts: x.map((v, k) => [v, now.wse[k]] as XY).filter(([, y]) => Number.isFinite(y)), color: SER.c, width: 2.2, area: false });
   return <XYChart series={series} W={W} H={H} cls={cls} xLabel="abscisa por el valle (m)" yLabel="cota (m)" yFmt={(v) => es(v, 1)} label="Perfil longitudinal por el eje del cauce: fondo, orillas, corona del jarillón y la cota máxima del agua." />;
 }
 

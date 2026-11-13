@@ -17,8 +17,8 @@ import { EQ_NAMES, EQ_SHORT, TABLE_DH, TABLE_LEVELS, buildGeometry, cellAt, cell
 import { damBreak } from './dambreak';
 import { NX, NY, terrainFor } from './terrain';
 import { useModelRun, useReference } from './runs';
-import { PLACE, RunBadge, VexChoice, sg, useBatch, valleyState, vexNote, waterOf } from './common';
-import { PARTICLE_SPEED, ValleyWorld } from './three/valleyWorld';
+import { FlowTools, PLACE, RunBadge, TimeBar, VexChoice, sg, useBatch, usePlayback, valleyState, vexNote, waterOf } from './common';
+import { PARTICLE_SPEED, ValleyWorld, type ClickTool } from './three/valleyWorld';
 
 interface Ctx {
   s: EqScene;
@@ -105,11 +105,19 @@ export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const unstable = run.status === 'inestable';
   const courant = run.res?.courantMax ?? 0;
   const volErr = run.res?.vol.errPct ?? 0;
+  const [tool, setTool] = useState<ClickTool>('sonda');
+  const [notice, setNotice] = useState('');
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, run, vex, geom, ci, eta, sum });
-  sync.current = { s, run, vex, geom, ci, eta, sum };
+  const play = usePlayback(run.status === 'listo' ? run.res : null, (f) => world.current?.setFrame(f));
+  const sync = useRef({ s, run, vex, geom, ci, eta, sum, tool });
+  sync.current = { s, run, vex, geom, ci, eta, sum, tool };
   const toWorld = () => {
-    const { s: x, run: rr, vex: v, geom: g, ci: c, eta: e, sum: sm } = sync.current;
+    const { s: x, run: rr, vex: v, geom: g, ci: c, eta: e, sum: sm, tool: tl } = sync.current;
+    if (world.current) {
+      // un clic elige la celda que se inspecciona
+      world.current.onProbe = (px, py) => setS((q) => ({ ...q, cx: Math.max(5, Math.min(NX - 5, Math.round(px))), cy: Math.max(5, Math.min(NY - 5, Math.round(py))) }));
+      world.current.onNotice = setNotice;
+    }
     const [cx, cy] = cellCenter(g, c), cs = cellSize(g, c);
     world.current?.set(
       valleyState({
@@ -119,7 +127,9 @@ export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         mesh: { c: x.c, geom: g },
         breaklines: x.breaklines,
         cell: { c: cs, ci: c, geom: g, eta: e },
-        water: waterOf(rr, x.layer, null, { particles: x.particles }),
+        water: waterOf(rr, x.layer, play.ref.current, { particles: x.particles }),
+        cellFlux: true,
+        tool: tl,
         labels: [
           { id: 'celda', text: `Celda de ${cs} m`, sub: `${es(cellVolume(g, c, e), 0)} m³ con ${es(x.h, 2)} m sobre su punto más bajo`, x: cx, y: cy + cs / 2, up: 6, kind: 'sonda', prio: 9 },
           ...(sm ? [PLACE.puente(`Puente: ${es(sm.wseBridge, 2)} m`, undefined, 'dato')] : []),
@@ -129,7 +139,7 @@ export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [run.res, run.status, run.live, vex, geom, ci, eta, sum, s.breaklines, s.c, s.layer, s.particles]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run.res, run.status, run.live, vex, geom, ci, eta, sum, s.breaklines, s.c, s.layer, s.particles, tool]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ s, sum, ref, unstable, courant, volErr, cells: geom.NC }), [s, sum, ref, unstable, courant, volErr, geom.NC]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<EqScene>) => setS((x) => ({ ...x, ...p }));
@@ -180,6 +190,7 @@ export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           { key: 'v', label: 'Error de volumen', unit: '%', value: volErr, digits: 4 },
         ]}
       />
+      <TimeBar pb={play} res={run.status === 'listo' ? run.res : null} note="Las flechas en las caras de la celda marcada dan el caudal del instante: azul el que entra, naranja el que sale." />
       <DockChoice label="Celdas de base" value={String(s.c)} options={[5, 10, 20, 40].map((c) => ({ value: String(c), label: `${c} m` }))} onChange={(v) => set({ c: Number(v) })} />
       <DockChoice<RefineChoice> label="Regiones de refinamiento" value={s.refine} options={(Object.keys(REFINE_NAMES) as RefineChoice[]).map((k) => ({ value: k, label: REFINE_NAMES[k] }))} onChange={(v) => set({ refine: v })} />
       <DockChoice
@@ -219,6 +230,7 @@ export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         label="El agua muestra"
         value={s.layer}
         options={[
+          { value: 'natural', label: 'Aspecto' },
           { value: 'profundidad', label: 'Profundidad' },
           { value: 'velocidad', label: 'Velocidad' },
           { value: 'courant', label: 'Courant de cada celda' },
@@ -227,15 +239,7 @@ export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         onChange={(v) => set({ layer: v as EqScene['layer'] })}
       />
       <LayerLegend layer={s.layer} eq={s.eq} />
-      <DockChoice
-        label="Partículas"
-        value={s.particles ? 'si' : 'no'}
-        options={[
-          { value: 'si', label: `Sí (${PARTICLE_SPEED}× más rápido)` },
-          { value: 'no', label: 'No' },
-        ]}
-        onChange={(v) => set({ particles: v === 'si' })}
-      />
+      <FlowTools particles={s.particles} setParticles={(v) => set({ particles: v })} tool={tool} setTool={setTool} probeLabel="Elige la celda" notice={notice} />
       <VexChoice value={vex} onChange={setVex} />
     </>
   );

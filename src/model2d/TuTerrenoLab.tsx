@@ -16,8 +16,8 @@ import { useModelRun } from './runs';
 import { MAX_PIXELS, exampleDem, readDem, type DemInfo } from './importDem';
 import { resultsPackage, zip } from './exports';
 import { downloadBytes } from '../lib/download';
-import { RunBadge, VexChoice, valleyState, vexNote, waterOf } from './common';
-import { PARTICLE_SPEED, ValleyWorld, type Layer } from './three/valleyWorld';
+import { FlowTools, RunBadge, TimeBar, VexChoice, WATER_LAYERS, WaterChoice, usePlayback, valleyState, vexNote, waterOf } from './common';
+import { PARTICLE_SPEED, ValleyWorld, type ClickTool, type Layer } from './three/valleyWorld';
 
 interface Params {
   n: number;
@@ -107,7 +107,9 @@ function kOptions(d: CustomDomain): number[] {
 export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [dem, setDem] = useState<{ domain: CustomDomain; info: DemInfo; example: boolean } | null>(null);
   const [p, setP] = useState<Params>({ n: 0.04, cn: 80, inSide: 'O', inFrom: 0, inTo: 100, outSide: 'E', outFrom: 0, outTo: 100, Qp: 25, Qb: 1, tp: 20, slope: 0.006, k: 3, eq: 'inercia', duration: 60, rain: false, P: 60, D: 60 });
-  const [layer, setLayer] = useState<Layer>('profundidad');
+  const [layer, setLayer] = useState<Layer>('natural');
+  const [tool, setTool] = useState<ClickTool>('sonda');
+  const [notice, setNotice] = useState('');
   const [particles, setParticles] = useState(true);
   const [probe, setProbe] = useState<{ x: number; y: number } | null>(null);
   const [vex, setVex] = useState(3);
@@ -185,13 +187,15 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const res = run.status === 'listo' || run.status === 'inestable' ? run.res : null;
   const cells = d ? Math.ceil(d.NX / p.k) * Math.ceil(d.NY / p.k) : 0;
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ d, run, vex, layer, particles, probe, bcs, p });
-  sync.current = { d, run, vex, layer, particles, probe, bcs, p };
+  const play = usePlayback(res, (f) => world.current?.setFrame(f));
+  const sync = useRef({ d, run, vex, layer, particles, probe, bcs, p, tool });
+  sync.current = { d, run, vex, layer, particles, probe, bcs, p, tool };
   const toWorld = () => {
-    const { d: dd, run: rr, vex: v, layer: ly, particles: pt, probe: pb, bcs: bl, p: pp } = sync.current;
+    const { d: dd, run: rr, vex: v, layer: ly, particles: pt, probe: pb, bcs: bl, p: pp, tool: tl } = sync.current;
     const w = world.current;
     if (!w || !dd) return;
     w.onProbe = rr.res ? (x, y) => setProbe({ x: Math.round(x), y: Math.round(y) }) : null;
+    w.onNotice = setNotice;
     w.set(
       valleyState({
         vex: v,
@@ -202,7 +206,8 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         bcLines: bl,
         rain: pp.rain,
         mesh: rr.res ? null : { c: pp.k * dd.px },
-        water: waterOf(rr, ly, null, { particles: pt }),
+        water: waterOf(rr, ly, play.ref.current, { particles: pt }),
+        tool: tl,
         probe: pb,
         labels: [],
       }),
@@ -210,7 +215,7 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [d, run.res, run.status, run.live, vex, layer, particles, probe, bcs, p.k, p.rain]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [d, run.res, run.status, run.live, vex, layer, particles, probe, bcs, p.k, p.rain, tool]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ example: !!dem?.example, own: !!dem && !dem.example, ok: !!res && !res.unstable, volErr: res?.vol.errPct ?? NaN }), [dem, res]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (q: Partial<Params>) => setP((x) => ({ ...x, ...q }));
@@ -296,9 +301,9 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         head={d ? [`${es(W, 0)} × ${es(H, 0)} m`, `${cells.toLocaleString('es-CO')} celdas`, res ? `${es(wet / 10000, 2)} ha con agua` : 'sin correr'] : ['Sin terreno', '', '']}
         chart={
           pser ? (
-            <XYChart series={[{ name: 'cota del agua en la sonda', pts: pser.pts, color: SER.a, width: 2.4 }]} hlines={[{ y: pser.zg, text: 'terreno' }]} xLabel="tiempo (min)" yLabel="cota (m)" yFmt={(v) => es(v, 2)} label="Nivel del agua en la sonda a lo largo de la corrida; si se queda en la línea del terreno, la sonda no se mojó." />
+            <XYChart series={[{ name: 'cota del agua en la sonda', pts: pser.pts, color: SER.a, width: 2.4 }]} hlines={[{ y: pser.zg, text: 'terreno' }]} vlines={play.t !== null ? [{ x: play.t / 60, text: 'ahora' }] : []} onScrub={play.seekMin} tipFmt={(v) => `${es(v, 0)} min`} xLabel="tiempo (min)" yLabel="cota (m)" yFmt={(v) => es(v, 2)} label="Nivel del agua en la sonda a lo largo de la corrida; si se queda en la línea del terreno, la sonda no se mojó." />
           ) : res ? (
-            <HydroChart t={res.series.t} qin={res.series.qin} qBridge={res.series.qin.map(() => NaN)} qout={res.series.qout} />
+            <HydroChart t={res.series.t} qin={res.series.qin} qBridge={res.series.qin.map(() => NaN)} qout={res.series.qout} now={play.t} onScrub={play.seekMin} />
           ) : undefined
         }
         traces={[
@@ -307,6 +312,7 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           { key: 'v', label: 'Error de volumen', unit: '%', value: res?.vol.errPct ?? NaN, digits: 4 },
         ]}
       />
+      <TimeBar pb={play} res={res} />
       <div className="hc-flood is-inline m2-file">
         <input
           ref={fileRef}
@@ -359,28 +365,9 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           <DockChoice label="Celdas" value={String(p.k)} options={kOptions(d).map((k) => ({ value: String(k), label: `${es(k * d.px, 1)} m (${(Math.ceil(d.NX / k) * Math.ceil(d.NY / k)).toLocaleString('es-CO')})` }))} onChange={(v) => set({ k: Number(v) })} />
           <DockChoice<Eq> label="Ecuaciones" value={p.eq} options={(Object.keys(EQ_NAMES) as Eq[]).map((k) => ({ value: k, label: EQ_NAMES[k] }))} onChange={(v) => set({ eq: v })} />
           <DockRange label="Duración" value={p.duration} min={30} max={180} step={10} show={`${p.duration} min`} onChange={(v) => set({ duration: v })} />
-          <DockChoice
-            label="El agua muestra"
-            value={layer}
-            options={[
-              { value: 'profundidad', label: 'Profundidad' },
-              { value: 'velocidad', label: 'Velocidad' },
-              { value: 'amenaza', label: 'Amenaza H1–H6' },
-              { value: 'llegada', label: 'Llegada' },
-              { value: 'courant', label: 'Courant' },
-            ]}
-            onChange={(v) => setLayer(v as Layer)}
-          />
+          <WaterChoice value={layer} onChange={setLayer} options={[...WATER_LAYERS, { value: 'courant', label: 'Courant' }]} />
           <LayerLegend layer={layer} maxT={p.duration} eq={p.eq} />
-          <DockChoice
-            label="Partículas"
-            value={particles ? 'si' : 'no'}
-            options={[
-              { value: 'si', label: `Sí (${PARTICLE_SPEED}× más rápido)` },
-              { value: 'no', label: 'No' },
-            ]}
-            onChange={(v) => setParticles(v === 'si')}
-          />
+          <FlowTools particles={particles} setParticles={setParticles} tool={tool} setTool={setTool} notice={notice} />
           {res && (
             <div className="hc-flood is-inline">
               <button type="button" onClick={saveRes}>

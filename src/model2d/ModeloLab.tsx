@@ -16,8 +16,8 @@ import { AMS_FIT, PERIODS, quantile, risk } from './hydrology';
 import { BUILDING_NAMES, EQ_NAMES, EQ_SHORT, buildGeometry, cellAt, groundAt, hydroQ, type BuildingMode, type Eq, type RunResult } from './solver';
 import { COVER_KEYS, COVERS, LEVEE, NX, NY, ROAD, ROAD_Z, bankZ, bedZ, sectionAt, terrainFor, truth, yc } from './terrain';
 import { useModelRun } from './runs';
-import { PLACE, VexChoice, sg, valleyState, vexNote } from './common';
-import { PARTICLE_SPEED, ValleyWorld } from './three/valleyWorld';
+import { FlowTools, PLACE, TimeBar, VexChoice, frameTime, sg, usePlayback, valleyState, vexNote } from './common';
+import { PARTICLE_SPEED, ValleyWorld, type ClickTool } from './three/valleyWorld';
 import { hecrasPackage, resultsPackage } from './exports';
 import { downloadBytes } from '../lib/download';
 
@@ -103,8 +103,8 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<ModelScene>(DEFAULT_MODEL);
   const [vex, setVex] = useState(3);
   const [tab, setTab] = useState<PanelTab>('esquema');
-  const [frame, setFrame] = useState<number | null>(null);
-  const [playing, setPlaying] = useState(false);
+  const [tool, setTool] = useState<ClickTool>('sonda');
+  const [notice, setNotice] = useState('');
   const [hist, setHist] = useState<Saved[]>(() => [...HISTORY]);
   const [probe, setProbe] = useState<{ x: number; y: number } | null>(null);
   const [particles, setParticles] = useState(true);
@@ -126,25 +126,22 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     while (HISTORY.length > 8) HISTORY.shift();
     setHist([...HISTORY]);
   }, [run.status, run.key]); // eslint-disable-line react-hooks/exhaustive-deps
-  // reproducción de los mapas en el tiempo
-  useEffect(() => {
-    if (!playing || !res) return;
-    const id = window.setInterval(() => setFrame((f) => (f === null ? 0 : f + 1 >= res.frames.length ? (setPlaying(false), res.frames.length - 1) : f + 1)), 140);
-    return () => window.clearInterval(id);
-  }, [playing, res]);
-  useEffect(() => {
-    setFrame(null);
-    setPlaying(false);
-  }, [run.key]);
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, vex, terr, res, frame, sum, geom, live, probe, particles, lineX });
-  sync.current = { s, vex, terr, res, frame, sum, geom, live, probe, particles, lineX };
+  // reproducción de los mapas en el tiempo (la escena se mueve en cada cuadro; la interfaz, unas siete veces por segundo)
+  const play = usePlayback(step === 'resultados' ? res : null, (f) => world.current?.setFrame(f));
+  const frame = play.frame;
+  const sync = useRef({ s, vex, terr, res, sum, geom, live, probe, particles, lineX, tool, frame });
+  sync.current = { s, vex, terr, res, sum, geom, live, probe, particles, lineX, tool, frame };
   const toWorld = () => {
-    const { s: x, vex: v, terr: t, res: rr, frame: fr, sum: sm, geom: gm, live: lv, probe: pb, particles: pt, lineX: lx } = sync.current;
+    const { s: x, vex: v, terr: t, res: rr, sum: sm, geom: gm, live: lv, probe: pb, particles: pt, lineX: lx, tool: tl, frame: fu } = sync.current;
+    const fr = play.ref.current;
     const id = STEPS[x.step].id;
     const showWater = !!rr && ['correr', 'resultados', 'comparar'].includes(id);
     const showLive = !showWater && !!lv && id === 'correr';
-    if (world.current) world.current.onProbe = id === 'resultados' ? (px, py) => setProbe({ x: Math.round(px), y: Math.round(py) }) : null;
+    if (world.current) {
+      world.current.onProbe = id === 'resultados' ? (px, py) => setProbe({ x: Math.round(px), y: Math.round(py) }) : null;
+      world.current.onNotice = setNotice;
+    }
     world.current?.set(
       valleyState({
         vex: v,
@@ -155,19 +152,25 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         mesh: id === 'malla' || id === 'plan' ? { c: x.c, geom: gm } : null,
         breaklines: (id === 'malla' || id === 'plan') && x.breaklines,
         bc: id === 'bordes' || id === 'flujo',
-        water: showWater ? { res: rr!, frame: id === 'resultados' ? fr : null, layer: id === 'resultados' ? x.layer : 'profundidad', particles: id === 'resultados' && pt } : showLive ? { res: null, frame: null, layer: 'profundidad', live: lv } : null,
+        water: showWater ? { res: rr!, frame: id === 'resultados' ? fr : null, layer: id === 'resultados' ? x.layer : 'natural', particles: id === 'resultados' && pt } : showLive ? { res: null, frame: null, layer: 'natural', live: lv } : null,
+        tool: id === 'resultados' ? tl : 'sonda',
         probe: id === 'resultados' ? pb : null,
         lines: id === 'resultados' && rr ? [{ x0: lineSeries(rr, lx).x, y0: 2, x1: lineSeries(rr, lx).x, y1: NY - 2, color: '#1baf7a' }] : null,
-        labels: showLive ? [PLACE.barrio(`Calculando: t = ${es(lv!.t / 60, 0)} min`, 'el agua avanza mientras el modelo calcula', 'dato')] : worldLabels(x, sm, rr ? rr.frameT[fr ?? 0] : null, fr),
+        labels: showLive ? [PLACE.barrio(`Calculando: t = ${es(lv!.t / 60, 0)} min`, 'el agua avanza mientras el modelo calcula', 'dato')] : worldLabels(x, sm, rr && fu !== null ? frameTime(rr, fu) : null, fu),
       }),
     );
   };
   useEffect(() => {
     toWorld();
-  }, [s, vex, terr, res, frame, sum, geom, live, probe, particles, lineX]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, vex, terr, res, frame, sum, geom, live, probe, particles, lineX, tool]); // eslint-disable-line react-hooks/exhaustive-deps
   const pser = useMemo(() => (res && probe && res.frames.length ? probeSeries(res, probe.x, probe.y) : null), [res, probe]);
   const lser = useMemo(() => (res && res.qFrames.length ? lineSeries(res, lineX) : null), [res, lineX]);
   const prof = useMemo(() => (res ? profile(res) : null), [res]);
+  const profNow = useMemo(() => {
+    if (!res || frame === null || !res.frames.length || !prof) return null;
+    const k = Math.min(res.frames.length - 1, Math.round(frame));
+    return { text: `agua a los ${es(res.frameT[k] / 60, 0)} min`, wse: prof.x.map((x) => res.frames[k][cellAt(res.geom, x, yc(x))]) };
+  }, [res, frame, prof]);
   const save = async (what: 'paquete' | 'resultados') => {
     setMsg('Preparando el archivo…');
     const bytes = what === 'paquete' ? hecrasPackage(opts, terr.fine, nSet(s.level), s.refine === 'no' ? [] : (opts.mesh.refine ?? []).map((q) => ({ name: q.region, c: q.c }))) : resultsPackage(res!, 'corrida_' + s.T + '_anios');
@@ -345,6 +348,7 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           label="Capa de resultados"
           value={s.layer}
           options={[
+            { value: 'natural', label: 'Aspecto' },
             { value: 'profundidad', label: 'Profundidad' },
             { value: 'velocidad', label: 'Velocidad' },
             { value: 'cota', label: 'Cota del agua' },
@@ -358,26 +362,9 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         <LayerLegend layer={s.layer} maxT={s.duration} eq={s.eq} />
         {res ? (
           <>
-            <div className="hc-flood is-inline">
-              <button type="button" onClick={() => (frame === null || frame >= res.frames.length - 1 ? (setFrame(0), setPlaying(true)) : setPlaying(!playing))}>
-                {playing ? 'Pausar' : 'Reproducir la creciente'}
-              </button>
-              <button type="button" onClick={() => (setPlaying(false), setFrame(null))}>
-                Máximos
-              </button>
-            </div>
-            <DockRange label="Tiempo" value={frame ?? res.frames.length - 1} min={0} max={res.frames.length - 1} step={1} show={frame === null ? 'máximos' : `${es(res.frameT[frame] / 60, 0)} min`} onChange={(v) => (setPlaying(false), setFrame(v))} />
-            <DockChoice
-              label="Partículas que siguen la velocidad"
-              value={particles ? 'si' : 'no'}
-              options={[
-                { value: 'si', label: `Sí (${PARTICLE_SPEED}× más rápido)` },
-                { value: 'no', label: 'No' },
-              ]}
-              onChange={(v) => setParticles(v === 'si')}
-            />
+            <FlowTools particles={particles} setParticles={setParticles} tool={tool} setTool={setTool} notice={notice} />
             <DockRange label="Línea para medir caudal (norte-sur) en x" value={lineX} min={20} max={620} step={10} show={`${es(lser?.x ?? lineX, 0)} m`} onChange={setLineX} />
-            <p className="q3-small">{probe ? `Sonda en (${probe.x}, ${probe.y}) m: su hidrograma está en la gráfica.` : 'Toca el terreno o el agua para poner una sonda y ver su nivel en el tiempo.'}</p>
+            <p className="q3-small">{probe ? `Sonda en (${probe.x}, ${probe.y}) m: su hidrograma está en la gráfica.` : 'Con la herramienta «Sonda», toca el terreno o el agua para ver su nivel en el tiempo.'}</p>
             {probe && (
               <div className="hc-flood is-inline">
                 <button type="button" onClick={() => setProbe(null)}>
@@ -420,7 +407,9 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       <XYChart
         series={[{ name: 'cota del agua', pts: pser.t.map((t, k) => [t, Math.max(pser.zg, pser.wse[k])] as XY), color: SER.a, width: 2.4 }]}
         hlines={[{ y: pser.zg, text: 'terreno de la sonda' }]}
-        vlines={frame !== null ? [{ x: res.frameT[frame] / 60, text: 'ahora' }] : []}
+        vlines={play.t !== null ? [{ x: play.t / 60, text: 'ahora' }] : []}
+        onScrub={play.seekMin}
+        tipFmt={(v) => `${es(v, 0)} min`}
         xLabel="tiempo (min)"
         yLabel="cota (m)"
         yFmt={(v) => es(v, 1)}
@@ -432,14 +421,16 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           { name: `por la línea en x = ${es(lser.x, 0)} m`, pts: lser.t.map((t, k) => [t, lser.q[k]] as XY), color: SER.c, width: 2.4 },
           { name: 'entrada', pts: res.series.t.map((t, k) => [t / 60, res.series.qin[k]] as XY), color: SER.soft, dash: true },
         ]}
-        vlines={frame !== null ? [{ x: res.frameT[frame] / 60, text: 'ahora' }] : []}
+        vlines={play.t !== null ? [{ x: play.t / 60, text: 'ahora' }] : []}
+        onScrub={play.seekMin}
+        tipFmt={(v) => `${es(v, 0)} min`}
         xLabel="tiempo (min)"
         yLabel="caudal (m³/s)"
         yFmt={(v) => es(v, 0)}
         label={`Caudal que cruza la línea norte-sur en x = ${es(lser.x, 0)} m frente al de entrada.`}
       />
     ) : res && (step === 'resultados' || step === 'correr' || step === 'comparar') ? (
-      <HydroChart t={res.series.t} qin={res.series.qin} qBridge={res.series.qBridge} qout={res.series.qout} now={frame !== null ? res.frameT[frame] : null} />
+      <HydroChart t={res.series.t} qin={res.series.qin} qBridge={res.series.qBridge} qout={res.series.qout} now={step === 'resultados' ? play.t : null} onScrub={step === 'resultados' ? play.seekMin : undefined} />
     ) : step === 'flujo' || step === 'bordes' ? (
       <XYChart series={[{ name: 'hidrograma de entrada', pts: hydroPreview, color: '#2a78d6', area: true }]} xLabel="tiempo (min)" yLabel="caudal (m³/s)" yFmt={(v) => es(v, 0)} label={`Hidrograma de entrada de la creciente de ${s.T} años: pico de ${es(QT, 1)} m³/s.`} />
     ) : (
@@ -468,6 +459,7 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           { key: 'v', label: 'Error de volumen', unit: '%', value: sum?.volErr ?? NaN, digits: 4 },
         ]}
       />
+      {step === 'resultados' && <TimeBar pb={play} res={res} note="Arrastra sobre la gráfica para ir a un instante." />}
       {controls[step]}
       <div className="m2-stepnav">
         <button type="button" onClick={() => go(s.step - 1)} disabled={s.step === 0}>
@@ -491,7 +483,7 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         {res && prof && (
           <>
             <h3>Perfil longitudinal por el eje del cauce</h3>
-            <ProfileChart x={prof.x} bed={prof.bed} bank={prof.bank} wse={prof.wse} crest={prof.crest} W={480} H={210} cls="hc-exp-svg cu-svg" />
+            <ProfileChart x={prof.x} bed={prof.bed} bank={prof.bank} wse={prof.wse} crest={prof.crest} now={profNow} W={480} H={210} cls="hc-exp-svg cu-svg" />
             <p className="q3-small">La cota máxima del agua en la celda del eje a lo largo del valle, con el fondo del cauce, la orilla y la corona del jarillón: donde la línea azul toca la naranja, el agua pasa sobre el jarillón.</p>
             <h3>Nivel aguas arriba del puente</h3>
             <StageChart t={res.series.t} wse={res.series.wseBridge} ref={{ y: ROAD_Z, text: 'corona de la vía' }} W={480} H={190} cls="hc-exp-svg cu-svg" />

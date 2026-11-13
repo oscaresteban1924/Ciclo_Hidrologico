@@ -8,15 +8,15 @@ import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene
 import { DesignTab } from '../canals/design';
 import { FlatStage, Row, es } from '../canals/common';
 import { LiveHud } from '../canals/live';
-import { HazardBars, HydroChart, SER, XYChart, type XY } from './charts';
+import { HazardBars, HydroChart, LayerLegend, SER, XYChart, type XY } from './charts';
 import { MODEL2D_TOOLS, ROOM } from './design';
 import { DEFAULT_COVER, LIDAR_BURNED, N_LEVEL_NAMES, coverBase, coverRun, nSet, type CoverScene, type NLevel, type Summary } from './scene';
 import { COVER_KEYS, COVERS, coverShares, terrainFor } from './terrain';
 import { BUILDING_NAMES, modelSurface, type BuildingMode } from './solver';
 import { runAsync, useModelRun, useReference } from './runs';
 import { EVENT, HIDDEN_MULT, MARKS, MARK_NOISE, calibRun, fitStats, golden, marksFrom, type Fit } from './analysis';
-import { PLACE, RunBadge, VIEWS_BASE, VexChoice, sg, useBatch, valleyState, vexNote, waterOf } from './common';
-import { ValleyWorld, type PlanLabel } from './three/valleyWorld';
+import { FlowTools, PLACE, RunBadge, TimeBar, VIEWS_BASE, VexChoice, WaterChoice, sg, useBatch, usePlayback, valleyState, vexNote, waterOf } from './common';
+import { ValleyWorld, type ClickTool, type Layer, type PlanLabel } from './three/valleyWorld';
 
 interface Ctx {
   s: CoverScene;
@@ -77,11 +77,17 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const fine = useMemo(() => terrainFor(LIDAR_BURNED).fine, []);
   const nGrid = useMemo(() => (s.view === 'n' ? modelSurface(LIDAR_BURNED, opts.rough).n : null), [s.view, opts.rough]);
   const sum = run.sum;
+  const [layer, setLayer] = useState<Layer>('natural');
+  const [particles, setParticles] = useState(true);
+  const [tool, setTool] = useState<ClickTool>('sonda');
+  const [notice, setNotice] = useState('');
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, run, vex, nGrid, sum, fit, obs });
-  sync.current = { s, run, vex, nGrid, sum, fit, obs };
+  const play = usePlayback(run.status === 'listo' ? run.res : null, (f) => world.current?.setFrame(f));
+  const sync = useRef({ s, run, vex, nGrid, sum, fit, obs, layer, particles, tool });
+  sync.current = { s, run, vex, nGrid, sum, fit, obs, layer, particles, tool };
   const toWorld = () => {
-    const { s: x, run: rr, vex: v, nGrid: ng, sum: sm, fit: ft, obs: ob } = sync.current;
+    const { s: x, run: rr, vex: v, nGrid: ng, sum: sm, fit: ft, obs: ob, layer: ly, particles: pt, tool: tl } = sync.current;
+    if (world.current) world.current.onNotice = setNotice;
     const marks: PlanLabel[] =
       x.mode === 'calibrar' && ob
         ? MARKS.flatMap((m, k) =>
@@ -97,7 +103,9 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         colorBy: x.view,
         n: ng,
         objects: 'si',
-        water: waterOf(rr),
+        water: waterOf(rr, ly, play.ref.current, { particles: pt }),
+        tool: tl,
+        marks: x.mode === 'calibrar' && ob ? MARKS.flatMap((m, k) => (ob[k] === null ? [] : [{ id: m.id, x: m.x, y: m.y, obs: ob[k] as number, model: ft && ft.model[k] !== undefined && Number.isFinite(ft.model[k]) ? ft.model[k] : null }])) : null,
         labels: x.mode === 'calibrar' ? marks : sm
           ? [
               PLACE.puente(`Puente: ${es(sm.wseBridge, 2)} m`, 'cota máxima del agua aguas arriba', 'dato'),
@@ -110,7 +118,7 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [run.res, run.status, run.live, vex, nGrid, s.view, s.mode, sum, fit, obs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run.res, run.status, run.live, vex, nGrid, s.view, s.mode, sum, fit, obs, layer, particles, tool]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ s, sum, base, fit }), [s, sum, base, fit]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<CoverScene>) => setS((x) => ({ ...x, ...p }));
@@ -156,7 +164,7 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     <>
       {gl ? (
         <Scene3D
-          label={`Maqueta 3D del valle coloreada por ${s.view === 'n' ? 'el n de Manning (más oscuro, más rugoso)' : 'cobertura del suelo (cauce, pasto, cultivos, rastrojo, bosque, vías y casas)'}, con el agua máxima de la creciente de 100 años coloreada por profundidad; ${vexNote(vex)}.`}
+          label={`Maqueta 3D del valle coloreada por ${s.view === 'n' ? 'el n de Manning (más oscuro, más rugoso)' : 'cobertura del suelo (cauce, pasto, cultivos, rastrojo, bosque, vías y casas)'}, con el agua de la corrida (${layer === "natural" ? "con su aspecto de creciente" : `coloreada por ${layer}`})${s.mode === "calibrar" ? " y los postes de las marcas de agua: franja roja a la cota observada y anillo azul a la del modelo" : ""}; ${vexNote(vex)}.`}
           viewNames={VIEWS_BASE}
           make={(st) => new ValleyWorld(st)}
           onReady={(w) => {
@@ -193,7 +201,7 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       ) : (
         <LiveHud
           head={[`n ${N_LEVEL_NAMES[s.level].toLowerCase()} ×${es(s.mult, 1)}`, sum ? `puente ${es(sum.wseBridge, 2)} m` : 'calculando', base ? `normal ${es(base.wseBridge, 2)} m` : '']}
-          chart={run.res ? <HydroChart t={run.res.series.t} qin={run.res.series.qin} qBridge={run.res.series.qBridge} qout={run.res.series.qout} /> : undefined}
+          chart={run.res ? <HydroChart t={run.res.series.t} qin={run.res.series.qin} qBridge={run.res.series.qBridge} qout={run.res.series.qout} now={play.t} onScrub={play.seekMin} /> : undefined}
           traces={[
             { key: 'w', label: 'Agua en el puente frente a los n normales', unit: 'm', value: Number.isFinite(d) ? d : NaN, digits: 2 },
             { key: 'a', label: 'Barrio con agua', unit: 'm²', value: sum?.townArea ?? NaN, digits: 0, ref: base ? { value: base.townArea, label: 'normal' } : undefined },
@@ -201,6 +209,7 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           ]}
         />
       )}
+      {!cal && <TimeBar pb={play} res={run.status === 'listo' ? run.res : null} />}
       <DockChoice
         label="Qué hacer"
         value={s.mode}
@@ -234,6 +243,9 @@ export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           {s.buildings === 'n' && <DockRange label="n de las casas" value={s.nB} min={0.1} max={1} step={0.05} show={es(s.nB, 2)} onChange={(v) => set({ nB: v })} />}
         </>
       )}
+      <WaterChoice value={layer} onChange={setLayer} />
+      <LayerLegend layer={layer} />
+      {!cal && <FlowTools particles={particles} setParticles={setParticles} tool={tool} setTool={setTool} probeLabel="Solo mirar" notice={notice} />}
       <DockChoice
         label="Colorear el terreno por"
         value={s.view}

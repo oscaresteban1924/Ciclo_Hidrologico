@@ -261,7 +261,7 @@ export interface EqScene {
   /** Nivel del agua en el inspector, sobre el punto más bajo de la celda [m]. */
   h: number;
   /** Lo que muestra el agua y si van las partículas. */
-  layer: 'profundidad' | 'velocidad' | 'courant' | 'iteraciones';
+  layer: 'natural' | 'profundidad' | 'velocidad' | 'courant' | 'iteraciones';
   particles: boolean;
 }
 export const DEFAULT_EQ: EqScene = { c: 20, subgrid: true, breaklines: true, refine: 'no', eq: 'inercia', dtMode: 'courant', dt: 10, theta: 1, cx: 250, cy: 220, h: 1.5, layer: 'profundidad', particles: true };
@@ -299,7 +299,7 @@ export interface ModelScene {
   theta: number;
   tolWS: number;
   maxIter: number;
-  layer: 'profundidad' | 'velocidad' | 'cota' | 'amenaza' | 'llegada' | 'courant' | 'iteraciones';
+  layer: 'natural' | 'profundidad' | 'velocidad' | 'cota' | 'amenaza' | 'llegada' | 'courant' | 'iteraciones';
 }
 export const DEFAULT_MODEL: ModelScene = {
   step: 0,

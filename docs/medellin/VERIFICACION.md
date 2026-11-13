@@ -934,6 +934,39 @@ Las marcas de agua, los valores de las viviendas y la zonificación son de ejerc
 - Los medidores mostraban 0 antes de calcular: ahora muestran «—».
 - En «Tu terreno», la entrada propuesta se ponía en el lado más alto (a veces una ladera): ahora va en el lado opuesto a la salida, centrada en su punto más bajo.
 
+## 4 undecquatricies. La sala 2D: escena, animaciones e interacción (ejecutada)
+
+**Pedido.** Mejorar todas las modelaciones y animaciones de la sala «Modelación hidráulica 2D» y hacerlas mucho más interactivas, bonitas y detalladas (el alcance se precisó con el usuario: las ocho partes de esta sala).
+
+**Qué cambió.** Documentado en `docs/modelo2d/MODELO_2D.md`, sección 9.
+
+- **Agua de creciente:** turbia, con ondas que avanzan con la corriente, espuma en el flujo rápido y en la orilla, y reflejo del cielo. Solo cambia la superficie: la lámina queda a la cota del modelo.
+- **El tiempo:** barra de reproducción en seis partes, con interpolación entre mapas. El barro, las manchas en los muros, la lluvia del hietograma, la rotura que se abre y los rótulos siguen el instante. Las gráficas del tiempo marcan el instante y se pueden arrastrar.
+- **Interacción:** lectura al pasar el ratón; tinta con un clic; partículas con estela; flechas de caudal en las caras de la celda marcada (que ahora se elige con un clic); postes de las marcas de agua; miembros del ensamble uno a uno.
+- **Maqueta:** casas con ventanas y techos de teja, puente con vigas y barandas, líneas de la vía, caudal base en el cauce, corte del suelo con estratos, sombras de nubes.
+- **Gráficas:** cursor con los valores de cada serie al pasar el ratón; la leyenda va en su propia franja.
+
+**Comprobado.**
+- `npx tsc --noEmit` sin errores y pruebas de la sala 28 de 28 (el motor no cambió).
+- En Chrome con dibujo por software, sin errores en la consola:
+  - la creciente se reproduce y se puede mover a cualquier instante en las seis partes con mapas;
+  - la rotura se ve entera a los 22 min, abriéndose a los 33 min y abierta a los 60 min (el modelo la disparó a los 25 min y la completó a los 35 min);
+  - las flechas de la celda dan el caudal de sus caras con su signo;
+  - la lectura al pasar el ratón da la cobertura, el suelo y el agua del instante;
+  - la tinta se suelta y avanza con la corriente;
+  - los miembros del ensamble se pasan uno a uno;
+  - en ningún panel aparece NaN, «undefined» ni «Infinity».
+- Superposiciones de la sala, con dos estados nuevos (la creciente a mitad de la corrida y la rotura abriéndose): **96 de 96 estados** en las cuatro pantallas (24 en cada una), sin choques, cortes ni errores en la consola.
+- Rehacer el agua para un instante cuesta 2 a 4 ms en la cañada de ejemplo (unos 22 000 vértices) en este entorno; la reproducción la rehace a lo sumo 30 veces por segundo.
+
+**Ajustes durante la verificación.**
+- De lejos, el dibujo fino del agua se veía como ruido blanco: ahora se apaga con la distancia (más de un metro por píxel) y la espuma lejana es un velo parejo.
+- El agua turbia muy transparente se confundía con el pasto: ahora es casi opaca (como el agua de una creciente) y más clara y cálida que el terreno.
+- En el modo estricto de React la escena se monta dos veces y la lectura de la primera quedaba en el contenedor: se quita al montar de nuevo.
+- La línea de tiempo quedaba angosta junto a los demás controles: ocupa todo el ancho.
+- La tinta soltada sobre suelo seco no se movía y no se veía: ahora la escena avisa que se toque el agua, y cada gota se ve desde que se suelta.
+- La espuma de la orilla salpicaba toda la llanura con agua poco profunda: ahora queda en la lámina de menos de 4 cm.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
@@ -1025,4 +1058,5 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
   - No se comparó con corridas de HEC-RAS sobre el mismo terreno; el paquete descargado permite hacerlo.
   - De los formatos de GeoTIFF se probaron el sin comprimir y el comprimido con deflate; los decodificadores LZW, PackBits y JPEG van incluidos pero no se probaron con archivos reales.
   - El puente usa coeficientes de manual sin calibrar; la rotura del jarillón es geométrica (no calcula la erosión del material).
+  - El aspecto del agua, las estelas y la tinta se revisaron solo con dibujo por software (unos 2 s por cuadro en este entorno, a 1280 × 820); no se midió en un equipo con GPU.
 - **Manual de Drenaje para Carreteras del INVÍAS** (alcantarillas bajo vías, puentes, cunetas): no incluido en «Hidráulica de canales» porque su PDF oficial no se pudo leer desde el entorno de trabajo.

@@ -30,7 +30,7 @@ Se prueba en `tests/model2d/model2d.test.ts` (`npm run test:model2d`; informe en
 
 **Qué es y qué no es.** Laboratorio educativo. El modelo 2D de la sala se construye con las ideas de HEC-RAS 2D (volúmenes finitos, tablas subgrid, malla con refinamiento, onda difusiva implícita con θ, iteraciones y tolerancias, Courant, líneas de quiebre, estructuras en líneas de la malla, condiciones de borde por conducción y profundidad normal, lluvia sobre la malla), pero **no es HEC-RAS** ni da sus resultados. El valle, la quebrada, el jarillón, el barrio, la vía, el puente, las coberturas, la serie de caudales, las marcas de agua y los valores de las viviendas son **ilustrativos**: no son un lugar de Medellín ni un levantamiento real. Los mapas no son un estudio de amenaza, un pronóstico oficial de inundación ni diseños de ingeniería; la zonificación es un ejercicio con un criterio de ejemplo, no la de un plan de ordenamiento; la rotura y el puente no son diseños de obras. El paquete para HEC-RAS lleva coordenadas inventadas y lo declara en su LEAME.
 
-**Escalas.** El valle mide 640 × 400 m (1 unidad de la escena = 2 m). El relieve se puede ver a escala real o exagerado ×3 o ×6; la escena lo dice y el agua se estira lo mismo que el terreno (no se exagera la profundidad del agua sola). Las partículas que siguen la corriente van 6 veces más rápido que el agua, y la escena lo dice.
+**Escalas.** El valle mide 640 × 400 m (1 unidad de la escena = 2 m). El relieve se puede ver a escala real o exagerado ×3 o ×6; la escena lo dice y el agua, el terreno y las casas se estiran lo mismo (no se exagera la profundidad del agua sola). Las partículas que siguen la corriente y la tinta van 6 veces más rápido que el agua, y la escena lo dice; la reproducción en el tiempo va de 1 a 8 minutos de creciente por segundo.
 
 ## El valle
 
@@ -195,11 +195,30 @@ El mismo modelo sobre un terreno propio. Se carga un **GeoTIFF de una banda** (u
 
 Límites: n y número de curva uniformes, líneas de borde solo en los lados, sin estructuras. Es una primera aproximación, no un estudio de amenaza.
 
-## 9. El cálculo en un hilo aparte
+## 9. La escena: el agua, el tiempo y las herramientas
+
+Lo que se ve en las ocho partes sale de la misma escena (`three/valleyWorld.ts`).
+
+**El agua.** Con la capa «Aspecto», el agua de los resultados se ve como una creciente: turbia (de ocre claro donde hay poca a café oscuro donde pasa de 3 m), con ondas que avanzan en la dirección y a la velocidad de cada punto, espuma donde el número de Froude pasa de 0,85 y en la orilla, y reflejo del cielo. Las otras capas colorean un dato (profundidad, velocidad, cota, amenaza H1–H6, llegada, Courant, error de iteración, probabilidad o zona) y bajan las ondas y la espuma para que el color se lea. Las ondas y la espuma cambian solo el color y la luz de la superficie: la lámina queda a la cota que calculó el modelo. Sin corrida, el cauce del valle lleva su caudal base (0,5 m sobre el fondo).
+
+**El tiempo.** En las partes con una corrida guardada mapa a mapa (cada minuto), una barra de tiempo reproduce la creciente a 1, 3 u 8 minutos de creciente por segundo, lleva a cualquier instante o vuelve a los máximos. Entre dos mapas guardados el nivel, la velocidad y el caudal de las caras se interpolan, así el agua avanza sin saltos. Al reproducir:
+
+- donde el agua ya pasó y bajó queda barro;
+- los muros de las casas guardan la mancha del nivel más alto que alcanzó el agua hasta ese momento;
+- la lluvia cae con la intensidad del hietograma en ese minuto y el cielo se oscurece con ella;
+- el jarillón se abre en la rotura entre el minuto en que el modelo la disparó y el minuto en que la completó;
+- los rótulos del puente y de la rotura dicen el nivel, el caudal y el estado de la obra en ese instante;
+- en las gráficas del tiempo, una línea marca el instante y arrastrar sobre ellas lleva la reproducción a ese minuto.
+
+**Las herramientas.** Al pasar el ratón por la escena, una lectura da la cobertura, la cota del suelo (y la que ve el modelo si es distinta) y, con una corrida, la profundidad, la velocidad y el nivel del agua en ese punto y en ese instante, más el dato de la capa (clase de amenaza, minuto de llegada, Courant, error de iteración, probabilidad o zona). Un clic pone la sonda (en «Paso a paso» y «Tu terreno»), elige la celda (en «La malla y las ecuaciones») o suelta tinta: 120 partículas que la corriente del instante lleva y dispersa durante 50 s. Las partículas que siguen la corriente dejan una estela que se desvanece; van 6 veces más rápido que el agua y la escena lo dice.
+
+**Por parte.** En «La malla y las ecuaciones», flechas en las caras de la celda marcada dan el caudal que entra (azul) y sale (naranja) en el instante, con su valor. En la calibración, cada marca de agua es un poste con una franja roja a la cota observada y un anillo azul a la del modelo. En «Riesgo», los miembros del ensamble se pueden pasar uno a uno, de la menor a la mayor inundación del barrio, para ver de dónde sale la probabilidad. Las casas tienen ventanas y techos de teja (la escuela, de zinc); el puente, vigas de borde, barandas y el asfalto con su eje; la vía, sus líneas.
+
+## 10. El cálculo en un hilo aparte
 
 Las corridas se calculan en un Web Worker (hasta dos a la vez) para que la página siga respondiendo; mientras calcula, el hilo manda cada ~140 ms el mapa de niveles y la escena muestra el agua avanzando. El hilo se prueba apenas carga la sala; si el navegador no deja crearlo o no responde, las corridas se calculan a ratos en la página (y si el hilo responde después, las siguientes van al hilo). Las últimas corridas se guardan para no repetirlas al volver a una parte. El hilo va dentro del mismo archivo de la aplicación.
 
-## 10. Herramientas de diseño
+## 11. Herramientas de diseño
 
 | Parte | Calculadora | Prediseño o adicional |
 |---|---|---|
@@ -212,7 +231,7 @@ Las corridas se calculan en un Web Worker (hasta dos a la vez) para que la pági
 | Modelo | balance de volumen de una corrida | lista de chequeo del modelo |
 | Tu terreno | la malla de tu terreno | revisión del terreno |
 
-## 11. Verificación
+## 12. Verificación
 
 `npm run test:model2d` ejecuta veintiocho pruebas (M1 a M28):
 

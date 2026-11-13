@@ -9,15 +9,15 @@ import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene
 import { DesignTab } from '../canals/design';
 import { FlatStage, Row, es } from '../canals/common';
 import { LiveHud } from '../canals/live';
-import { HydroChart, SER, StageChart, XYChart, type XY } from './charts';
+import { HydroChart, LayerLegend, SER, StageChart, XYChart, type XY } from './charts';
 import { MODEL2D_TOOLS, ROOM } from './design';
 import { BREACH_SITES, DEFAULT_STRUCT, LIDAR_BURNED, leveeAt, structBase, structRun, type StructScene, type Summary } from './scene';
 import { BRIDGE_DEFAULT, BRIDGE_LINE, LOW_CHORD } from './solver';
 import { PERIODS, quantile, AMS_FIT } from './hydrology';
 import { NX, ROAD, ROAD_Z, terrainFor, truth, yc } from './terrain';
 import { useModelRun, useReference } from './runs';
-import { PLACE, RunBadge, VIEWS_BASE, VexChoice, sg, useBatch, valleyState, vexNote, waterOf } from './common';
-import { PARTICLE_SPEED, ValleyWorld } from './three/valleyWorld';
+import { FlowTools, PLACE, RunBadge, TimeBar, VIEWS_BASE, VexChoice, WaterChoice, seriesAt, sg, useBatch, usePlayback, valleyState, vexNote, waterOf } from './common';
+import { PARTICLE_SPEED, ValleyWorld, type ClickTool, type Layer } from './three/valleyWorld';
 
 interface Ctx {
   s: StructScene;
@@ -67,12 +67,27 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const qBreach = res && s.kind === 'rotura' ? Math.max(0, ...res.series.qBreach) : 0;
   const lv = useMemo(() => leveeAt(s.bx), [s.bx]);
   const fine = s.kind === 'rotura' && res?.breach?.t0 !== null && res ? res.geom.z : terr;
+  const [layer, setLayer] = useState<Layer>('natural');
+  const [tool, setTool] = useState<ClickTool>('sonda');
+  const [notice, setNotice] = useState('');
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, run, vex, sum, fine, particles, qBreach });
-  sync.current = { s, run, vex, sum, fine, particles, qBreach };
+  const play = usePlayback(run.status === 'listo' ? run.res : null, (f) => world.current?.setFrame(f));
+  const sync = useRef({ s, run, vex, sum, fine, particles, qBreach, layer, tool, t: play.t });
+  sync.current = { s, run, vex, sum, fine, particles, qBreach, layer, tool, t: play.t };
   const toWorld = () => {
-    const { s: x, run: rr, vex: v, sum: sm, fine: f, particles: pt, qBreach: qb } = sync.current;
+    const { s: x, run: rr, vex: v, sum: sm, fine: f, particles: pt, qBreach: qb, layer: ly, tool: tl, t: tNow } = sync.current;
     const r = rr.res;
+    if (world.current) world.current.onNotice = setNotice;
+    const broke = x.kind === 'rotura' && !!r?.breach && r.breach.t0 !== null;
+    // durante la reproducción, los rótulos dicen lo que pasa en ese instante
+    const tm = tNow !== null && r ? tNow : null;
+    const nowBreach =
+      tm !== null && r && broke
+        ? tm < (r.breach!.t0 as number)
+          ? { text: `t = ${es(tm / 60, 0)} min: el jarillón resiste`, sub: `se rompe a los ${es((r.breach!.t0 as number) / 60, 0)} min` }
+          : { text: `t = ${es(tm / 60, 0)} min: ${r.breach!.full !== null && tm < r.breach!.full ? 'la rotura se abre' : 'rotura abierta'}`, sub: `pasan ${es(Math.max(0, seriesAt(r.series.t, r.series.qBreach, tm)), 1)} m³/s` }
+        : null;
+    const nowBridge = tm !== null && r && x.kind === 'puente' ? { text: `t = ${es(tm / 60, 0)} min: ${es(seriesAt(r.series.t, r.series.wseBridge, tm), 2)} m`, sub: `pasan ${es(seriesAt(r.series.t, r.series.qBridge, tm), 1)} m³/s bajo el puente` } : null;
     world.current?.set(
       valleyState({
         vex: v,
@@ -81,15 +96,17 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         objects: 'si',
         breaklines: false,
         bridge: x.kind === 'puente' && x.bridgeMode === 'estructura' ? { low: x.low, block: x.block } : null,
-        water: waterOf(rr, 'profundidad', null, { particles: pt }),
+        water: waterOf(rr, ly, play.ref.current, { particles: pt }),
+        breach: broke ? { before: terr } : null,
+        tool: tl,
         labels:
           x.kind === 'puente'
             ? [
-                PLACE.puente(sm ? `Puente: ${es(sm.wseBridge, 2)} m` : 'El puente', x.bridgeMode === 'estructura' ? `tablero a ${es(x.low, 2)} m${x.block ? `, luz tapada ${es(x.block * 100, 0)} %` : ''}` : 'en el terreno (sin estructura)', sm && sm.wseBridge > x.low && x.bridgeMode === 'estructura' ? 'alerta' : 'dato'),
+                nowBridge ? PLACE.puente(nowBridge.text, nowBridge.sub, 'dato') : PLACE.puente(sm ? `Puente: ${es(sm.wseBridge, 2)} m` : 'El puente', x.bridgeMode === 'estructura' ? `tablero a ${es(x.low, 2)} m${x.block ? `, luz tapada ${es(x.block * 100, 0)} %` : ''}` : 'en el terreno (sin estructura)', sm && sm.wseBridge > x.low && x.bridgeMode === 'estructura' ? 'alerta' : 'dato'),
                 ...(sm ? [PLACE.barrio(`Barrio: ${es(sm.townArea, 0)} m² con agua`, undefined, sm.townArea > 400 ? 'alerta' : 'ok')] : []),
               ]
             : [
-                PLACE.rotura(x.bx, r?.breach?.t0 !== null && r?.breach ? `Rotura a los ${es((r.breach.t0 as number) / 60, 0)} min` : 'Aquí se rompe el jarillón', r?.breach?.t0 !== null && r ? `por ella pasan hasta ${es(qb, 1)} m³/s` : `ancho final ${x.width} m`),
+                nowBreach ? PLACE.rotura(x.bx, nowBreach.text, nowBreach.sub) : PLACE.rotura(x.bx, r?.breach?.t0 !== null && r?.breach ? `Rotura a los ${es((r.breach.t0 as number) / 60, 0)} min` : 'Aquí se rompe el jarillón', r?.breach?.t0 !== null && r ? `por ella pasan hasta ${es(qb, 1)} m³/s` : `ancho final ${x.width} m`),
                 ...(sm ? [PLACE.barrio(`Barrio: ${es(sm.townArea, 0)} m² con agua`, undefined, sm.townArea > 400 ? 'alerta' : 'ok'), PLACE.escuela('La escuela', sm.school > 0.05 ? `${es(sm.school, 2)} m de agua` : 'seca', sm.school > 0.05 ? 'alerta' : 'ok')] : []),
               ],
       }),
@@ -97,7 +114,7 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [run.res, run.status, run.live, vex, sum, fine, particles, s.kind, s.low, s.block, s.bx, s.bridgeMode, qBreach]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run.res, run.status, run.live, vex, sum, fine, particles, s.kind, s.low, s.block, s.bx, s.bridgeMode, qBreach, layer, tool, play.t]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ s, sum, base, qBreach }), [s, sum, base, qBreach]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<StructScene>) => setS((x) => ({ ...x, ...p }));
@@ -134,13 +151,15 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           { name: 'por la rotura', pts: res.series.t.map((t, k) => [t / 60, res.series.qBreach[k]] as XY), color: SER.b, width: 2.4 },
           { name: 'bajo el puente / 20', pts: res.series.t.map((t, k) => [t / 60, res.series.qBridge[k] / 20] as XY), color: SER.soft, dash: true },
         ]}
-        vlines={res.breach?.t0 !== null && res.breach ? [{ x: (res.breach.t0 as number) / 60, text: 'empieza' }] : []}
+        vlines={[...(res.breach?.t0 !== null && res.breach ? [{ x: (res.breach.t0 as number) / 60, text: 'empieza' }] : []), ...(play.t !== null ? [{ x: play.t / 60, text: 'ahora' }] : [])]}
+        onScrub={play.seekMin}
+        tipFmt={(v) => `${es(v, 0)} min`}
         xLabel="tiempo (min)"
         yLabel="caudal (m³/s)"
         label="Caudal que entra al barrio por la rotura del jarillón, con el caudal bajo el puente dividido por 20 para ver la creciente."
       />
     ) : res ? (
-      <StageChart t={res.series.t} wse={res.series.wseBridge} ref={s.bridgeMode === 'estructura' ? { y: s.low, text: 'cara inferior del tablero' } : { y: ROAD_Z, text: 'rasante de la vía' }} />
+      <StageChart t={res.series.t} wse={res.series.wseBridge} ref={s.bridgeMode === 'estructura' ? { y: s.low, text: 'cara inferior del tablero' } : { y: ROAD_Z, text: 'rasante de la vía' }} now={play.t} onScrub={play.seekMin} />
     ) : undefined;
 
   const stage = (
@@ -187,6 +206,7 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
               ]
         }
       />
+      <TimeBar pb={play} res={run.status === 'listo' ? run.res : null} note={s.kind === 'rotura' ? 'Al reproducir, el jarillón se abre cuando lo abrió el modelo.' : undefined} />
       <DockChoice
         label="La obra"
         value={s.kind}
@@ -236,15 +256,9 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           )}
         </>
       )}
-      <DockChoice
-        label="Partículas"
-        value={particles ? 'si' : 'no'}
-        options={[
-          { value: 'si', label: `Sí (${PARTICLE_SPEED}× más rápido)` },
-          { value: 'no', label: 'No' },
-        ]}
-        onChange={(v) => setParticles(v === 'si')}
-      />
+      <WaterChoice value={layer} onChange={setLayer} />
+      <LayerLegend layer={layer} />
+      <FlowTools particles={particles} setParticles={setParticles} tool={tool} setTool={setTool} probeLabel="Solo mirar" notice={notice} />
       <VexChoice value={vex} onChange={setVex} />
     </>
   );

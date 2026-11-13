@@ -96,6 +96,7 @@ def check(pg, screen, state, shots, report):
 
 RANGE = """([l, v]) => { const el = [...document.querySelectorAll('.q3-range')].find((r) => r.textContent.includes(l)); const i = el && el.querySelector('input'); if (!i) return; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, v); i.dispatchEvent(new Event('input', { bubbles: true })); }"""
 BTN = """(t) => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === t); if (b) b.click(); }"""
+SEEK = """(f) => { const r = document.querySelector('.m2-time-range'); if (!r) return; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(r, String(f * Number(r.max))); r.dispatchEvent(new Event('input', { bubbles: true })); }"""
 
 
 def top(pg):
@@ -280,6 +281,8 @@ def modelo2d(pg, screen, shots, report):
         if tag == 'estructuras':
             pg.evaluate(BTN, 'La rotura del jarillón'); pg.wait_for_timeout(12000)
             top(pg); check(pg, screen, 'modelo2d-rotura', shots, report)
+            pg.evaluate(SEEK, 0.33); pg.wait_for_timeout(3000)
+            top(pg); check(pg, screen, 'modelo2d-rotura-tiempo', shots, report)
         if tag == 'riesgo':
             pg.evaluate(BTN, 'Zonificación de la amenaza'); pg.wait_for_timeout(12000)
             top(pg); check(pg, screen, 'modelo2d-zonas', shots, report)
@@ -287,6 +290,9 @@ def modelo2d(pg, screen, shots, report):
             for k in (3, 6, 7, 8):
                 pg.evaluate("(k) => { const b = document.querySelectorAll('.m2-steps button')[k]; if (b) b.click(); }", k); pg.wait_for_timeout(2500)
                 top(pg); check(pg, screen, f'modelo2d-paso{k + 1}', shots, report)
+            # la creciente en el tiempo: el mapa a la mitad de la corrida (si ya corrió)
+            pg.evaluate(SEEK, 0.45); pg.wait_for_timeout(3000)
+            top(pg); check(pg, screen, 'modelo2d-tiempo', shots, report)
             pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
             top(pg); check(pg, screen, 'modelo2d-diseno', shots, report)
         if tag == 'propio':

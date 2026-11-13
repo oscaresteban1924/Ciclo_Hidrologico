@@ -4,7 +4,7 @@
 // de cada creciente y el daño anual esperado. La pregunta: ¿qué tan seguro es el mapa y cuánto cuesta el agua?
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DockChoice, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
+import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene3D, useRetos, type PanelTab, type Reto } from '../quality/shell';
 import { DesignTab } from '../canals/design';
 import { FlatStage, Row, es } from '../canals/common';
 import { LiveHud } from '../canals/live';
@@ -31,6 +31,10 @@ const DEFAULT_RISK: RiskScene = { mode: 'ensamble', n: 12, sdN: 0.15, T: 100 };
 interface Ens {
   n: number;
   sdN: number;
+  /** Caudal pico y multiplicador del n de cada miembro. */
+  ms: { Qp: number; mult: number }[];
+  /** Barrio con agua de cada miembro (en el orden de las corridas). */
+  areas: number[];
   p: Float32Array;
   rs: RunResult[];
   town: number[];
@@ -99,7 +103,9 @@ export function RiesgoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     const p = probabilityMap(rs);
     const sc = cellAt(rs[0].geom, POIS.escuela.x, POIS.escuela.y);
     const zs = rs[0].geom.z[Math.floor(POIS.escuela.y) * NX + Math.floor(POIS.escuela.x)];
-    setEns({ n: ms.length, sdN: s.sdN, p, rs, town: rs.map((r) => summarize(r).townArea).sort((a, b) => a - b), school: rs.filter((r) => r.etaMax[sc] - zs > 0.1).length / rs.length });
+    const areas = rs.map((r) => summarize(r).townArea);
+    setEns({ n: ms.length, sdN: s.sdN, ms: ms.map((m) => ({ Qp: m.Qp, mult: m.mult })), areas, p, rs, town: [...areas].sort((a, b) => a - b), school: rs.filter((r) => r.etaMax[sc] - zs > 0.1).length / rs.length });
+    setMember(-1);
     setBusy(null);
   };
   const runDam = async () => {
@@ -110,22 +116,37 @@ export function RiesgoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     setDam(rs.map((r, k) => ({ T: EAD_PERIODS[k], d: damageOf(r), r })));
     setBusy(null);
   };
+  // recorrer los miembros del ensamble, de la menor a la mayor inundación del barrio
+  const [member, setMember] = useState(-1);
+  const [flip, setFlip] = useState(false);
+  const order = useMemo(() => (ens ? ens.areas.map((_, i) => i).sort((a, b) => ens.areas[a] - ens.areas[b]) : []), [ens]);
+  useEffect(() => {
+    if (!flip || !ens) return;
+    const id = window.setInterval(() => setMember((m) => (m + 1 >= ens.n ? 0 : m + 1)), 900);
+    return () => window.clearInterval(id);
+  }, [flip, ens]);
+  useEffect(() => {
+    if (s.mode !== 'ensamble') setFlip(false);
+  }, [s.mode]);
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, vex, ens, zones, r100, damT });
-  sync.current = { s, vex, ens, zones, r100, damT };
+  const sync = useRef({ s, vex, ens, zones, r100, damT, member, order });
+  sync.current = { s, vex, ens, zones, r100, damT, member, order };
   const toWorld = () => {
-    const { s: x, vex: v, ens: e, zones: z, r100: rr, damT: dt } = sync.current;
+    const { s: x, vex: v, ens: e, zones: z, r100: rr, damT: dt, member: mb, order: od } = sync.current;
+    const mi = e && mb >= 0 ? od[mb] : -1;
     const water =
       x.mode === 'ensamble'
         ? e
-          ? { res: e.rs[0], frame: null, layer: 'probabilidad' as const, values: e.p }
-          : waterOf(rr)
+          ? mi >= 0
+            ? { res: e.rs[mi], frame: null, layer: 'natural' as const }
+            : { res: e.rs[0], frame: null, layer: 'probabilidad' as const, values: e.p }
+          : waterOf(rr, 'natural')
         : x.mode === 'zonas'
           ? z && rr.res
             ? { res: rr.res, frame: null, layer: 'zonas' as const, zones: z }
             : waterOf(rr)
           : dt
-            ? { res: dt.r, frame: null, layer: 'profundidad' as const }
+            ? { res: dt.r, frame: null, layer: 'natural' as const }
             : null;
     world.current?.set(
       valleyState({
@@ -136,7 +157,9 @@ export function RiesgoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         damage: x.mode === 'danos' && dt ? Float32Array.from(dt.d.fracs) : null,
         water,
         labels:
-          x.mode === 'ensamble' && e
+          x.mode === 'ensamble' && e && mi >= 0
+            ? [PLACE.barrio(`Miembro ${mb + 1} de ${e.n}: ${es(e.areas[mi], 0)} m²`, `pico ${es(e.ms[mi].Qp, 0)} m³/s y n ×${es(e.ms[mi].mult, 2)}`, 'dato')]
+            : x.mode === 'ensamble' && e
             ? [PLACE.barrio(`Barrio: de ${es(e.town[0], 0)} a ${es(e.town[e.town.length - 1], 0)} m²`, `con agua en los ${e.n} miembros`, 'dato'), PLACE.escuela('La escuela', `se moja en ${es(e.school * 100, 0)} % de los miembros`, e.school > 0.3 ? 'alerta' : 'ok')]
             : x.mode === 'danos' && dt
               ? [PLACE.barrio(`${dt.d.wet} casas con agua`, `daño de ${es(dt.d.total, 0)} m² de vivienda (T = ${dt.T} años)`, dt.d.wet ? 'alerta' : 'ok')]
@@ -146,7 +169,7 @@ export function RiesgoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [s, vex, ens, zones, r100.res, r100.status, r100.live, damT]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, vex, ens, zones, r100.res, r100.status, r100.live, damT, member, order]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ s, ens, zoneHigh: zAreas ? zAreas[3] : 0, eadDone: !!eadV }), [s, ens, zAreas, eadV]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<RiskScene>) => setS((x) => ({ ...x, ...p }));
@@ -264,7 +287,34 @@ export function RiesgoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
               {ens ? 'Correr otro ensamble' : 'Correr el ensamble'}
             </button>
           </div>
-          {ens && <LayerLegend layer="probabilidad" />}
+          {ens && (
+            <>
+              <DockRange
+                label="Ver"
+                value={member}
+                min={-1}
+                max={ens.n - 1}
+                step={1}
+                show={member < 0 ? 'la probabilidad' : `el miembro ${member + 1} de ${ens.n}`}
+                onChange={(v) => {
+                  setFlip(false);
+                  setMember(v);
+                }}
+              />
+              <div className="hc-flood is-inline">
+                <button type="button" onClick={() => (flip ? setFlip(false) : (setMember((m) => (m < 0 ? 0 : m)), setFlip(true)))}>
+                  {flip ? 'Detener' : 'Pasar los miembros uno a uno'}
+                </button>
+                {member >= 0 && (
+                  <button type="button" onClick={() => (setFlip(false), setMember(-1))}>
+                    Volver a la probabilidad
+                  </button>
+                )}
+              </div>
+              <p className="q3-small">{member < 0 ? 'Los miembros van de la menor a la mayor inundación del barrio: pásalos para ver de dónde sale la probabilidad.' : `Miembro ${member + 1}: pico de ${es(ens.ms[order[member]].Qp, 0)} m³/s y n ×${es(ens.ms[order[member]].mult, 2)}; barrio con ${es(ens.areas[order[member]], 0)} m² de agua.`}</p>
+              <LayerLegend layer={member < 0 ? 'probabilidad' : 'natural'} />
+            </>
+          )}
         </>
       )}
       {s.mode === 'zonas' && <LayerLegend layer="zonas" />}

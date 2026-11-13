@@ -8,15 +8,15 @@ import { DockChoice, DockRange, MedalToast, Q3Layout, Question, RetosList, Scene
 import { DesignTab } from '../canals/design';
 import { FlatStage, es } from '../canals/common';
 import { LiveHud } from '../canals/live';
-import { GumbelChart, HydroChart, RainChart } from './charts';
+import { GumbelChart, HydroChart, LayerLegend, RainChart } from './charts';
 import { MODEL2D_TOOLS, ROOM } from './design';
 import { DEFAULT_RETURN, LIDAR_BURNED, SCEN_NAMES, returnRun, returnScene, type ReturnScene, type Summary } from './scene';
 import { AMS, AMS_FIT, PERIODS, gumbelK, hydroVolume, plotting, quantile, risk } from './hydrology';
 import { COVER_KEYS, COVERS, terrainFor } from './terrain';
 import { CN_SOURCE, CN_TABLE, hyetograph, scsQ, scsS, type Soil } from './solver';
 import { cachedSummary, useModelRun, useReference } from './runs';
-import { PLACE, RunBadge, VIEWS_BASE, VexChoice, sg, useBatch, valleyState, vexNote, waterOf } from './common';
-import { ValleyWorld } from './three/valleyWorld';
+import { FlowTools, PLACE, RunBadge, TimeBar, VIEWS_BASE, VexChoice, WaterChoice, sg, useBatch, usePlayback, valleyState, vexNote, waterOf } from './common';
+import { ValleyWorld, type ClickTool, type Layer } from './three/valleyWorld';
 
 interface Ctx {
   s: ReturnScene;
@@ -82,11 +82,17 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const prev = run.sum ? cachedSummary(returnRun({ ...s, T: prevT(s.T) })) : null;
   const fine = useMemo(() => terrainFor(LIDAR_BURNED).fine, []);
   const sum = run.sum;
+  const [layer, setLayer] = useState<Layer>('natural');
+  const [particles, setParticles] = useState(true);
+  const [tool, setTool] = useState<ClickTool>('sonda');
+  const [notice, setNotice] = useState('');
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, run, vex, sum, r });
-  sync.current = { s, run, vex, sum, r };
+  const play = usePlayback(run.status === 'listo' ? run.res : null, (f) => world.current?.setFrame(f));
+  const sync = useRef({ s, run, vex, sum, r, layer, particles, tool });
+  sync.current = { s, run, vex, sum, r, layer, particles, tool };
   const toWorld = () => {
-    const { s: x, run: rr, vex: v, sum: sm, r: rs } = sync.current;
+    const { s: x, run: rr, vex: v, sum: sm, r: rs, layer: ly, particles: pt, tool: tl } = sync.current;
+    if (world.current) world.current.onNotice = setNotice;
     world.current?.set(
       valleyState({
         vex: v,
@@ -95,7 +101,8 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         objects: 'si',
         bc: true,
         rain: x.scen !== 'creciente',
-        water: waterOf(rr),
+        water: waterOf(rr, ly, play.ref.current, { particles: pt }),
+        tool: tl,
         labels: [
           PLACE.entrada('Entrada: hidrograma de caudal', x.scen === 'lluvia' ? `caudal base de 4 m³/s` : `pico de ${es(rs.Q, 1)} m³/s (T = ${x.T} años)`),
           PLACE.salida('Salida: profundidad normal', `pendiente de fricción ${es(x.outSlope * 100, 2)} %`),
@@ -106,7 +113,7 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [run.res, run.status, run.live, vex, sum, r]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run.res, run.status, run.live, vex, sum, r, layer, particles, tool]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ s, sum, prev, flat, risk: r.risk }), [s, sum, prev, flat, r.risk]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<ReturnScene>) => setS((x) => ({ ...x, ...p }));
@@ -133,7 +140,7 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     <>
       {gl ? (
         <Scene3D
-          label={`Maqueta 3D del valle con las líneas de borde del modelo (azul la entrada, naranja la salida)${rainy ? ', la lluvia cayendo sobre la malla' : ''} y el agua máxima ${s.scen === 'lluvia' ? 'del aguacero' : `de la creciente de ${s.T} años`} coloreada por profundidad; ${vexNote(vex)}.`}
+          label={`Maqueta 3D del valle con las líneas de borde del modelo (azul la entrada, naranja la salida)${rainy ? ', la lluvia cayendo sobre la malla' : ''} y el agua ${s.scen === 'lluvia' ? 'del aguacero' : `de la creciente de ${s.T} años`} ${layer === 'natural' ? 'con su aspecto' : `coloreada por ${layer}`}${play.frame !== null ? ' en el instante que se reproduce' : ' (máximos)'}; ${vexNote(vex)}.`}
           viewNames={[...VIEWS_BASE, { id: 'entrada', label: 'La entrada' }]}
           make={(st) => new ValleyWorld(st)}
           onReady={(w) => {
@@ -157,7 +164,7 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       {rainy ? (
         <LiveHud
           head={[`${es(s.P, 0)} mm en ${s.D} min`, `suelo ${s.soil}`, sum ? `barrio ${es(sum.townArea, 0)} m²` : 'calculando']}
-          chart={<RainChart blocks={h.blocks} t={run.res?.series.t} excess={run.res?.series.excess} />}
+          chart={<RainChart blocks={h.blocks} t={run.res?.series.t} excess={run.res?.series.excess} now={play.t} onScrub={play.n > 1 ? play.seekMin : undefined} />}
           traces={[
             { key: 'p', label: 'Lluvia sobre el valle', unit: 'mil m³', value: vol ? (vol.rain + vol.infil) / 1000 : NaN, digits: 1 },
             { key: 'e', label: 'Escorrentía que entra al modelo', unit: 'mil m³', value: vol ? vol.rain / 1000 : NaN, digits: 1 },
@@ -167,7 +174,7 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       ) : (
         <LiveHud
           head={[`T = ${s.T} años`, `Q = ${es(r.Q, 1)} m³/s`, `riesgo ${es(r.risk * 100, 0)} % en ${s.life} años`]}
-          chart={<GumbelChart Q={AMS.map((a) => a.Q)} fit={AMS_FIT} T={s.T} />}
+          chart={play.frame !== null && run.res ? <HydroChart t={run.res.series.t} qin={run.res.series.qin} qBridge={run.res.series.qBridge} qout={run.res.series.qout} now={play.t} onScrub={play.seekMin} /> : <GumbelChart Q={AMS.map((a) => a.Q)} fit={AMS_FIT} T={s.T} />}
           traces={[
             { key: 'q', label: 'Caudal de diseño', unit: 'm³/s', value: r.Q, digits: 1 },
             { key: 'r', label: `Riesgo en ${s.life} años`, unit: '%', value: r.risk * 100, digits: 1 },
@@ -175,6 +182,7 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           ]}
         />
       )}
+      <TimeBar pb={play} res={run.status === 'listo' ? run.res : null} note={rainy ? 'La lluvia de la escena sigue el hietograma del instante que se ve.' : 'Mientras se reproduce, la gráfica muestra los hidrogramas.'} />
       <DockChoice label="Escenario" value={s.scen} options={(Object.keys(SCEN_NAMES) as ReturnScene['scen'][]).map((k) => ({ value: k, label: SCEN_NAMES[k] }))} onChange={(v) => set({ scen: v as ReturnScene['scen'] })} />
       {s.scen !== 'lluvia' && <DockChoice label="Periodo de retorno" value={String(s.T)} options={PERIODS.map((T) => ({ value: String(T), label: `${T} años` }))} onChange={(v) => set({ T: Number(v) })} />}
       {rainy && (
@@ -202,6 +210,9 @@ export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         options={[0.001, 0.005, 0.02].map((v) => ({ value: String(v), label: `${es(v * 100, 1)} %` }))}
         onChange={(v) => set({ egSlope: Number(v) })}
       />
+      <WaterChoice value={layer} onChange={setLayer} />
+      <LayerLegend layer={layer} maxT={run.res ? run.res.opts.duration : undefined} />
+      <FlowTools particles={particles} setParticles={setParticles} tool={tool} setTool={setTool} probeLabel="Solo mirar" notice={notice} />
       <VexChoice value={vex} onChange={setVex} />
     </>
   );

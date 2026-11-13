@@ -591,6 +591,8 @@ export interface LitHouse {
   h: number;
   rot: number;
   wall: string;
+  /** Color del techo (si no, uno de la lista). */
+  roof?: string;
 }
 
 /**
@@ -654,7 +656,7 @@ export class LitHouses {
       walls.setMatrixAt(i, M.compose(P.set(s.x, s.y - 0.4, s.z), Q, S.set(s.w, s.h + 0.4, s.d)));
       walls.setColorAt(i, C.set(s.wall));
       roofs.setMatrixAt(i, M.compose(P.set(s.x, s.y + s.h - 0.02, s.z), Q, S.set(s.w * 1.12, s.d * 0.62, s.d * 1.12)));
-      roofs.setColorAt(i, C.set(ROOFS[i % ROOFS.length]));
+      roofs.setColorAt(i, C.set(s.roof ?? ROOFS[i % ROOFS.length]));
     });
     walls.count = roofs.count = spots.length;
     for (const m of [walls, roofs]) {
