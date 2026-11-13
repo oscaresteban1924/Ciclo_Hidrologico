@@ -7,7 +7,8 @@ import { registerPlan } from '../canals/designPlans';
 import type { XY } from '../canals/plan';
 import type { ToolSet } from '../canals/design';
 import { AMS, fitGumbel, gumbelK, periodForRisk, periodOfY, plotting, quantile, reducedY, risk } from './hydrology';
-import { hydroQ } from './solver';
+import { hydroQ, scsQ, scsS, weirFlow } from './solver';
+import { damageFrac, ead, intensity, zoneOf, INTENSITY_NAMES, ZONE_NAMES } from './analysis';
 
 export const ROOM = 'Modelación hidráulica 2D';
 
@@ -478,6 +479,315 @@ registerPlan(calcSubgrid, (d) => {
   return { chart: { title: 'Curva cota-volumen de la celda', xLabel: 'nivel del agua (m)', yLabel: 'volumen (m³)', series: [{ name: 'subgrid', pts: es.map((e) => [e, z.reduce((s, q) => s + Math.max(0, e - q) * N(d.a), 0)] as XY) }, { name: 'celda plana', pts: es.map((e) => [e, Math.max(0, e - mean) * z.length * N(d.a)] as XY), dash: true }] } };
 });
 
+
+// ------------------------------------------------------------------ calibración y lluvia (herramientas extra)
+
+const DEF_MARKS = '1479,87 1479,74\n1479,53 1479,41\n1479,16 1479,05\n1478,72 1478,60\n1478,46 1478,33\n1478,03 1477,96';
+export function calcMarcas(v: Vals): Result {
+  const rows = lines(String(v.marcas ?? DEF_MARKS)).map(numbers).filter((r) => r.length >= 2);
+  if (rows.length < 2) return bad('Escribe al menos dos marcas: una línea por marca con la cota observada y la del modelo.');
+  const r = rows.map(([o, m]) => m - o);
+  const n = r.length, bias = r.reduce((a, b) => a + b, 0) / n, rmse = Math.sqrt(r.reduce((a, b) => a + b * b, 0) / n);
+  const mae = r.reduce((a, b) => a + Math.abs(b), 0) / n;
+  return {
+    outs: [
+      { label: 'Error medio cuadrático (RMSE)', value: `${f(rmse * 100, 1)} cm`, kid: true },
+      { label: 'Sesgo (modelo − marca)', value: `${bias >= 0 ? '+' : '−'}${f(Math.abs(bias) * 100, 1)} cm`, kid: true },
+      { label: 'Error absoluto medio', value: `${f(mae * 100, 1)} cm` },
+      { label: 'Marcas', value: f(n, 0) },
+    ],
+    steps: [
+      `Residuo de cada marca = cota del modelo − cota observada: ${r.map((x) => f(x * 100, 1)).join(', ')} cm.`,
+      `Sesgo = promedio de los residuos = ${f(bias * 100, 2)} cm: ${bias < 0 ? 'el modelo queda bajo (el n podría ser mayor)' : 'el modelo queda alto (el n podría ser menor)'}.`,
+      `RMSE = √(Σ residuo²/n) = ${f(rmse * 100, 2)} cm. Con marcas de agua levantadas después de una creciente, un RMSE del orden de su error de medida (5 a 15 cm) es un buen ajuste.`,
+    ],
+    checks: [
+      { name: 'Sesgo menor que 5 cm (criterio de esta sala)', ok: Math.abs(bias) < 0.05, value: `${f(bias * 100, 1)} cm` },
+      { name: 'RMSE menor que 15 cm (criterio de esta sala)', ok: rmse < 0.15, value: `${f(rmse * 100, 1)} cm` },
+    ],
+    kid: `El modelo se equivoca en promedio ${f(mae * 100, 0)} cm frente a las marcas.`,
+    data: { kind: 'marcas', pts: JSON.stringify(rows) },
+  };
+}
+
+export function calcSCS(v: Vals): Result {
+  const P = num(v.P, 80), CN = num(v.CN, 74);
+  if (!(P >= 0 && P <= 1000 && CN >= 30 && CN <= 100)) return bad('Revisa los datos: lluvia entre 0 y 1000 mm y número de curva entre 30 y 100.');
+  const S = scsS(CN), Ia = 0.2 * S, Q = scsQ(P, S);
+  return {
+    outs: [
+      { label: 'Escorrentía', value: `${f(Q, 1)} mm`, kid: true },
+      { label: 'Pérdidas (infiltración y retención)', value: `${f(P - Q, 1)} mm`, kid: true },
+      { label: 'Abstracción inicial Ia', value: `${f(Ia, 1)} mm` },
+      { label: 'Coeficiente de escorrentía', value: P > 0 ? f(Q / P, 2) : '—' },
+    ],
+    steps: [
+      `Retención potencial máxima: S = 25 400/CN − 254 = 25 400/${f(CN, 0)} − 254 = ${f(S, 1)} mm.`,
+      `Abstracción inicial: Ia = 0,2·S = ${f(Ia, 1)} mm (la lluvia que se queda antes de que empiece a escurrir).`,
+      P > Ia ? `Escorrentía: Q = (P − Ia)²/(P − Ia + S) = (${f(P, 1)} − ${f(Ia, 1)})²/(${f(P, 1)} − ${f(Ia, 1)} + ${f(S, 1)}) = ${f(Q, 2)} mm.` : `Como P ≤ Ia, no hay escorrentía: Q = 0.`,
+      'En la lluvia sobre la malla, cada celda aplica la fórmula a la lluvia acumulada con el CN de las coberturas de sus píxeles; lo que entra a la celda en cada paso es el aumento de la escorrentía acumulada.',
+    ],
+    checks: [{ name: 'Número de curva de una tabla (TR-55) para la cobertura y el suelo', ok: true, value: f(CN, 0) }],
+    kid: `De ${f(P, 0)} mm de lluvia escurren ${f(Q, 0)} mm.`,
+    data: { kind: 'scs', P, CN },
+  };
+}
+
+// ------------------------------------------------------------------ estructuras
+
+export function calcVertederoVia(v: Vals): Result {
+  const C = num(v.C, 1.66), L = num(v.L, 40), crest = num(v.crest, 1480.57), eu = num(v.eu, 1481.0), ed = num(v.ed, 1480.7);
+  if (!(C > 0.3 && C < 2.5 && L > 0 && Number.isFinite(crest) && Number.isFinite(eu) && Number.isFinite(ed))) return bad('Revisa los datos: coeficiente entre 0,3 y 2,5 (SI), longitud mayor que cero y cotas válidas.');
+  if (ed > eu) return bad('La cota de aguas abajo no puede ser mayor que la de aguas arriba (el agua iría al revés).');
+  const H = eu - crest, Hd = Math.max(0, ed - crest);
+  const free = weirFlow(eu, crest - 1, crest, C, L), q = weirFlow(eu, ed, crest, C, L);
+  const r = H > 0 ? Hd / H : 0;
+  return {
+    outs: [
+      { label: 'Caudal sobre la vía', value: `${f(q, 2)} m³/s`, kid: true },
+      { label: 'Carga sobre la corona', value: `${f(Math.max(0, H), 2)} m`, kid: true },
+      { label: 'Sumergencia Hd/Hu', value: H > 0 ? f(r, 2) : '—' },
+      { label: 'Caudal sin sumergencia', value: `${f(free, 2)} m³/s` },
+    ],
+    steps: [
+      H > 0 ? `Vertedero de cresta ancha: Q = C·L·H^1,5 = ${f(C, 2)}·${f(L, 1)}·${f(H, 3)}^1,5 = ${f(free, 3)} m³/s.` : 'El agua no llega a la corona: no hay flujo sobre la vía.',
+      H > 0 ? `Sumergencia (Villemonte): Q = Q_libre·(1 − (Hd/Hu)^1,5)^0,385 = ${f(free, 3)}·(1 − ${f(r, 3)}^1,5)^0,385 = ${f(q, 3)} m³/s.` : '—',
+      'Coeficientes típicos en unidades SI: 1,66 sobre los terraplenes de una vía y 1,44 sobre el tablero de un puente (HEC-RAS). Con una carga pequeña y aguas abajo alto, el vertedero se ahoga y pasa mucho menos.',
+    ],
+    checks: [{ name: 'Sumergencia menor que 0,98 (por encima HEC-RAS cambia de método)', ok: r < 0.98, value: H > 0 ? f(r, 2) : '—' }],
+    kid: H > 0 ? `Pasan ${f(q, 1)} m³/s por encima de la vía.` : 'El agua no pasa por encima de la vía.',
+    data: { kind: 'vertedero', C, L, crest, eu, ed },
+  };
+}
+
+export function prePresion(v: Vals): Result {
+  const b = num(v.b, 10), zf = num(v.zf, 1475.4), low = num(v.low, 1479.97), eu = num(v.eu, 1480.3), ed = num(v.ed, 1479.6), block = num(v.block, 0) / 100, Cd = num(v.Cd, 0.5), Co = num(v.Co, 0.8);
+  if (!(b > 0 && low > zf && block >= 0 && block < 1 && Cd > 0 && Cd <= 1 && Co > 0 && Co <= 1)) return bad('Revisa los datos: luz mayor que cero, tablero sobre el fondo, luz tapada entre 0 y 99 % y coeficientes entre 0 y 1.');
+  if (ed > eu) return bad('La cota de aguas abajo no puede ser mayor que la de aguas arriba.');
+  const A = b * (1 - block) * (low - zf);
+  let regime: string, Q: number;
+  if (eu <= low) {
+    regime = 'flujo libre bajo el tablero';
+    Q = NaN;
+  } else if (ed < low) {
+    regime = 'compuerta (el agua toca el tablero solo aguas arriba)';
+    Q = Cd * A * Math.sqrt(2 * 9.81 * Math.max(0, eu - Math.max(zf + (low - zf) / 2, ed)));
+  } else {
+    regime = 'orificio sumergido (el tablero bajo el agua a los dos lados)';
+    Q = Co * A * Math.sqrt(2 * 9.81 * Math.max(0, eu - ed));
+  }
+  return {
+    outs: [
+      { label: 'Tipo de flujo', value: regime, kid: true },
+      { label: 'Caudal por la luz', value: Number.isFinite(Q) ? `${f(Q, 1)} m³/s` : 'se calcula con las ecuaciones del cauce', kid: true },
+      { label: 'Área de la luz útil', value: `${f(A, 1)} m²` },
+      { label: 'Gálibo (de fondo a tablero)', value: `${f(low - zf, 2)} m` },
+    ],
+    steps: [
+      `Área útil de la luz: ancho × (1 − tapado) × altura = ${f(b, 1)}·${f(1 - block, 2)}·${f(low - zf, 2)} = ${f(A, 2)} m².`,
+      eu <= low ? 'El agua no toca el tablero: el puente es un estrechamiento del cauce con pérdidas de contracción y expansión.' : ed < low ? `Compuerta: Q = Cd·A·√(2g·(Hu − Z/2)) con Cd = ${f(Cd, 2)}, sobre el centro de la luz.` : `Orificio: Q = C·A·√(2g·ΔH) con C = ${f(Co, 2)} y ΔH = ${f(eu - ed, 2)} m.`,
+      'Con el agua sobre la rasante se suma el vertedero sobre el tablero y la vía. Troncos y basura atrapados en la luz la achican y suben el agua aguas arriba: hay que revisar el puente después de cada creciente.',
+    ],
+    checks: [
+      { name: 'El agua no toca el tablero (borde libre)', ok: eu <= low, value: `${f(low - eu, 2)} m` },
+      { name: 'Luz sin obstrucciones', ok: block === 0, value: `${f(block * 100, 0)} %` },
+    ],
+    kid: eu <= low ? 'El agua pasa por debajo del puente sin tocarlo.' : 'El agua empuja contra el puente: pasa a presión.',
+    data: { kind: 'presion', b: b * (1 - block), zf, low, ed, Cd, Co },
+  };
+}
+
+export function calcRoturaJarillon(v: Vals): Result {
+  const W = num(v.W, 30), Hb = num(v.Hb, 1.3), z = num(v.z, 1), tf = num(v.tf, 10), H = num(v.H, 0.4), C = num(v.C, 1.44);
+  if (!(W > 0 && Hb > 0 && z >= 0 && z <= 5 && tf > 0 && H >= 0 && C > 0)) return bad('Revisa los datos: ancho, altura y tiempo mayores que cero; talud entre 0 y 5; carga no negativa.');
+  const g = Math.max(W, Hb);
+  const Q = C * (W + z * H) * Math.pow(H, 1.5);
+  return {
+    outs: [
+      { label: 'Caudal por la rotura completa', value: `${f(Q, 1)} m³/s`, kid: true },
+      { label: 'Tiempo hasta llegar al fondo', value: `${f((Hb / g) * tf, 1)} min` },
+      { label: 'Ancho de arriba al final', value: `${f(W + 2 * z * Hb, 1)} m` },
+    ],
+    steps: [
+      `HEC-RAS abre la rotura como un cuadrado que crece hacia abajo y a los lados al mismo ritmo hasta llegar al fondo final (${f(Hb, 2)} m) y luego se ensancha hasta el ancho final (${f(W, 1)} m) en el tiempo de formación (${f(tf, 0)} min); los taludes (${f(z, 1)}H:1V) se mantienen.`,
+      `Con la rotura completa y el agua ${f(H, 2)} m sobre su fondo, como vertedero: Q ≈ C·(b + z·H)·H^1,5 = ${f(C, 2)}·(${f(W, 1)} + ${f(z, 1)}·${f(H, 2)})·${f(H, 2)}^1,5 = ${f(Q, 2)} m³/s.`,
+      'El ancho, el fondo y el tiempo de formación no salen del modelo hidráulico: se estiman con ecuaciones empíricas de roturas observadas o con modelos de erosión, y conviene probar varios.',
+    ],
+    checks: [{ name: 'Tiempo de formación probado con dos valores o más (sensibilidad)', ok: false, value: `${f(tf, 0)} min` }],
+    kid: `Por la rotura pasarían unos ${f(Q, 0)} m³/s.`,
+    data: { kind: 'rotura', W, Hb, z, tf },
+  };
+}
+
+// ------------------------------------------------------------------ incertidumbre, amenaza y daños
+
+const DEF_DAMAGE = '2 0\n10 0\n25 0\n50 23\n100 308\n500 1698';
+export function calcDAE(v: Vals): Result {
+  const rows = lines(String(v.tabla ?? DEF_DAMAGE)).map(numbers).filter((r) => r.length >= 2 && r[0] > 1 && r[1] >= 0);
+  if (rows.length < 2) return bad('Escribe al menos dos líneas con el periodo de retorno (mayor que 1) y el daño.');
+  const pts = rows.map(([T, D]) => ({ T, D }));
+  const e = ead(pts);
+  return {
+    outs: [
+      { label: 'Daño anual esperado', value: `${f(e.total, 2)} por año`, kid: true },
+      { label: 'Aporte de la cola (mayor que el último periodo)', value: f(e.parts[e.parts.length - 1].area, 2) },
+    ],
+    steps: [
+      'El daño anual esperado es el área bajo la curva daño–probabilidad de excedencia (P = 1/T): cada tramo entre dos periodos aporta el promedio de sus daños por la diferencia de probabilidades.',
+      ...e.parts.map((p) => (Number.isFinite(p.to) ? `De ${f(p.from, 0)} a ${f(p.to, 0)} años: ${f(p.area, 3)}` : `Más allá de ${f(p.from, 0)} años (se supone el mismo daño): ${f(p.area, 3)}`)),
+      'Las unidades son las del daño (aquí, metros cuadrados de vivienda equivalentes). Sirve para comparar alternativas: la obra que más reduce el daño anual esperado por cada peso invertido.',
+    ],
+    checks: [{ name: 'Periodos frecuentes y raros en la curva (de 2 a 500 años o más)', ok: Math.min(...pts.map((p) => p.T)) <= 2 && Math.max(...pts.map((p) => p.T)) >= 500, value: `${f(Math.min(...pts.map((p) => p.T)), 0)} a ${f(Math.max(...pts.map((p) => p.T)), 0)} años` }],
+    kid: `En promedio, cada año se perdería el equivalente a ${f(e.total, 1)}.`,
+    data: { kind: 'dae', pts: JSON.stringify(pts) },
+  };
+}
+
+export function preZonas(v: Vals): Result {
+  const h30 = num(v.h30, 0.3), v30 = num(v.v30, 0.4), h100 = num(v.h100, 0.8), v100 = num(v.v100, 0.6);
+  if (![h30, v30, h100, v100].every((x) => x >= 0 && x < 50)) return bad('Revisa los datos: profundidades y velocidades no negativas.');
+  const i30 = intensity(h30, v30, h30 * v30), i100 = intensity(h100, v100, h100 * v100);
+  const z = zoneOf(i30, i100);
+  return {
+    outs: [
+      { label: 'Zona del ejercicio', value: ZONE_NAMES[z], kid: true },
+      { label: 'Intensidad con 30 años', value: INTENSITY_NAMES[i30] },
+      { label: 'Intensidad con 100 años', value: INTENSITY_NAMES[i100] },
+    ],
+    steps: [
+      'Intensidad con la profundidad h, la velocidad v y su producto h·v (umbrales de un estudio de amenaza del corredor del río Cauca): baja si h ≤ 0,5 m, v ≤ 0,5 m/s y h·v ≤ 0,225 m²/s; alta si h > 1,0 m, v > 0,8 m/s o h·v > 0,45 m²/s; media entre ambas.',
+      `Con 30 años: h ${f(h30, 2)} m, v ${f(v30, 2)} m/s, h·v ${f(h30 * v30, 3)} → ${INTENSITY_NAMES[i30].toLowerCase()}. Con 100 años: h ${f(h100, 2)} m, v ${f(v100, 2)} m/s, h·v ${f(h100 * v100, 3)} → ${INTENSITY_NAMES[i100].toLowerCase()}.`,
+      'Matriz del ejercicio: la intensidad media o alta con la creciente frecuente, o alta con la rara, da amenaza alta; baja con la frecuente o media con la rara, amenaza media; baja con la rara, amenaza baja.',
+      'El Decreto 1077 de 2015 (que recoge el 1807 de 2014) pide zonificar la amenaza por inundación en alta, media y baja en los estudios básicos de los POT; los umbrales y la matriz los fija cada estudio. Este es un ejercicio, no una norma.',
+    ],
+    checks: [{ name: 'Zonificación con dos o más periodos de retorno', ok: true, value: '30 y 100 años' }],
+    kid: `Este punto queda en ${ZONE_NAMES[z].toLowerCase()} en el ejercicio.`,
+    data: { kind: 'zonas', h30, v30, h100, v100 },
+  };
+}
+
+export function calcErrorCaudal(v: Vals): Result {
+  const T = num(v.T, 100), n = num(v.n, 30), mean = num(v.media, 32.66), sd = num(v.desv, 14.97);
+  if (!(T > 1.01 && T <= 10000 && n >= 5 && n <= 500 && mean > 0 && sd > 0)) return bad('Revisa los datos: periodo mayor que 1, entre 5 y 500 años de registro, media y desviación mayores que cero.');
+  const K = gumbelK(T), Q = mean + K * sd;
+  const se = (sd / Math.sqrt(n)) * Math.sqrt(1 + 1.1396 * K + 1.1 * K * K);
+  return {
+    outs: [
+      { label: `Caudal de ${f(T, 0)} años`, value: `${f(Q, 1)} m³/s`, kid: true },
+      { label: 'Error estándar', value: `±${f(se, 1)} m³/s`, kid: true },
+      { label: 'Intervalo del 90 %', value: `${f(Q - 1.645 * se, 1)} a ${f(Q + 1.645 * se, 1)} m³/s` },
+    ],
+    steps: [
+      `Factor de frecuencia de Gumbel: K = ${f(K, 4)}; Q = media + K·desviación = ${f(mean, 2)} + ${f(K, 3)}·${f(sd, 2)} = ${f(Q, 2)} m³/s.`,
+      `Error estándar del cuantil ajustado por momentos: s/√n·√(1 + 1,1396·K + 1,1·K²) = ${f(sd, 2)}/√${f(n, 0)}·√(1 + 1,1396·${f(K, 3)} + 1,1·${f(K, 3)}²) = ${f(se, 2)} m³/s.`,
+      'Con pocos años de registro, el caudal de 100 años tiene una incertidumbre grande: un ensamble de corridas con caudales y n posibles da un mapa de probabilidad en vez de una sola mancha.',
+    ],
+    checks: [{ name: 'Registro de 30 años o más', ok: n >= 30, value: `${f(n, 0)} años` }],
+    kid: `El caudal de ${f(T, 0)} años está entre ${f(Q - 1.645 * se, 0)} y ${f(Q + 1.645 * se, 0)} m³/s con 90 % de confianza.`,
+    data: { kind: 'error', mean, sd, n },
+  };
+}
+
+// ------------------------------------------------------------------ tu terreno
+
+export function calcMallaPropia(v: Vals): Result {
+  const Lx = num(v.Lx, 360), Ly = num(v.Ly, 240), px = num(v.px, 2), c = num(v.c, 6), V = num(v.V, 2), h = num(v.h, 1.5);
+  if (!(Lx > 0 && Ly > 0 && px > 0 && c >= px && V > 0 && h > 0)) return bad('Revisa los datos: dimensiones, píxel y celda mayores que cero, con la celda igual o mayor que el píxel.');
+  const cells = Math.ceil(Lx / c) * Math.ceil(Ly / c), ppc = Math.round(c / px) ** 2;
+  const dtLI = (0.7 * c) / (V + Math.sqrt(9.81 * h)), dtDW = (2 * c) / V;
+  return {
+    outs: [
+      { label: 'Celdas', value: f(cells, 0), kid: true },
+      { label: 'Píxeles por celda (subgrid)', value: f(ppc, 0) },
+      { label: 'Paso de tiempo explícito (Courant 0,7)', value: `${f(dtLI, 2)} s`, kid: true },
+      { label: 'Paso de la onda difusiva (Courant 2)', value: `${f(dtDW, 1)} s` },
+    ],
+    steps: [
+      `Celdas: ⌈${f(Lx, 0)}/${f(c, 1)}⌉ × ⌈${f(Ly, 0)}/${f(c, 1)}⌉ = ${f(cells, 0)}; cada una con ${f(ppc, 0)} píxeles en sus tablas.`,
+      `Inercia local o aguas someras (explícitas): Δt = 0,7·Δx/(V + √(g·h)) = 0,7·${f(c, 1)}/(${f(V, 2)} + √(9,81·${f(h, 2)})) = ${f(dtLI, 3)} s.`,
+      `Onda difusiva (implícita) con Courant 2: Δt = 2·Δx/V = ${f(dtDW, 2)} s.`,
+      'En el navegador, conviene quedarse por debajo de unas 6000 celdas para que la corrida tome segundos.',
+    ],
+    checks: [
+      { name: 'Menos de 6000 celdas (para correr en el navegador)', ok: cells <= 6000, value: f(cells, 0) },
+      { name: 'Celda de 2 píxeles o más (para que el subgrid sirva)', ok: c / px >= 2, value: f(c / px, 1) },
+    ],
+    kid: `Tu malla tendría ${f(cells, 0)} celdas.`,
+    data: { kind: 'malla', c, V, h },
+  };
+}
+
+export function preTerrenoPropio(v: Vals): Result {
+  const px = num(v.px, 2), rmse = num(v.rmse, 0.15), W = num(v.W, 12), D = num(v.D, 1.8), src = String(v.src ?? 'mdt');
+  if (!(px > 0 && rmse >= 0 && W > 0 && D > 0)) return bad('Revisa los datos: píxel, ancho y profundidad mayores que cero; error no negativo.');
+  const checks = [
+    { name: 'Modelo del terreno (suelo desnudo), no de superficie', ok: src === 'mdt', value: src === 'mdt' ? 'MDT' : 'MDS' },
+    { name: 'Cuatro píxeles o más a lo ancho del cauce', ok: W / px >= 4, value: f(W / px, 1) },
+    { name: 'Error vertical menor que la décima parte de la profundidad del cauce', ok: rmse <= 0.1 * D, value: `${f(rmse, 2)} m` },
+    { name: 'Coordenadas planas en metros', ok: true, value: 'revise el sistema del archivo' },
+  ];
+  const ok = checks.filter((c) => c.ok).length;
+  return {
+    outs: [
+      { label: 'Puntos que cumplen', value: `${ok} de ${checks.length}`, kid: true },
+      { label: 'Píxeles a lo ancho del cauce', value: f(W / px, 1) },
+    ],
+    steps: [
+      'Un terreno para un modelo 2D se revisa antes de correr: que sea un MDT (sin techos ni copas), que el cauce quepa con varios píxeles y que el error vertical sea pequeño frente a las profundidades.',
+      'Si el sensor no atravesó el agua, el cauce bajo la lámina falta: hay que levantarlo e insertarlo (en HEC-RAS, con un terreno del cauce o el modificador de canal).',
+      'La sala solo corre un sector pequeño en el navegador: no hace falta descargar la ciudad para estudiar una quebrada.',
+    ],
+    checks,
+    kid: `Tu terreno cumple ${ok} de ${checks.length} puntos.`,
+    data: { kind: 'dem', ok },
+  };
+}
+
+registerPlan(calcMarcas, (d) => {
+  const rows = JSON.parse(String(d.pts)) as number[][];
+  const lo = Math.min(...rows.flat()) - 0.2, hi = Math.max(...rows.flat()) + 0.2;
+  return { chart: { title: 'Marcas observadas y modelo', xLabel: 'cota observada (m)', yLabel: 'cota del modelo (m)', series: [{ name: 'marcas', pts: rows.map(([o, m]) => [o, m] as XY), dots: true }, { name: 'ajuste perfecto', pts: [[lo, lo], [hi, hi]] as XY[], dash: true }] } };
+});
+registerPlan(calcSCS, (d) => {
+  const S = scsS(N(d.CN));
+  const ps = Array.from({ length: 41 }, (_, k) => (k / 40) * Math.max(100, N(d.P) * 1.5));
+  return { chart: { title: 'Escorrentía del número de curva', xLabel: 'lluvia acumulada (mm)', yLabel: 'escorrentía (mm)', series: [{ name: `CN ${f(N(d.CN), 0)}`, pts: ps.map((p) => [p, scsQ(p, S)] as XY) }, { name: 'todo escurre', pts: ps.map((p) => [p, p] as XY), dash: true }], mark: { at: [N(d.P), scsQ(N(d.P), S)] as XY, text: 'tu lluvia' } } };
+});
+registerPlan(calcVertederoVia, (d) => {
+  const crest = N(d.crest), eu = N(d.eu);
+  const eds = Array.from({ length: 31 }, (_, k) => crest - 0.3 + ((eu - crest + 0.3) * k) / 30);
+  return { chart: { title: 'Caudal sobre la vía según el nivel aguas abajo', xLabel: 'cota aguas abajo (m)', yLabel: 'caudal (m³/s)', series: [{ name: 'Villemonte', pts: eds.map((e) => [e, weirFlow(eu, e, crest, N(d.C), N(d.L))] as XY) }], mark: { at: [N(d.ed), weirFlow(eu, N(d.ed), crest, N(d.C), N(d.L))] as XY, text: 'tu caso' } } };
+});
+registerPlan(prePresion, (d) => {
+  const zf = N(d.zf), low = N(d.low), ed = N(d.ed), A = N(d.b) * (low - zf);
+  const eus = Array.from({ length: 31 }, (_, k) => low + (k / 30) * 1.5);
+  const q = (eu: number) => (ed < low ? N(d.Cd) * A * Math.sqrt(2 * 9.81 * Math.max(0, eu - Math.max(zf + (low - zf) / 2, ed))) : N(d.Co) * A * Math.sqrt(2 * 9.81 * Math.max(0, eu - ed)));
+  return { chart: { title: 'Caudal a presión según el nivel aguas arriba', xLabel: 'cota aguas arriba (m)', yLabel: 'caudal (m³/s)', series: [{ name: 'por la luz', pts: eus.map((e) => [e, q(e)] as XY) }] } };
+});
+registerPlan(calcRoturaJarillon, (d) => {
+  const W = N(d.W), Hb = N(d.Hb), tf = N(d.tf), g = Math.max(W, Hb);
+  const ts = Array.from({ length: 41 }, (_, k) => (k / 40) * tf);
+  return { chart: { title: 'Cómo se abre la rotura', xLabel: 'tiempo desde que empieza (min)', yLabel: 'metros', series: [{ name: 'ancho del fondo', pts: ts.map((t) => [t, Math.min(W, (t / tf) * g)] as XY) }, { name: 'profundidad', pts: ts.map((t) => [t, Math.min(Hb, (t / tf) * g)] as XY), dash: true }] } };
+});
+registerPlan(calcDAE, (d) => {
+  const pts = (JSON.parse(String(d.pts)) as { T: number; D: number }[]).sort((a, b) => b.T - a.T);
+  return { chart: { title: 'Daño según la probabilidad anual de excedencia', xLabel: 'probabilidad anual (%)', yLabel: 'daño', series: [{ name: 'daño', pts: [[0, pts[0].D] as XY, ...pts.map((p) => [100 / p.T, p.D] as XY)] }] } };
+});
+registerPlan(preZonas, (d) => {
+  const hs = Array.from({ length: 31 }, (_, k) => (k / 30) * 1.6);
+  return { chart: { title: 'Umbrales de intensidad (profundidad contra velocidad)', xLabel: 'profundidad (m)', yLabel: 'velocidad (m/s)', series: [{ name: 'baja / media', pts: hs.map((h) => [h, Math.min(0.5, h > 0 ? 0.225 / h : 9)] as XY).filter((p) => p[0] <= 0.5) }, { name: 'media / alta', pts: hs.map((h) => [h, Math.min(0.8, h > 0 ? 0.45 / h : 9)] as XY).filter((p) => p[0] <= 1), dash: true }, { name: 'tus puntos', pts: [[N(d.h30), N(d.v30)], [N(d.h100), N(d.v100)]] as XY[], dots: true }] } };
+});
+registerPlan(calcErrorCaudal, (d) => {
+  const Ts = [2, 5, 10, 25, 50, 100, 200, 500];
+  const q = (T: number, s: number) => N(d.mean) + gumbelK(T) * N(d.sd) + s * 1.645 * (N(d.sd) / Math.sqrt(N(d.n))) * Math.sqrt(1 + 1.1396 * gumbelK(T) + 1.1 * gumbelK(T) ** 2);
+  return { chart: { title: 'Caudal de diseño con su intervalo del 90 %', xLabel: 'variable reducida del periodo', yLabel: 'caudal (m³/s)', series: [{ name: 'Gumbel', pts: Ts.map((T) => [reducedY(T), q(T, 0)] as XY) }, { name: 'límite superior', pts: Ts.map((T) => [reducedY(T), q(T, 1)] as XY), dash: true }, { name: 'límite inferior', pts: Ts.map((T) => [reducedY(T), q(T, -1)] as XY), dash: true }] } };
+});
+registerPlan(calcMallaPropia, (d) => {
+  const cs = [1, 2, 4, 6, 8, 10, 15, 20, 30];
+  return { chart: { title: 'Paso de tiempo explícito según la celda', xLabel: 'celda (m)', yLabel: 'Δt (s)', series: [{ name: 'Courant 0,7', pts: cs.map((c) => [c, (0.7 * c) / (N(d.V) + Math.sqrt(9.81 * N(d.h)))] as XY) }], mark: { at: [N(d.c), (0.7 * N(d.c)) / (N(d.V) + Math.sqrt(9.81 * N(d.h)))] as XY, text: 'tu celda' } } };
+});
+void damageFrac;
+
 // ------------------------------------------------------------------ juegos de herramientas
 
 const NORM =
@@ -485,7 +795,7 @@ const NORM =
 
 const OPT = (o: Record<string, number>, names: Record<string, string>) => Object.keys(o).map((k) => ({ value: k, label: `${names[k]} (${f(o[k], k.startsWith('m') ? 2 : 4)})` }));
 
-export const MODEL2D_TOOLS: Record<'terreno' | 'cobertura' | 'retorno' | 'ecuaciones' | 'modelo', ToolSet> = {
+export const MODEL2D_TOOLS: Record<'terreno' | 'cobertura' | 'retorno' | 'ecuaciones' | 'estructuras' | 'riesgo' | 'modelo' | 'propio', ToolSet> = {
   terreno: {
     norm: NORM,
     calc: {
@@ -547,6 +857,16 @@ export const MODEL2D_TOOLS: Record<'terreno' | 'cobertura' | 'retorno' | 'ecuaci
       ],
       run: preCompuesto,
     },
+    extra: [
+      {
+        kind: 'calc',
+        title: 'Ajuste con marcas de agua',
+        intro: 'El error medio cuadrático y el sesgo del modelo frente a marcas de agua levantadas después de una creciente.',
+        kidIntro: '¿Qué tanto se equivoca el modelo?',
+        fields: [{ id: 'marcas', label: 'Cota observada y del modelo (m), una marca por línea', def: DEF_MARKS, text: true, kid: true }],
+        run: calcMarcas,
+      },
+    ],
   },
   retorno: {
     norm: NORM,
@@ -583,6 +903,17 @@ export const MODEL2D_TOOLS: Record<'terreno' | 'cobertura' | 'retorno' | 'ecuaci
           { id: 'dur', label: 'Duración de la simulación', unit: 'min', def: 120 },
         ],
         run: calcHidrograma,
+      },
+      {
+        kind: 'calc',
+        title: 'Escorrentía con el número de curva',
+        intro: 'La lámina de lluvia que escurre con el método del SCS (número de curva), la que usa la lluvia sobre la malla.',
+        kidIntro: '¿Cuánta lluvia corre por el suelo?',
+        fields: [
+          { id: 'P', label: 'Lluvia acumulada', unit: 'mm', def: 80, kid: true },
+          { id: 'CN', label: 'Número de curva', def: 74, kid: true },
+        ],
+        run: calcSCS,
       },
     ],
   },
@@ -629,6 +960,92 @@ export const MODEL2D_TOOLS: Record<'terreno' | 'cobertura' | 'retorno' | 'ecuaci
       },
     ],
   },
+  estructuras: {
+    norm: NORM,
+    calc: {
+      title: 'Vertedero sobre la vía',
+      intro: 'El caudal que pasa por encima del terraplén de una vía como vertedero de cresta ancha, con la reducción por sumergencia.',
+      kidIntro: '¿Cuánta agua pasa por encima de la vía?',
+      fields: [
+        { id: 'C', label: 'Coeficiente del vertedero (SI)', def: 1.66 },
+        { id: 'L', label: 'Longitud de vía que vierte', unit: 'm', def: 40, kid: true },
+        { id: 'crest', label: 'Cota de la corona', unit: 'm', def: 1480.57 },
+        { id: 'eu', label: 'Cota del agua aguas arriba', unit: 'm', def: 1481.0, kid: true },
+        { id: 'ed', label: 'Cota del agua aguas abajo', unit: 'm', def: 1480.7 },
+      ],
+      run: calcVertederoVia,
+    },
+    pre: {
+      title: 'El puente a presión',
+      intro: 'Tipo de flujo bajo el tablero (libre, compuerta u orificio) y su caudal, con la luz tapada por troncos y basura.',
+      kidIntro: '¿El agua pasa libre o empuja el puente?',
+      fields: [
+        { id: 'b', label: 'Ancho de la luz', unit: 'm', def: 10 },
+        { id: 'zf', label: 'Cota del fondo bajo el puente', unit: 'm', def: 1475.4 },
+        { id: 'low', label: 'Cota de la cara inferior del tablero', unit: 'm', def: 1479.97, kid: true },
+        { id: 'eu', label: 'Cota del agua aguas arriba', unit: 'm', def: 1480.3, kid: true },
+        { id: 'ed', label: 'Cota del agua aguas abajo', unit: 'm', def: 1479.6 },
+        { id: 'block', label: 'Luz tapada', unit: '%', def: 0 },
+        { id: 'Cd', label: 'Coeficiente de compuerta', def: 0.5 },
+        { id: 'Co', label: 'Coeficiente de orificio', def: 0.8 },
+      ],
+      run: prePresion,
+    },
+    extra: [
+      {
+        kind: 'calc',
+        title: 'Rotura del jarillón',
+        intro: 'Cómo se abre una rotura en HEC-RAS (ancho, fondo, taludes y tiempo de formación) y el caudal que pasa cuando está completa.',
+        kidIntro: '¿Cuánta agua entra por un hueco en el jarillón?',
+        fields: [
+          { id: 'W', label: 'Ancho final del fondo', unit: 'm', def: 30, kid: true },
+          { id: 'Hb', label: 'Altura de la rotura', unit: 'm', def: 1.3 },
+          { id: 'z', label: 'Taludes (H:1V)', def: 1 },
+          { id: 'tf', label: 'Tiempo de formación', unit: 'min', def: 10 },
+          { id: 'H', label: 'Agua sobre el fondo de la rotura', unit: 'm', def: 0.4, kid: true },
+          { id: 'C', label: 'Coeficiente del vertedero (SI)', def: 1.44 },
+        ],
+        run: calcRoturaJarillon,
+      },
+    ],
+  },
+  riesgo: {
+    norm: NORM,
+    calc: {
+      title: 'Daño anual esperado',
+      intro: 'El área bajo la curva daño–probabilidad con los daños de varios periodos de retorno (regla del trapecio y cola).',
+      kidIntro: '¿Cuánto se pierde en promedio cada año?',
+      fields: [{ id: 'tabla', label: 'Periodo de retorno (años) y daño, uno por línea', def: DEF_DAMAGE, text: true, kid: true }],
+      run: calcDAE,
+    },
+    pre: {
+      title: 'Zona de amenaza de un punto (ejercicio)',
+      intro: 'La intensidad con la profundidad, la velocidad y su producto para dos crecientes, y la zona con la matriz del ejercicio.',
+      kidIntro: '¿Qué tan peligroso es este punto?',
+      fields: [
+        { id: 'h30', label: 'Profundidad con 30 años', unit: 'm', def: 0.3, kid: true },
+        { id: 'v30', label: 'Velocidad con 30 años', unit: 'm/s', def: 0.4 },
+        { id: 'h100', label: 'Profundidad con 100 años', unit: 'm', def: 0.8, kid: true },
+        { id: 'v100', label: 'Velocidad con 100 años', unit: 'm/s', def: 0.6 },
+      ],
+      run: preZonas,
+    },
+    extra: [
+      {
+        kind: 'calc',
+        title: 'Incertidumbre del caudal de diseño',
+        intro: 'El error estándar del caudal de un periodo de retorno ajustado con Gumbel por momentos, y su intervalo del 90 %.',
+        kidIntro: '¿Qué tan seguro es el caudal de 100 años?',
+        fields: [
+          { id: 'T', label: 'Periodo de retorno', unit: 'años', def: 100, kid: true },
+          { id: 'n', label: 'Años de registro', def: 30, kid: true },
+          { id: 'media', label: 'Media de los máximos', unit: 'm³/s', def: 32.66 },
+          { id: 'desv', label: 'Desviación estándar', unit: 'm³/s', def: 14.97 },
+        ],
+        run: calcErrorCaudal,
+      },
+    ],
+  },
   modelo: {
     norm: NORM,
     calc: {
@@ -660,6 +1077,36 @@ export const MODEL2D_TOOLS: Record<'terreno' | 'cobertura' | 'retorno' | 'ecuaci
         { id: 'runs', label: 'Corridas de sensibilidad', def: 3, kid: true },
       ],
       run: preChequeo,
+    },
+  },
+  propio: {
+    norm: NORM,
+    calc: {
+      title: 'La malla de tu terreno',
+      intro: 'Celdas, píxeles por celda y pasos de tiempo de una malla sobre un terreno propio.',
+      kidIntro: '¿Cuántas celdas tendría tu terreno?',
+      fields: [
+        { id: 'Lx', label: 'Largo del terreno', unit: 'm', def: 360, kid: true },
+        { id: 'Ly', label: 'Ancho del terreno', unit: 'm', def: 240, kid: true },
+        { id: 'px', label: 'Píxel del terreno', unit: 'm', def: 2 },
+        { id: 'c', label: 'Tamaño de celda', unit: 'm', def: 6, kid: true },
+        { id: 'V', label: 'Velocidad esperada', unit: 'm/s', def: 2 },
+        { id: 'h', label: 'Profundidad esperada', unit: 'm', def: 1.5 },
+      ],
+      run: calcMallaPropia,
+    },
+    pre: {
+      title: 'Revisión del terreno',
+      intro: 'Antes de correr: tipo de modelo, píxeles a lo ancho del cauce y error vertical frente a la profundidad.',
+      kidIntro: '¿Sirve tu terreno para el modelo?',
+      fields: [
+        { id: 'src', label: 'Tipo de modelo', def: 'mdt', kid: true, options: [{ value: 'mdt', label: 'MDT (suelo)' }, { value: 'mds', label: 'MDS (con techos y copas)' }] },
+        { id: 'px', label: 'Píxel', unit: 'm', def: 2 },
+        { id: 'rmse', label: 'Error vertical (RMSE)', unit: 'm', def: 0.15 },
+        { id: 'W', label: 'Ancho del cauce', unit: 'm', def: 12, kid: true },
+        { id: 'D', label: 'Profundidad del cauce', unit: 'm', def: 1.8 },
+      ],
+      run: preTerrenoPropio,
     },
   },
 };

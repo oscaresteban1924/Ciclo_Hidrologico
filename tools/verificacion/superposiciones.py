@@ -254,9 +254,10 @@ def casa(pg, screen, shots, report):
 
 
 def modelo2d(pg, screen, shots, report):
-    """Sala de modelación 2D: las cinco partes, píxeles gruesos, el MDS, la malla gruesa, los pasos del modelo y Diseño."""
+    """Sala de modelación 2D: las ocho partes, píxeles gruesos, el MDS, la calibración, la lluvia, la malla gruesa,
+    la rotura del jarillón, la zonificación, los pasos del modelo, Diseño y el terreno de ejemplo."""
     mode(pg, 'Modelación hidráulica 2D'); pg.wait_for_timeout(4000)
-    parts = [('El terreno: MDT, MDS y el píxel', 'terreno'), ('Coberturas y n de Manning', 'cobertura'), ('Periodos de retorno y bordes', 'retorno'), ('La malla y las ecuaciones', 'ecuaciones'), ('HEC-RAS 2D paso a paso', 'modelo')]
+    parts = [('El terreno: MDT, MDS y el píxel', 'terreno'), ('Coberturas, n y calibración', 'cobertura'), ('Crecientes, lluvia y bordes', 'retorno'), ('La malla y las ecuaciones', 'ecuaciones'), ('El puente y la rotura del jarillón', 'estructuras'), ('Incertidumbre, zonificación y daños', 'riesgo'), ('HEC-RAS 2D paso a paso', 'modelo'), ('Tu terreno', 'propio')]
     for part, tag in parts:
         pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(4000)
         top(pg); check(pg, screen, f'modelo2d-{tag}', shots, report)
@@ -268,15 +269,30 @@ def modelo2d(pg, screen, shots, report):
         if tag == 'cobertura':
             pg.wait_for_timeout(6000)
             top(pg); check(pg, screen, 'modelo2d-cobertura-agua', shots, report)
+            pg.evaluate(BTN, 'Calibrar con marcas de agua'); pg.wait_for_timeout(9000)
+            top(pg); check(pg, screen, 'modelo2d-calibrar', shots, report)
+        if tag == 'retorno':
+            pg.evaluate(BTN, 'Lluvia sobre el valle'); pg.wait_for_timeout(9000)
+            top(pg); check(pg, screen, 'modelo2d-lluvia', shots, report)
         if tag == 'ecuaciones':
             pg.evaluate(BTN, '40 m'); pg.wait_for_timeout(5000)
             top(pg); check(pg, screen, 'modelo2d-celdas40', shots, report)
+        if tag == 'estructuras':
+            pg.evaluate(BTN, 'La rotura del jarillón'); pg.wait_for_timeout(12000)
+            top(pg); check(pg, screen, 'modelo2d-rotura', shots, report)
+        if tag == 'riesgo':
+            pg.evaluate(BTN, 'Zonificación de la amenaza'); pg.wait_for_timeout(12000)
+            top(pg); check(pg, screen, 'modelo2d-zonas', shots, report)
         if tag == 'modelo':
             for k in (3, 6, 7, 8):
                 pg.evaluate("(k) => { const b = document.querySelectorAll('.m2-steps button')[k]; if (b) b.click(); }", k); pg.wait_for_timeout(2500)
                 top(pg); check(pg, screen, f'modelo2d-paso{k + 1}', shots, report)
             pg.get_by_role('tab', name='Diseño', exact=True).first.click(); pg.wait_for_timeout(1000)
             top(pg); check(pg, screen, 'modelo2d-diseno', shots, report)
+        if tag == 'propio':
+            pg.evaluate(BTN, 'Usar el ejemplo'); pg.wait_for_timeout(4000)
+            pg.evaluate(BTN, 'Calcular'); pg.wait_for_timeout(9000)
+            top(pg); check(pg, screen, 'modelo2d-propio-ejemplo', shots, report)
 
 
 SIN_MEDELLIN = '--sin-medellin' in sys.argv

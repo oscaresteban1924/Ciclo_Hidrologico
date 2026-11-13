@@ -1,8 +1,8 @@
 // Escenas de la sala «Modelación hidráulica 2D»: lo que cada parte calcula con sus controles, el resumen de una
 // corrida del modelo (nivel en el puente, barrio inundado, la escuela, amenaza) y las corridas de referencia.
 
-import { COVER_KEYS, COVERS, LEVEE, NX, NY, POIS, ROAD, yc, bankZ, bridgeOpening, buildingsRaised, capacityAt, dn, leveeLoss, meanCapacity, sectionAt, terrainFor, truth, verticalError, type Cover, type TerrainOpts } from './terrain';
-import { normalN, type BuildingMode, type Eq, type MeshOpts, type Roughness, type RunOpts, type RunResult } from './solver';
+import { COVER_KEYS, COVERS, LEVEE, NX, NY, POIS, ROAD, yc, bankZ, bridgeOpening, buildingsRaised, capacityAt, dn, leveeHeight, leveeLoss, meanCapacity, sectionAt, terrainFor, truth, verticalError, type Cover, type TerrainOpts } from './terrain';
+import { BRIDGE_DEFAULT, LOW_CHORD as LOW_CHORD_DEFAULT, cellAt, normalN, type Refine, type Soil, type BuildingMode, type Eq, type MeshOpts, type Roughness, type RunOpts, type RunResult } from './solver';
 import { AMS_FIT, designHydro, quantile, risk } from './hydrology';
 
 // ------------------------------------------------------------------ parte 1: el terreno
@@ -148,7 +148,7 @@ export function summarize(r: RunResult): Summary {
   let townArea = 0;
   const townHazard = [0, 0, 0, 0, 0, 0, 0];
   for (const k of town) {
-    const ci = Math.floor(Math.floor(k / NX) / g.c) * g.MX + Math.floor((k % NX) / g.c);
+    const ci = g.pmap[k];
     const D = r.etaMax[ci] - g.z[k];
     if (D > 0.1) townArea++;
     if (D > 0.02) {
@@ -159,8 +159,8 @@ export function summarize(r: RunResult): Summary {
   let wet = 0;
   for (let j = 0; j < NY; j += 2)
     for (let i = 0; i < NX; i += 2) {
-      const ci = Math.floor(j / g.c) * g.MX + Math.floor(i / g.c);
-      if (r.etaMax[ci] - g.z[j * NX + i] > 0.05) wet += 4;
+      const ci = g.pmap[j * NX + i];
+      if (ci >= 0 && r.etaMax[ci] - g.z[j * NX + i] > 0.05) wet += 4;
     }
   let vmax = 0;
   for (let i = 0; i < g.NC; i++) vmax = Math.max(vmax, r.vMax[i]);
@@ -168,7 +168,7 @@ export function summarize(r: RunResult): Summary {
   const qin = Math.max(0, ...s.qin), qout = Math.max(0, ...s.qout);
   // nivel cerca de la salida (celda sobre el eje en x = 620)
   const xo = 620;
-  const co = Math.floor(Math.min(NY - 1, yc(xo)) / g.c) * g.MX + Math.floor(xo / g.c);
+  const co = cellAt(g, xo, Math.min(NY - 1, yc(xo)));
   return {
     ok: !r.unstable,
     wseBridge: s.wseBridge.length ? Math.max(...s.wseBridge) : NaN,
@@ -198,8 +198,11 @@ export interface CoverScene {
   nB: number;
   /** Colorear por cobertura o por n. */
   view: 'cobertura' | 'n';
+  /** Sensibilidad al n o calibración con marcas de agua (y el multiplicador que se calibra). */
+  mode: 'sensibilidad' | 'calibrar';
+  cal: number;
 }
-export const DEFAULT_COVER: CoverScene = { level: 'normal', mult: 1, buildings: 'n', nB: 0.2, view: 'cobertura' };
+export const DEFAULT_COVER: CoverScene = { level: 'normal', mult: 1, buildings: 'n', nB: 0.2, view: 'cobertura', mode: 'sensibilidad', cal: 1 };
 export const coverRun = (s: CoverScene) => baseRun({ rough: { n: nSet(s.level, s.nB), mult: s.mult, buildings: s.buildings } });
 export const coverBase = () => baseRun();
 
@@ -213,19 +216,41 @@ export interface ReturnScene {
   tp: number;
   outSlope: number;
   egSlope: number;
+  /** La creciente del río, la lluvia sobre el valle o las dos; lluvia total [mm], duración [min] y suelo. */
+  scen: 'creciente' | 'lluvia' | 'ambas';
+  P: number;
+  D: number;
+  soil: Soil;
 }
-export const DEFAULT_RETURN: ReturnScene = { T: 25, life: 50, tp: 30, outSlope: 0.005, egSlope: 0.005 };
-export const returnRun = (s: ReturnScene) => baseRun({ hydro: designHydro(s.T, s.tp), outSlope: s.outSlope, egSlope: s.egSlope, duration: Math.max(100, Math.round(s.tp * 3.4)) });
+export const DEFAULT_RETURN: ReturnScene = { T: 25, life: 50, tp: 30, outSlope: 0.005, egSlope: 0.005, scen: 'creciente', P: 80, D: 60, soil: 'C' };
+export const SCEN_NAMES: Record<ReturnScene['scen'], string> = { creciente: 'Creciente del río', lluvia: 'Lluvia sobre el valle', ambas: 'Las dos' };
+export function returnRun(s: ReturnScene): RunOpts {
+  const rain = s.scen !== 'creciente';
+  return baseRun({
+    hydro: s.scen === 'lluvia' ? { Qp: 4, tp: s.tp, Qb: 4 } : designHydro(s.T, s.tp),
+    outSlope: s.outSlope,
+    egSlope: s.egSlope,
+    duration: Math.max(100, Math.round(s.tp * 3.4), rain ? s.D + 60 : 0),
+    ...(rain ? { rain: { P: s.P, D: s.D, soil: s.soil } } : {}),
+  });
+}
 export function returnScene(s: ReturnScene) {
   return { Q: quantile(AMS_FIT, s.T), risk: risk(s.T, s.life), fit: AMS_FIT };
 }
 
 // ------------------------------------------------------------------ parte 4: malla y ecuaciones
 
+export type RefineChoice = 'no' | 'cauce10' | 'cauce5';
+export const REFINE_NAMES: Record<RefineChoice, string> = { no: 'Sin refinar', cauce10: 'Cauce y jarillón a 10 m', cauce5: 'Cauce a 5 m y jarillón a 10 m' };
+export const refineOf = (r: RefineChoice, c: number): Refine[] | undefined =>
+  r === 'cauce10' ? [{ region: 'cauce', c: Math.min(c, 10) }, { region: 'jarillon', c: Math.min(c, 10) }] : r === 'cauce5' ? [{ region: 'cauce', c: Math.min(c, 5) }, { region: 'jarillon', c: Math.min(c, 10) }] : undefined;
+
 export interface EqScene {
   c: number;
   subgrid: boolean;
   breaklines: boolean;
+  /** Regiones con celdas más pequeñas. */
+  refine: RefineChoice;
   eq: Eq;
   dtMode: 'fijo' | 'courant';
   dt: number;
@@ -235,10 +260,16 @@ export interface EqScene {
   cy: number;
   /** Nivel del agua en el inspector, sobre el punto más bajo de la celda [m]. */
   h: number;
+  /** Lo que muestra el agua y si van las partículas. */
+  layer: 'profundidad' | 'velocidad' | 'courant' | 'iteraciones';
+  particles: boolean;
 }
-export const DEFAULT_EQ: EqScene = { c: 20, subgrid: true, breaklines: true, eq: 'inercia', dtMode: 'courant', dt: 10, theta: 1, cx: 250, cy: 220, h: 1.5 };
-export const eqMesh = (s: EqScene): MeshOpts => ({ c: s.c, subgrid: s.subgrid, breaklines: s.breaklines });
-export const eqRun = (s: EqScene) => baseRun({ mesh: eqMesh(s), eq: s.eq, dtMode: s.dtMode, dt: s.dt, theta: s.theta, courantMax: s.eq === 'inercia' ? 0.7 : 2 });
+export const DEFAULT_EQ: EqScene = { c: 20, subgrid: true, breaklines: true, refine: 'no', eq: 'inercia', dtMode: 'courant', dt: 10, theta: 1, cx: 250, cy: 220, h: 1.5, layer: 'profundidad', particles: true };
+export const eqMesh = (s: Pick<EqScene, 'c' | 'subgrid' | 'breaklines'> & Partial<Pick<EqScene, 'refine'>>): MeshOpts => {
+  const refine = refineOf(s.refine ?? 'no', s.c);
+  return refine ? { c: s.c, subgrid: s.subgrid, breaklines: s.breaklines, refine } : { c: s.c, subgrid: s.subgrid, breaklines: s.breaklines };
+};
+export const eqRun = (s: EqScene) => baseRun({ mesh: eqMesh(s), eq: s.eq, dtMode: s.dtMode, dt: s.dt, theta: s.theta, courantMax: s.eq === 'difusiva' ? 2 : 0.7 });
 /** Referencia de la parte 4: celdas de 10 m con subgrid y líneas de quiebre. */
 export const eqReference = () => baseRun({ mesh: { c: 10, subgrid: true, breaklines: true } });
 
@@ -254,6 +285,7 @@ export interface ModelScene {
   buildings: BuildingMode;
   c: number;
   breaklines: boolean;
+  refine: RefineChoice;
   egSlope: number;
   outSlope: number;
   T: number;
@@ -267,7 +299,7 @@ export interface ModelScene {
   theta: number;
   tolWS: number;
   maxIter: number;
-  layer: 'profundidad' | 'velocidad' | 'cota' | 'amenaza' | 'llegada';
+  layer: 'profundidad' | 'velocidad' | 'cota' | 'amenaza' | 'llegada' | 'courant' | 'iteraciones';
 }
 export const DEFAULT_MODEL: ModelScene = {
   step: 0,
@@ -278,6 +310,7 @@ export const DEFAULT_MODEL: ModelScene = {
   buildings: 'n',
   c: 10,
   breaklines: true,
+  refine: 'no',
   egSlope: 0.005,
   outSlope: 0.005,
   T: 100,
@@ -301,7 +334,7 @@ export function modelTerrain(s: ModelScene): TerrainOpts {
 export function modelRun(s: ModelScene): RunOpts {
   return {
     terrain: modelTerrain(s),
-    mesh: { c: s.c, subgrid: true, breaklines: s.breaklines },
+    mesh: eqMesh({ c: s.c, subgrid: true, breaklines: s.breaklines, refine: s.refine }),
     rough: { n: nSet(s.level), mult: 1, buildings: s.buildings } as Roughness,
     eq: s.eq,
     dtMode: s.dtMode,
@@ -333,3 +366,47 @@ export const STEPS = [
 ] as const;
 
 export { POIS, ROAD, dn };
+
+// ------------------------------------------------------------------ parte: estructuras (el puente y la rotura)
+
+export interface StructScene {
+  kind: 'puente' | 'rotura';
+  T: number;
+  /** El puente: en el terreno (como lo ve el MDT) o como estructura; cara inferior del tablero y luz tapada. */
+  bridgeMode: 'terreno' | 'estructura';
+  low: number;
+  block: number;
+  /** La rotura: abscisa, ancho final, tiempo de formación y disparo (nivel sobre el pie o tiempo). */
+  bx: number;
+  width: number;
+  tForm: number;
+  trigger: 'nivel' | 'tiempo';
+  trigH: number;
+  tTrig: number;
+}
+export const DEFAULT_STRUCT: StructScene = { kind: 'puente', T: 100, bridgeMode: 'estructura', low: LOW_CHORD_DEFAULT, block: 0, bx: 300, width: 30, tForm: 10, trigger: 'nivel', trigH: 0.15, tTrig: 10 };
+export const BREACH_SITES = [150, 225, 300, 375];
+
+/** Pie (terreno natural) y corona del jarillón en una abscisa. */
+export function leveeAt(x: number): { toe: number; crest: number } {
+  const T = truth();
+  let toe = Infinity, crest = -Infinity;
+  const i = Math.max(0, Math.min(NX - 1, Math.floor(x)));
+  for (let j = 0; j < NY; j++) {
+    const k = j * NX + i;
+    const lev = leveeHeight(i + 0.5, j + 0.5);
+    if (lev > 0.01) toe = Math.min(toe, T.mdt[k] - lev);
+    if (T.ridge[k] === 1) crest = Math.max(crest, T.mdt[k]);
+  }
+  return { toe, crest };
+}
+
+const STRUCT_MESH: MeshOpts = { c: 10, subgrid: true, breaklines: true };
+export function structRun(s: StructScene): RunOpts {
+  const hydro = designHydro(s.T, 30);
+  if (s.kind === 'puente') return baseRun({ mesh: STRUCT_MESH, hydro, ...(s.bridgeMode === 'estructura' ? { bridge: { ...BRIDGE_DEFAULT, low: s.low, block: s.block } } : {}) });
+  const lv = leveeAt(s.bx);
+  return baseRun({ mesh: STRUCT_MESH, hydro, breach: { x: s.bx, width: s.width, bottom: 0, slope: 1, tForm: s.tForm, trigger: s.trigger, zTrigger: Math.round((lv.toe + s.trigH) * 100) / 100, tTrigger: s.tTrig } });
+}
+/** Corrida sin la estructura (el puente en el terreno) o sin la rotura, con la misma creciente. */
+export const structBase = (s: StructScene) => baseRun({ mesh: STRUCT_MESH, hydro: designHydro(s.T, 30) });

@@ -223,3 +223,55 @@
 .hc-tabs.n5 button {
   font-size: 0.82rem;
 }
+/* ocho partes: dos filas de cuatro */
+.hc-tabs.n8 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.hc-tabs.n8 button {
+  min-height: 50px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+@media (max-width: 420px) {
+  .hc-tabs.n8 button {
+    min-height: 46px;
+    font-size: 0.74rem;
+  }
+}
+/* «Tu terreno»: carga del archivo */
+.m2-drop {
+  max-width: 560px;
+  width: 100%;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  border: 2px dashed var(--line, #b9c9d3);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink-2);
+  text-align: center;
+}
+.m2-drop.is-over {
+  border-color: var(--water-deep, var(--water));
+  background: var(--water-wash);
+}
+.m2-file {
+  flex-wrap: wrap;
+}
+/* en el teléfono la pregunta va al pie de la escena: el estado de la corrida (y su botón) sube bajo los lugares */
+@media (max-width: 900px) {
+  .q3-view > .m2-badge {
+    position: absolute;
+    top: 56px;
+    left: 8px;
+    z-index: 4;
+    min-height: 0;
+    padding: 4px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 2px 8px rgba(20, 40, 60, 0.12);
+    font-size: 0.82rem;
+  }
+}

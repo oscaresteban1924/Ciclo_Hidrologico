@@ -888,6 +888,52 @@ El valle, la serie y las obras son ilustrativos y así se dice.
 - **Cálculo en la página.** Se da al menos la mitad del tiempo al cálculo aunque la escena tarde en dibujarse (equipos lentos).
 - **En todas las salas.** En los teléfonos, los instrumentos ponen la gráfica arriba y los medidores debajo en dos columnas; antes se apretaban en una fila y se cortaban los números. Con el cambio se repasó el teléfono en todas las salas menos Medellín: **87 de 87 estados** sin choques ni cortes.
 
+## 4 decquatricies. La sala «Modelación hidráulica 2D», ampliada (ejecutada)
+
+**Pedido.** Hacer todas las mejoras propuestas a la sala 2D: aguas someras completas, rotura del jarillón, lluvia sobre la malla con el número de curva, el puente como estructura, malla refinada, calibración con marcas de agua, ensamble de incertidumbre, sondas, líneas y perfil, mapas de diagnóstico, partículas, zonificación de ejemplo, curva de daño y daño anual esperado, paquete para HEC-RAS, terreno propio, cálculo en un hilo aparte y el agua avanzando mientras calcula.
+
+**La sala.** Pasa de cinco a ocho partes: Terreno; Coberturas, n y calibración; Crecientes, lluvia y bordes; La malla y las ecuaciones; Estructuras (nueva); Riesgo (nueva); HEC-RAS 2D paso a paso; Tu terreno (nueva). El motor se reescribió para mallas generales (árbol cuaternario balanceado, caras entre celdas de distinto tamaño, líneas de borde en cualquier lado) y suma las aguas someras completas, el puente, la rotura progresiva y la lluvia. Modelo en `docs/modelo2d/MODELO_2D.md`.
+
+**Confirmado en fuentes.**
+- La advección que conserva la cantidad de movimiento (Stelling y Duinmeijer, 2003) y la inercia local (Bates y otros, 2010).
+- La sumersión de vertederos de Villemonte (1947).
+- Los números de curva del TR-55 (USDA) y la abstracción inicial 0,2·S.
+- La forma de las curvas profundidad-daño del JRC para Suramérica (Huizinga y otros, 2017).
+- Los umbrales de intensidad de un estudio de amenaza del corredor del río Cauca (CVC), usados como ejemplo y así dichos.
+- El error estándar del cuantil de Gumbel por momentos (Kite).
+
+Las marcas de agua, los valores de las viviendas y la zonificación son de ejercicio, y el paquete para HEC-RAS lleva coordenadas inventadas; así se dice en la sala y en el LEAME del paquete.
+
+**Comprobado.**
+- Pruebas de la sala: 28 de 28 (`npm run test:model2d`, en 66 s).
+  - Malla refinada de 949 celdas: el puente a 1 mm de la malla de 10 m (2560 celdas).
+  - Rotura de presa en 2D contra Ritter: aguas someras 3,5 %, inercia local 32,5 %.
+  - Lluvia: la escorrentía del número de curva es exacta y el volumen se conserva con los dos esquemas.
+  - Rotura del jarillón: empieza a los 24,9 min y se completa a los 34,9 min; el volumen se conserva al cambiar el terreno.
+  - Puente: el vertedero libre y sumergido es exacto; con el tablero bajo y la luz tapada pasa a presión sin inestabilidad.
+  - Calibración: recupera ×1,16 (escondido ×1,18) con un RMSE de 1,7 cm en 10 corridas.
+  - GeoTIFF, shapefile y ZIP: se leen con geotiff.js, el CRC-32 de control es el esperado y el paquete trae sus 26 archivos; los archivos descargados se abrieron también con Python (zipfile, tifffile y pyshp).
+  - Un terreno propio: con 20 m³/s constantes, a la hora sale lo mismo que entra (20,00 m³/s).
+- Pruebas de las trece salas: 230 de 230 (ciudad 64, calidad 26, canales 33, cuencas 12, acueducto 12, aguas subterráneas 9, presas 8, laderas 9, bombas 11, medición 10, casa 8, modelación 2D 28).
+- En el navegador (Chrome, dibujo por software):
+  - El cálculo corre en el hilo aparte en el servidor de desarrollo y en el archivo único abierto sin servidor; el agua avanza en la escena mientras calcula.
+  - El ensamble de 12 miembros tarda 27 s; la zonificación y los daños dan las mismas cifras que las pruebas.
+  - Las descargas (paquete para HEC-RAS, resultados, terreno de ejemplo) llegan completas y se abren.
+  - Un GeoTIFF propio comprimido con deflate y georreferenciado en EPSG:9377 se lee en el archivo único y se corre.
+  - En ningún panel aparece NaN, «undefined» ni «Infinity».
+- Superposiciones de la sala (`superposiciones.py`, función `modelo2d`): **88 de 88 estados** en las cuatro pantallas (22 en cada una), sin choques, cortes ni errores en la consola. Incluyen la calibración, la lluvia, la rotura, la zonificación y el terreno de ejemplo corrido. En el portátil, el último estado se repitió aparte porque la pasada se detuvo por tiempo.
+
+**Ajustes durante la verificación.**
+- El ensamble y los experimentos no arrancaban en el modo estricto de React: la marca de «parte abierta» quedaba apagada tras el doble montaje. Ahora se enciende al montar.
+- El hilo de cálculo se descartaba si tardaba en responder mientras la página armaba la escena: ahora se prueba apenas carga la sala y, si responde tarde, las corridas siguientes ya van a él.
+- La calibración mostraba por un instante el error de la corrida anterior con el multiplicador nuevo: el ajuste solo se calcula con la corrida del multiplicador elegido.
+- El caudal de salida de las series daba un salto en el último dato (un último paso diminuto): ahora el último tramo se reparte en dos pasos y el caudal de salida es el medio de cada intervalo.
+- La sonda dibujaba la cota de una celda seca por debajo del suelo: ahora se dibuja sobre el suelo y la pregunta dice que quedó en seco.
+- Las gráficas con leyenda la montaban sobre el rótulo del eje y los puntos de los extremos quedaban cortados: la leyenda tiene su franja y los puntos, un margen.
+- En el teléfono, la pregunta tapaba el botón «Calcular»: el estado de la corrida sube bajo los lugares para mirar.
+- Los medidores mostraban 0 antes de calcular: ahora muestran «—».
+- En «Tu terreno», la entrada propuesta se ponía en el lado más alto (a veces una ladera): ahora va en el lado opuesto a la salida, centrada en su punto más bajo.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):
@@ -975,4 +1021,8 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
   - Las casas son sólidas en el cálculo (el agua no entra) y no hay modelo estructural: «expuesta a daño estructural» es la lectura de la clase H5 o H6, no un cálculo de la estructura.
   - La trayectoria de los vehículos y el material flotante son ilustrativos; el criterio que mueve un vehículo (H2) sí es calculado.
 - **Calibración** de los parámetros de cobertura con datos locales.
+- **Modelación 2D.**
+  - No se comparó con corridas de HEC-RAS sobre el mismo terreno; el paquete descargado permite hacerlo.
+  - De los formatos de GeoTIFF se probaron el sin comprimir y el comprimido con deflate; los decodificadores LZW, PackBits y JPEG van incluidos pero no se probaron con archivos reales.
+  - El puente usa coeficientes de manual sin calibrar; la rotura del jarillón es geométrica (no calcula la erosión del material).
 - **Manual de Drenaje para Carreteras del INVÍAS** (alcantarillas bajo vías, puentes, cunetas): no incluido en «Hidráulica de canales» porque su PDF oficial no se pudo leer desde el entorno de trabajo.

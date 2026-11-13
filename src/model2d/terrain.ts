@@ -118,6 +118,9 @@ function channelCut(d: number): number {
   return DC * t;
 }
 
+/** Altura del jarillón sobre el terreno natural en el punto (x, y) [m] (0 fuera de él). */
+export const leveeHeight = (x: number, y: number) => leveeH(x, dn(x, y));
+
 function leveeH(x: number, d: number): number {
   if (d <= 0) return 0;
   const taper = smooth(LEVEE.x0, LEVEE.x0 + 30, x) * (1 - smooth(LEVEE.x1 - 6, LEVEE.x1, x));
@@ -192,6 +195,9 @@ export interface Truth {
   crowns: Crown[];
   /** Cota de la corona del jarillón por columna (NaN fuera de él). */
   leveeCrest: Float32Array;
+  /** 1 donde está el terraplén de la vía y la cota del suelo sin él (para modelarla como estructura). */
+  road: Uint8Array;
+  bare: Float32Array;
 }
 
 let TRUTH: Truth | null = null;
@@ -201,6 +207,7 @@ export function truth(): Truth {
   if (TRUTH) return TRUTH;
   const N = NX * NY;
   const mdt = new Float32Array(N), mds = new Float32Array(N), cover = new Uint8Array(N), ridge = new Uint8Array(N), dist = new Float32Array(N);
+  const road = new Uint8Array(N), bare = new Float32Array(N);
   const leveeCrest = new Float32Array(NX).fill(NaN);
   const { list, streets } = makeBuildings();
   const C = (c: Cover) => COVER_KEYS.indexOf(c);
@@ -226,6 +233,8 @@ export function truth(): Truth {
         const keep = smooth(ROAD.open, ROAD.open + 4, open);
         const zr = z + (rz - z) * keep;
         if (zr > z + 0.02) {
+          bare[k] = z;
+          road[k] = 1;
           z = zr;
           onRoad = true;
           if (Math.abs(x - ROAD.x) <= ROAD.half && keep > 0.98) ridge[k] = 2;
@@ -298,7 +307,7 @@ export function truth(): Truth {
       const k = j * NX + i;
       if (Math.abs(dist[k]) <= ROAD.open + 2) mds[k] = Math.max(mds[k], ROAD_Z);
     }
-  TRUTH = { mdt, mds, cover, ridge, dist, buildings: list, streets, crowns, leveeCrest };
+  TRUTH = { mdt, mds, cover, ridge, dist, buildings: list, streets, crowns, leveeCrest, road, bare };
   return TRUTH;
 }
 

@@ -8,7 +8,7 @@ import { yc, type Raster } from './terrain';
 import { cellVolume, faceProps, type Geometry } from './solver';
 import { periodOfY, quantile, reducedY, plotting, type GumbelFit } from './hydrology';
 import { HAZARD_TEXT } from './scene';
-import { LAYER_RAMPS } from './three/valleyWorld';
+import { LAYER_RAMPS, type Layer } from './three/valleyWorld';
 
 export type XY = [number, number];
 export interface Series {
@@ -79,7 +79,14 @@ export function XYChart({
     y0 -= pad;
     y1 += pad;
   }
-  const L = 46, R = 12, T = 26, B = 30;
+  // con puntos, un margen a los lados para que los extremos no queden sobre los bordes del eje
+  if (!xRange && series.some((q) => q.dots)) {
+    const pad = (x1 - x0) * 0.04;
+    x0 -= pad;
+    x1 += pad;
+  }
+  // con leyenda, la leyenda va en su propia franja bajo el rótulo del eje y (antes se montaban)
+  const L = 46, R = 12, T = series.length > 1 ? 36 : 26, B = 30;
   const X = (v: number) => L + ((v - x0) / (x1 - x0)) * (W - L - R);
   const Y = (v: number) => H - B - ((v - y0) / (y1 - y0)) * (H - T - B);
   const path = (pts: XY[]) => pts.filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y)).map(([x, y], k) => `${k ? 'L' : 'M'}${X(x).toFixed(1)},${Y(Math.max(y0, Math.min(y1, y))).toFixed(1)}`).join('');
@@ -114,13 +121,7 @@ export function XYChart({
           <line key={v.text} x1={X(v.x)} x2={X(v.x)} y1={T} y2={H - B} stroke={ink.strong} strokeWidth="1.2" />
         ))}
         {series.map((s) =>
-          s.dots ? (
-            <g key={s.name}>
-              {s.pts.map(([x, y], k) => (
-                <circle key={k} cx={X(x)} cy={Y(y)} r="3.6" fill={s.color} stroke="#fff" strokeWidth="1.4" />
-              ))}
-            </g>
-          ) : (
+          s.dots ? null : (
             <g key={s.name}>
               {s.area && s.pts.length > 1 && <path d={`${path(s.pts)}L${X(s.pts[s.pts.length - 1][0])},${H - B}L${X(s.pts[0][0])},${H - B}Z`} fill={s.color} fillOpacity="0.14" />}
               <path d={path(s.pts)} fill="none" stroke={s.color} strokeWidth={s.width ?? 2} strokeDasharray={s.dash ? '5 4' : undefined} strokeLinejoin="round" />
@@ -128,6 +129,18 @@ export function XYChart({
           ),
         )}
       </g>
+      {/* los puntos van fuera del recorte: uno en el borde del eje se ve entero */}
+      {series.map((s) =>
+        s.dots ? (
+          <g key={`d${s.name}`}>
+            {s.pts
+              .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y))
+              .map(([x, y], k) => (
+                <circle key={k} cx={X(x)} cy={Y(y)} r="3.6" fill={s.color} stroke="#fff" strokeWidth="1.4" />
+              ))}
+          </g>
+        ) : null,
+      )}
       {hlines.map((h) => (
         <text key={`t${h.text}`} x={W - R - 4} y={Y(h.y) - 4} textAnchor="end" className="hc-hud-t" fill={ink.mid}>
           {h.text}
@@ -145,7 +158,7 @@ export function XYChart({
         {xLabel}
       </text>
       {series.length > 1 && (
-        <g transform={`translate(${L + 8} 16)`}>
+        <g transform={`translate(${L + 8} 29)`}>
           {series.map((s, k) => {
             const off = series.slice(0, k).reduce((a, q) => a + 26 + q.name.length * 5.2, 0);
             return (
@@ -315,11 +328,12 @@ export function HydroChart({ t, qin, qBridge, qout, now, W = 560, H = 200, cls }
   const s = (arr: number[]) => t.map((v, i) => [v / 60, arr[i]] as XY);
   return (
     <XYChart
+      // sin puente (un terreno propio) la serie no existe y tampoco su rótulo
       series={[
         { name: 'entra', pts: s(qin), color: SER.ref, dash: true, width: 1.6 },
         { name: 'bajo el puente', pts: s(qBridge), color: SER.a },
         { name: 'sale', pts: s(qout), color: SER.b },
-      ]}
+      ].filter((q) => q.pts.some(([, y]) => Number.isFinite(y)))}
       W={W}
       H={H}
       cls={cls}
@@ -327,7 +341,7 @@ export function HydroChart({ t, qin, qBridge, qout, now, W = 560, H = 200, cls }
       yLabel="caudal (m³/s)"
       yFmt={(v) => es(v, 0)}
       vlines={now !== undefined && now !== null ? [{ x: now / 60, text: `${es(now / 60, 0)} min` }] : []}
-      label="Hidrogramas de entrada, bajo el puente y de salida."
+      label={qBridge.some(Number.isFinite) ? 'Hidrogramas de entrada, bajo el puente y de salida.' : 'Hidrogramas de entrada y de salida.'}
     />
   );
 }
@@ -372,26 +386,59 @@ export function HazardBars({ areas }: { areas: number[] }) {
 }
 
 /** Leyenda de la capa de resultados. */
-export function LayerLegend({ layer, maxT }: { layer: 'profundidad' | 'velocidad' | 'cota' | 'amenaza' | 'llegada'; maxT?: number }) {
-  if (layer === 'amenaza')
+export function LayerLegend({ layer, maxT, eq }: { layer: Layer; maxT?: number; eq?: string }) {
+  if (layer === 'amenaza' || layer === 'zonas') {
+    const list = layer === 'amenaza' ? LAYER_RAMPS.hazard.slice(1).map((c, k) => [c, `H${k + 1}`]) : LAYER_RAMPS.zones.slice(1).map((c, k) => [c, ['Baja', 'Media', 'Alta'][k]]);
     return (
       <div className="m2-legend">
-        {LAYER_RAMPS.hazard.slice(1).map((c, k) => (
-          <span key={k}>
-            <i style={{ background: c }} />H{k + 1}
+        {list.map(([c, t]) => (
+          <span key={t}>
+            <i style={{ background: c }} />
+            {t}
           </span>
         ))}
       </div>
     );
-  const map = { profundidad: [LAYER_RAMPS.depth, '0', '2,5 m o más'], velocidad: [LAYER_RAMPS.vel, '0', '3 m/s o más'], cota: [LAYER_RAMPS.wse, 'más baja', 'más alta'], llegada: [LAYER_RAMPS.arrival, '0 min', `${es(maxT ?? 100, 0)} min`] } as const;
+  }
+  const map: Record<Exclude<Layer, 'amenaza' | 'zonas'>, [readonly string[], string, string]> = {
+    profundidad: [LAYER_RAMPS.depth, '0', '2,5 m o más'],
+    velocidad: [LAYER_RAMPS.vel, '0', '3 m/s o más'],
+    cota: [LAYER_RAMPS.wse, 'más baja', 'más alta'],
+    llegada: [LAYER_RAMPS.arrival, '0 min', `${es(maxT ?? 100, 0)} min`],
+    courant: [LAYER_RAMPS.courant, '0', eq === 'difusiva' ? '5 o más' : '1,25 o más'],
+    iteraciones: [LAYER_RAMPS.error, '0', '4 veces la tolerancia'],
+    probabilidad: [LAYER_RAMPS.prob, '0 %', '100 %'],
+  };
   const [stops, a, b] = map[layer];
   return (
     <div className="m2-legend is-ramp">
       <span>{a}</span>
-      <i style={{ background: `linear-gradient(90deg, ${(stops as readonly string[]).join(',')})` }} />
+      <i style={{ background: `linear-gradient(90deg, ${stops.join(',')})` }} />
       <span>{b}</span>
     </div>
   );
+}
+
+/** Lluvia y escorrentía acumuladas [mm] y el hietograma en bloques. */
+export function RainChart({ blocks, t, rain, excess, W = 560, H = 190, cls }: { blocks: number[]; t?: number[]; rain?: number[]; excess?: number[]; W?: number; H?: number; cls?: string }) {
+  const cum: XY[] = [[0, 0]];
+  blocks.forEach((b, k) => cum.push([(k + 1) * 5, cum[k][1] + b]));
+  const series: Series[] = [{ name: 'lluvia acumulada', pts: cum, color: SER.a, width: 2 }];
+  if (t && excess && excess.length) series.push({ name: 'escorrentía (modelo)', pts: t.map((x, k) => [x / 60, excess[k]] as XY).filter(([x]) => x >= 0), color: SER.b, width: 2.4 });
+  void rain;
+  return <XYChart series={series} W={W} H={H} cls={cls} xLabel="tiempo (min)" yLabel="mm" label="Lluvia acumulada del hietograma de bloques alternos y la escorrentía que entra al modelo con el número de curva." />;
+}
+
+/** Perfil longitudinal por el eje del cauce: fondo, orillas, corona del jarillón y agua máxima. */
+export function ProfileChart({ x, bed, bank, wse, crest, other, W = 560, H = 200, cls }: { x: number[]; bed: number[]; bank: number[]; wse: number[]; crest?: (number | null)[]; other?: { name: string; wse: number[] }; W?: number; H?: number; cls?: string }) {
+  const series: Series[] = [
+    { name: 'agua máxima', pts: x.map((v, k) => [v, wse[k]] as XY), color: SER.a, width: 2.4 },
+    { name: 'orilla', pts: x.map((v, k) => [v, bank[k]] as XY), color: SER.soft, dash: true },
+    { name: 'fondo', pts: x.map((v, k) => [v, bed[k]] as XY), color: SER.ref },
+  ];
+  if (crest) series.splice(1, 0, { name: 'corona del jarillón', pts: x.map((v, k) => [v, crest[k] ?? NaN] as XY).filter(([, y]) => Number.isFinite(y)), color: SER.b, dash: true });
+  if (other) series.splice(1, 0, { name: other.name, pts: x.map((v, k) => [v, other.wse[k]] as XY), color: SER.c, width: 2 });
+  return <XYChart series={series} W={W} H={H} cls={cls} xLabel="abscisa por el valle (m)" yLabel="cota (m)" yFmt={(v) => es(v, 1)} label="Perfil longitudinal por el eje del cauce: fondo, orillas, corona del jarillón y la cota máxima del agua." />;
 }
 
 export function rasterNote(r: Raster): string {
