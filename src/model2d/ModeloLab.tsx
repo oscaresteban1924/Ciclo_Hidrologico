@@ -101,7 +101,7 @@ function profile(r: RunResult) {
 
 export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<ModelScene>(DEFAULT_MODEL);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [tool, setTool] = useState<ClickTool>('sonda');
   const [notice, setNotice] = useState('');

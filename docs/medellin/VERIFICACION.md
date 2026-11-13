@@ -967,6 +967,36 @@ Las marcas de agua, los valores de las viviendas y la zonificación son de ejerc
 - La tinta soltada sobre suelo seco no se movía y no se veía: ahora la escena avisa que se toque el agua, y cada gota se ve desde que se suelta.
 - La espuma de la orilla salpicaba toda la llanura con agua poco profunda: ahora queda en la lámina de menos de 4 cm.
 
+## 4 duodecquatricies. La sala 2D: la maqueta, el suelo, las casas y el agua (ejecutada)
+
+**Pedido.** Que la sala «Modelación hidráulica 2D» se vea sustancialmente más bonita y robusta (alcance: las ocho partes de la sala).
+
+**Qué cambió.** Documentado en `docs/modelo2d/MODELO_2D.md`, sección 9 («La maqueta» y «El agua»); el acabado está en `src/model2d/three/valleyLook.ts`.
+
+- **Suelo por cobertura:** sombreador con el dibujo de cada cobertura en metros del plano (potreros, lotes de cultivo con hileras y orientación propia, rastrojo moteado, grava del cauce, patios), bordes irregulares entre coberturas y parches de tierra en los taludes. Los costados del terraplén de la vía van empradizados.
+- **Casas de barrio:** fachadas pintadas con zócalo, cornisa, ventanas por piso (rejas en el primer piso) y la puerta hacia la calle más cercana; techo de teja de dos aguas o plancha con tanque; la escuela con ventanales y zócalo azul. Calles con andenes y matas bajas en el rastrojo.
+- **Zócalo de la maqueta:** el corte del terreno con las capas del suelo por los cuatro costados y un piso de estudio con sombra.
+- **Agua:** la lámina sigue plana hasta donde su cota corta el terreno (orilla nítida, con una línea de espuma de unos pocos píxeles); color café más saturado, vetas de sedimento que avanzan con la corriente, reflejo del cielo solo en ángulo rasante, espuma de corriente desde Froude 1,05. No se dibuja agua en una celda que el modelo tiene seca.
+- **Relieve:** se abre exagerado ×2 (antes ×3) y se agrega esa opción; el terreno, el agua y las casas se siguen estirando lo mismo.
+- **«El terreno»:** el terreno se puede ver con su aspecto (por defecto) o coloreado por la cota.
+- **Partículas:** estelas más discretas (de lejos parecían pintura de vía).
+
+**Comprobado.**
+- `npx tsc --noEmit` sin errores, pruebas de la sala 28 de 28 (el motor no cambió) y las dos compilaciones.
+- En Chrome con dibujo por software, sin errores en la consola, capturas del valle, el barrio, el puente y la entrada, con y sin creciente, en escritorio y teléfono.
+- La lectura al pasar el ratón sobre el agua quieta junto a la vía dio 5 y 10 cm a los 36 min de la creciente de 25 años, y sobre el cauce, 2,35 m a 2,91 m/s. Esto confirmó que el gris que se veía allí era el reflejo del cielo sobre un café oscuro, no un error del dato.
+- Cuadros en el valle y en el barrio: unos 2,1 s por cuadro con dibujo por software, como antes del cambio.
+- Superposiciones de la sala: **96 de 96 estados** en las cuatro pantallas (24 en cada una), sin choques, cortes ni errores en la consola. Con tres o cuatro navegadores por software a la vez, algunos cambios de parte superaban los 90 s de espera de la prueba; con una o dos pantallas a la vez pasaron todos.
+
+**Ajustes durante la verificación.**
+- El agua turbia clara se confundía con tierra seca, y con el reflejo del cielo se volvía gris; ahora es un café más saturado y el reflejo pesa solo en ángulo rasante.
+- La espuma de la orilla, puesta por profundidad, cubría charcas planas enteras y las volvía grises; ahora es una línea de pocos píxeles medida desde donde la profundidad es cero.
+- En los taludes la tierra salía como un velo con vetas verticales, porque el ruido se proyectaba sobre el plano; ahora sale en parches con el ruido sobre la cara del talud. Cambiar de proyección según la pendiente dejaba costuras y se descartó.
+- Las hileras de cultivo se estiraban en los taludes; allí el lote se vuelve pasto.
+- La grava del cauce se veía como camuflaje; ahora tiene menos contraste.
+
+**Pendiente.** No se probó en un equipo con GPU, y la página publicada no se abrió desde este entorno.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

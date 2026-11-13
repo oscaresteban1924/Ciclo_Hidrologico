@@ -1,6 +1,7 @@
 // El valle en 3D para la sala «Modelación hidráulica 2D»: el terreno como lo ve el modelo (liso o en píxeles cuando
-// son gruesos), coloreado por altura, por cobertura o por n; las casas con sus ventanas, los árboles, las calles y la
-// vía con su puente; el corte del terreno; la malla de cálculo (también la refinada) con las líneas de quiebre y las
+// son gruesos), con el aspecto de cada cobertura (ver valleyLook.ts) o coloreado por altura, por cobertura o por n,
+// sobre un zócalo con las capas del suelo; las casas de barrio con sus fachadas y techos, los árboles y las matas, las
+// calles con andenes y la vía con su puente; el corte del terreno; la malla de cálculo (también la refinada) con las líneas de quiebre y las
 // condiciones de borde; la celda que se inspecciona con su agua por dentro (subgrid) y el caudal de sus caras; y el
 // agua de los resultados.
 //
@@ -15,8 +16,9 @@
 
 import * as THREE from 'three';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { RainStreaks, trees, type TreeSpot } from '../../three/scenery';
-import { LitHouses, paint, type LitHouse } from '../../three/machines';
+import { RainStreaks, strataWall, studioFloor, trees, type TreeSpot } from '../../three/scenery';
+import { paint } from '../../three/machines';
+import { bushes, groundMaterial, valleyHouses, type BushSpot, type HouseSpec } from './valleyLook';
 import { LOOK_TIME, lookMaterial } from '../../three/look';
 import { BASE_WATER, COVER_KEYS, COVERS, LEVEE, NX as VNX, NY as VNY, ROAD, ROAD_Z, S0, Z0, bedZ, truth, yc, type Raster } from '../terrain';
 import { LOW_CHORD, cellFaces, hyetograph, type BcLine, type Geometry, type RunResult } from '../solver';
@@ -114,7 +116,7 @@ export interface ValleyState {
 }
 
 const COLORS = {
-  natural: ['#c9aa70', '#ae8c55', '#8d6d40', '#6c5230'],
+  natural: ['#a27746', '#8a6439', '#71502d', '#563c22'],
   depth: ['#d6ecf8', '#7fbbe2', '#2f7fb8', '#0f4c86', '#062a52'],
   vel: ['#efe6f7', '#c5a6e3', '#9168c8', '#5f3a9e', '#331e5e'],
   wse: ['#cfe7f2', '#6fb0d4', '#2a78b0', '#174d80'],
@@ -128,7 +130,7 @@ const COLORS = {
 };
 /** Agua del caudal base: verdosa y clara. */
 const BASE_COLOR = new THREE.Color('#5f8a84');
-const MUD = new THREE.Color('#5e4a33');
+const MUD = new THREE.Color('#7d6748');
 function ramp(stops: string[], t: number, out: THREE.Color): THREE.Color {
   const u = Math.max(0, Math.min(1, t)) * (stops.length - 1);
   const k = Math.min(stops.length - 2, Math.floor(u));
@@ -169,9 +171,16 @@ function nColor(n: number, out: THREE.Color): THREE.Color {
   const t = (Math.log(n) - Math.log(0.013)) / (Math.log(0.25) - Math.log(0.013));
   return ramp(['#f3f1e6', '#d9e2b6', '#9fbf7a', '#5f8f4c', '#2f5a2c'], t, out);
 }
-/** Muros de las casas: colores claros de barrio; la escuela, gris claro con techo de zinc. */
-const WALLS = ['#efe3cf', '#ead7bf', '#f2eadb', '#dfe8e2', '#f1ddc9', '#e7e1ee', '#f4e5bd', '#e2ebf0'];
-const ROOF_TILE = ['#a6503a', '#9a4a34', '#b25d40', '#8c4632'];
+/** Muros de las casas: los colores de un barrio antioqueño (crema, terracota, verde agua, mostaza, rosa viejo,
+ * azul cielo, blanco, verde claro); la escuela, blanca con zócalo azul. */
+const WALLS = ['#e9d8b4', '#d98c5f', '#7fb3a6', '#e6b655', '#c96f6a', '#9ec1d9', '#f1efe8', '#b5c98f', '#e8c9a0', '#d7a86e'];
+const ROOF_TILE = ['#a6503a', '#9a4a34', '#b25d40', '#8c4632', '#b8613f'];
+const ROOF_SLAB = ['#bdb6aa', '#a9a49b', '#c6beb0'];
+const markOwn = (o: THREE.Object3D) =>
+  o.traverse((c) => {
+    const m = (c as THREE.Mesh).material;
+    if (m) for (const mt of Array.isArray(m) ? m : [m]) mt.userData.own = true;
+  });
 
 /** Factor de las partículas: van este número de veces más rápido que el agua. */
 export const PARTICLE_SPEED = 6;
@@ -199,19 +208,31 @@ float m2F(vec2 p) { float a = 0.5, s = 0.0; for (int k = 0; k < 3; k++) { s += a
  * cielo se refleja más en ángulo rasante. `uDetail` baja todo eso cuando el agua muestra un dato (profundidad,
  * amenaza…), para que el color se lea. Solo cambia el color y las normales: la superficie queda a su cota.
  */
-function floodWaterMaterial(u: { uDetail: { value: number }; uSc: { value: number } }): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, roughness: 0.32, metalness: 0, envMapIntensity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+interface WaterUniforms {
+  uDetail: { value: number };
+  uSc: { value: number };
+  /** Colores del cielo que se refleja: en el horizonte (ángulo rasante) y arriba (mirando de frente). */
+  uSky: { value: THREE.Color };
+  uSkyTop: { value: THREE.Color };
+  /** Reflejo de frente, reflejo rasante y contraste de las vetas de la corriente (w sin uso). */
+  uTune: { value: THREE.Vector4 };
+}
+
+function floodWaterMaterial(u: WaterUniforms): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, roughness: 0.16, metalness: 0, envMapIntensity: 0.8, depthWrite: false, side: THREE.DoubleSide });
   m.userData.noLook = true;
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = LOOK_TIME;
     sh.uniforms.uDetail = u.uDetail;
     sh.uniforms.uSc = u.uSc;
-    sh.uniforms.uSky = { value: new THREE.Color('#cdd9df') };
+    sh.uniforms.uSky = u.uSky;
+    sh.uniforms.uSkyTop = u.uSkyTop;
+    sh.uniforms.uTune = u.uTune;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aFlow;\nattribute float aDepth;\nattribute float aFoam;\nvarying vec2 vFlow;\nvarying float vDepth;\nvarying float vFoam;\nvarying vec3 vWPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlow = aFlow; vDepth = aDepth; vFoam = aFoam;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uDetail;\nuniform float uSc;\nuniform vec3 uSky;\nvarying vec2 vFlow;\nvarying float vDepth;\nvarying float vFoam;\nvarying vec3 vWPos;\nfloat m2Foam = 0.0;\nfloat m2H0 = 0.0, m2Hx = 0.0, m2Hz = 0.0, m2K = 0.0;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uDetail;\nuniform float uSc;\nuniform vec3 uSky;\nuniform vec3 uSkyTop;\nuniform vec4 uTune;\nvarying vec2 vFlow;\nvarying float vDepth;\nvarying float vFoam;\nvarying vec3 vWPos;\nfloat m2Foam = 0.0;\nfloat m2H0 = 0.0, m2Hx = 0.0, m2Hz = 0.0, m2K = 0.0;\n${NOISE}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -239,18 +260,24 @@ function floodWaterMaterial(u: { uDetail: { value: number }; uSc: { value: numbe
           float m2Near = 1.0 - smoothstep(0.35, 1.3, length(fwidth(P)));
           m2K = uDetail * (0.25 + 0.75 * clamp(sp / 1.4, 0.0, 1.0)) * m2Near;
           // orilla: espuma fina donde el agua es muy poca; corriente rápida: crestas blancas
-          float shore = smoothstep(0.045, 0.012, vDepth) * smoothstep(0.004, 0.012, vDepth);
+          // la línea de la orilla: unos pocos píxeles desde donde la profundidad es cero (en una charca plana toda la
+          // lámina es delgada: la espuma no la cubre entera, solo marca el borde)
+          float dpx = vDepth / max(fwidth(vDepth), 1e-5);
+          float shore = (1.0 - smoothstep(1.0, 3.5, dpx)) * smoothstep(0.0, 0.004, vDepth) * (1.0 - smoothstep(0.06, 0.12, vDepth));
           float fn = m2F(P * 0.9 - fl * t0 * T * 1.1 + 5.1) * w0 + m2F(P * 0.9 - fl * t1 * T * 1.1 + 9.4) * w1;
-          m2Foam = shore * smoothstep(0.5, 0.66, fn) * 0.7;
-          m2Foam = max(m2Foam, clamp(vFoam, 0.0, 1.0) * smoothstep(0.5, 0.72, fn * 0.55 + m2H0 * 0.55) * 0.8);
-          // de lejos, la espuma es un velo parejo donde el flujo es rápido
-          m2Foam = mix(clamp(vFoam, 0.0, 1.0) * 0.35, m2Foam, m2Near) * uDetail;
+          float flowFoam = clamp(vFoam, 0.0, 1.0) * smoothstep(0.46, 0.82, fn * 0.55 + m2H0 * 0.55) * 0.6;
+          // de lejos, la espuma de la corriente es un velo parejo donde el flujo es rápido
+          flowFoam = mix(clamp(vFoam, 0.0, 1.0) * 0.14, flowFoam, m2Near);
+          m2Foam = max(shore * (0.45 + 0.55 * smoothstep(0.45, 0.66, fn)) * 0.55, flowFoam) * uDetail;
           // el agua poca deja ver el fondo; la honda es más opaca
           // el agua turbia de una creciente casi no deja ver el fondo: solo la lámina muy delgada es transparente
-          float deep = 1.0 - exp(-vDepth / 0.25);
-          diffuseColor.a *= mix(mix(1.0, 0.9, uDetail), 1.0, deep);
-          diffuseColor.rgb *= 1.0 + (m2H0 - 0.5) * 0.18 * m2K;
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.94, 0.93, 0.89), m2Foam * 0.85);
+          float deep = 1.0 - exp(-max(vDepth, 0.0) / 0.25);
+          diffuseColor.a *= mix(mix(1.0, 0.9, uDetail), 1.0, deep) * smoothstep(-0.002, 0.006, vDepth);
+          diffuseColor.rgb *= 1.0 + (m2H0 - 0.5) * uTune.z * m2K;
+          // vetas grandes de sedimento que la corriente arrastra (se ven también de lejos)
+          float plume = m2F((P - o0) * 0.035 + 1.7) * w0 + m2F((P - o1) * 0.035 + 5.3) * w1;
+          diffuseColor.rgb *= 1.0 + (plume - 0.5) * 0.24 * uDetail * step(0.999, uDetail);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 0.72, 0.6), m2Foam * 0.8);
           diffuseColor.a = mix(diffuseColor.a, 0.96, m2Foam * 0.8);
         }`,
       )
@@ -266,8 +293,12 @@ function floodWaterMaterial(u: { uDetail: { value: number }; uSc: { value: numbe
         '#include <opaque_fragment>',
         `{
           // reflejo del cielo: un poco siempre (la lámina es lisa) y más en ángulo rasante; destellos del sol en las ondas
-          float fr = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.0);
-          outgoingLight = mix(outgoingLight, uSky, (0.06 + fr * 0.26) * uDetail * (1.0 - m2Foam));
+          vec3 m2V = normalize(vViewPosition);
+          float fr = pow(1.0 - clamp(abs(dot(normal, m2V)), 0.0, 1.0), 3.0);
+          // el cielo reflejado: azul arriba y claro hacia el horizonte (lo lejano y lo rasante se ve más claro)
+          vec3 m2R = (vec4(reflect(-m2V, normal), 0.0) * viewMatrix).xyz;
+          vec3 skyR = mix(uSky, uSkyTop, pow(clamp(m2R.y, 0.0, 1.0), 0.7));
+          outgoingLight = mix(outgoingLight, skyR * (0.9 + 0.25 * m2H0 * m2K), (uTune.x + fr * uTune.y) * uDetail * (1.0 - m2Foam));
           outgoingLight += vec3(1.0, 0.97, 0.9) * pow(max(0.0, m2H0 - 0.55) * 2.2, 6.0) * 0.35 * m2K;
         }
         #include <opaque_fragment>`,
@@ -309,6 +340,8 @@ export class ValleyWorld {
   private stage: QStage;
   private st: ValleyState | null = null;
   private terrainG = new THREE.Group();
+  /** Zócalo de la maqueta (corte con estratos) y piso de estudio: fuera de lo que se toca. */
+  private plinthG = new THREE.Group();
   private objectsG = new THREE.Group();
   private ghostG = new THREE.Group();
   private sectionG = new THREE.Group();
@@ -327,9 +360,18 @@ export class ValleyWorld {
   private waterFlow!: Float32Array;
   private waterDepth!: Float32Array;
   private waterFoam!: Float32Array;
-  private waterU = { uDetail: { value: 1 }, uSc: { value: 0.5 } };
+  private waterU: WaterUniforms = {
+    uDetail: { value: 1 },
+    uSc: { value: 0.5 },
+    uSky: { value: new THREE.Color('#c9dbe6') },
+    uSkyTop: { value: new THREE.Color('#7ea7cc') },
+    uTune: { value: new THREE.Vector4(0.0, 0.28, 0.28, 1) },
+  };
   private terrainMat: THREE.MeshStandardMaterial;
   private terrainFlat: THREE.MeshStandardMaterial;
+  /** Suelo con la textura de cada cobertura (vista natural del valle). */
+  private groundMat: THREE.MeshStandardMaterial;
+  private groundSc = { value: 0.5 };
   // el dominio: píxeles, tamaño del píxel, paso de la grilla de dibujo y escala
   private NX = VNX;
   private NY = VNY;
@@ -379,7 +421,7 @@ export class ValleyWorld {
   private houseLevel: { key: string; lv: Float32Array[]; max: Float32Array } | null = null;
   // rotura que se abre en el tiempo
   private breachMesh: THREE.Mesh | null = null;
-  private breachData: { v: Int32Array; before: Float32Array; after: Float32Array; pos: Float32Array; col: Float32Array; base: Float32Array } | null = null;
+  private breachData: { v: Int32Array; before: Float32Array; after: Float32Array; pos: Float32Array; col: Float32Array; base: Float32Array; ground: boolean } | null = null;
   // lectura al pasar el puntero
   private ray = new THREE.Raycaster();
   private hoverAt = 0;
@@ -407,6 +449,7 @@ export class ValleyWorld {
     this.terrainMat = lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }), { detail: 0.08, patches: 0.1, clouds: [0.13, 95] });
     this.terrainFlat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
     this.terrainFlat.userData.noLook = true;
+    this.groundMat = groundMaterial(this.groundSc);
     this.makeWater();
     // partículas con estela (segmentos con transparencia que se desvanece) y tinta
     const mkTrails = (n: number, k: number, color: THREE.Color) => {
@@ -426,8 +469,9 @@ export class ValleyWorld {
       l.visible = false;
       return l;
     };
-    this.parts = mkTrails(NP, TRAIL, new THREE.Color('#f4f8fb'));
-    (this.parts.material as THREE.LineBasicMaterial).opacity = 0.7;
+    // partículas: estelas claras y discretas (marcan la corriente sin parecer pintura de vía)
+    this.parts = mkTrails(NP, TRAIL, new THREE.Color('#fbf6ea'));
+    (this.parts.material as THREE.LineBasicMaterial).opacity = 0.42;
     this.parts.renderOrder = 6;
     this.dye = mkTrails(ND, DTRAIL, new THREE.Color('#ff6a2b'));
     this.dye.renderOrder = 7;
@@ -444,7 +488,7 @@ export class ValleyWorld {
     this.pAge.fill(-1);
     // lluvia con salpicaduras (sigue al dominio: la caja se ajusta al cambiar de terreno)
     this.rain = this.makeRain();
-    sc.add(this.terrainG, this.objectsG, this.ghostG, this.sectionG, this.meshG, this.bcG, this.cellG, this.bridgeG, this.markG, this.postG, this.stainG, this.arrowG, this.breachG, this.water, this.parts, this.dye, this.rain.group);
+    sc.add(this.terrainG, this.plinthG, this.objectsG, this.ghostG, this.sectionG, this.meshG, this.bcG, this.cellG, this.bridgeG, this.markG, this.postG, this.stainG, this.arrowG, this.breachG, this.water, this.parts, this.dye, this.rain.group);
     const pick = (pt: THREE.Vector3) => this.click(this.px0(pt.x), this.py0(pt.z));
     stage.addPick(this.terrainG, pick, 'Toca para poner una sonda');
     stage.addPick(this.water, pick, 'Toca para poner una sonda');
@@ -676,11 +720,17 @@ export class ValleyWorld {
       return heightColor(z, x, col);
     };
     const flat = s.colorBy === 'cobertura' || s.colorBy === 'n';
-    const mat = flat ? this.terrainFlat : this.terrainMat;
-    if (valley && s.raster && s.raster.p >= 5) this.terrainG.add(this.blocky(s.raster, colorAt, mat));
+    const blocky = valley && !!s.raster && s.raster.p >= 5;
+    // la vista natural del valle liso: el suelo con la textura de cada cobertura; los colores de vértice, solo el
+    // sombreado del relieve
+    const ground = !!T && s.colorBy === 'natural' && !blocky;
+    const mat = flat ? this.terrainFlat : ground ? this.groundMat : this.terrainMat;
+    this.groundSc.value = this.sc;
+    if (blocky) this.terrainG.add(this.blocky(s.raster!, colorAt, mat));
     else {
       const g = new THREE.PlaneGeometry(1, 1, GX - 1, GY - 1);
       const pos = new Float32Array(GX * GY * 3), cl = new Float32Array(GX * GY * 3);
+      const mix = ground ? new Float32Array(GX * GY * 4) : null;
       for (let j = 0; j < GY; j++)
         for (let i = 0; i < GX; i++) {
           const v = j * GX + i, z = this.gz[v];
@@ -689,7 +739,29 @@ export class ValleyWorld {
           pos[v * 3 + 1] = this.Y(z);
           pos[v * 3 + 2] = this.wz(y);
           const kk = Math.min(NY - 1, Math.floor(y / px)) * NX + Math.min(NX - 1, Math.floor(x / px));
-          colorAt(kk, z);
+          if (mix && T) {
+            // mezcla de coberturas de los 4 × 4 píxeles alrededor del vértice (bordes suaves entre lotes)
+            let a = 0, b = 0, c = 0, d = 0, n = 0;
+            for (let dj = -2; dj <= 1; dj++)
+              for (let di = -2; di <= 1; di++) {
+                const pi = Math.round(x / px) + di, pj = Math.round(y / px) + dj;
+                if (pi < 0 || pj < 0 || pi >= NX || pj >= NY) continue;
+                const q = pj * NX + pi, cv = COVER_KEYS[T.cover[q]];
+                n++;
+                if (T.ridge[q] === 1) {
+                  // la corona del jarillón: camino de grava con pasto a los lados
+                  d += 0.6;
+                  a += 0.4;
+                } else if (cv === 'pasto' || (cv === 'via' && Math.abs(pi + 0.5 - ROAD.x) > ROAD.half + 0.5 && Math.abs(pi + 0.5 - ROAD.x) < ROAD.half + ROAD.side * 1.6)) a++;
+                // (los costados del terraplén de la vía van empradizados; la corona la cubre el asfalto)
+                else if (cv === 'cultivo') b++;
+                else if (cv === 'rastrojo' || cv === 'bosque') c++;
+                else if (cv === 'cauce') d++;
+              }
+            n = Math.max(1, n);
+            mix.set([a / n, b / n, c / n, d / n], v * 4);
+            col.setRGB(1, 1, 1);
+          } else colorAt(kk, z);
           if (!flat) {
             // sombreado del relieve (luz del noroeste), como un mapa de sombras de un SIG
             const zx = (this.gz[j * GX + Math.min(GX - 1, i + 1)] - this.gz[j * GX + Math.max(0, i - 1)]) / (2 * step);
@@ -703,14 +775,16 @@ export class ValleyWorld {
         }
       g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       g.setAttribute('color', new THREE.BufferAttribute(cl, 3));
+      if (mix) g.setAttribute('aMix', new THREE.BufferAttribute(mix, 4));
       g.index = gridIndex(GX, GY);
       g.computeVertexNormals();
       const m = new THREE.Mesh(g, mat);
       m.receiveShadow = true;
       this.terrainG.add(m);
     }
-    // costados del bloque de terreno (suelo)
-    this.terrainG.add(this.skirt());
+    // el zócalo de la maqueta: corte con las capas del suelo y el piso de estudio
+    clear(this.plinthG);
+    this.plinthG.add(this.plinth());
   }
 
   /** El ráster grueso como bloques: cada píxel una losa a su cota, con paredes entre vecinos. */
@@ -761,35 +835,27 @@ export class ValleyWorld {
     return m;
   }
 
-  private skirt(): THREE.Mesh {
-    const base = this.Y(this.zref - 3);
-    const pos: number[] = [];
-    const edge = (pts: [number, number][]) => {
-      for (let k = 0; k + 1 < pts.length; k++) {
-        const [x1, y1] = pts[k], [x2, y2] = pts[k + 1];
-        const a = [this.wx(x1), this.Y(this.zAt(x1, y1)), this.wz(y1)], b = [this.wx(x2), this.Y(this.zAt(x2, y2)), this.wz(y2)];
-        pos.push(...a, a[0], base, a[2], ...b, ...b, a[0], base, a[2], b[0], base, b[2]);
-      }
-    };
+  /** Zócalo de la maqueta: el corte del terreno por los cuatro costados con las capas del suelo (de la capa vegetal
+   * a la roca) y, debajo, el piso de estudio que recibe la sombra. */
+  private plinth(): THREE.Group {
+    const g = new THREE.Group();
+    const depth = Math.max(4, 0.04 * Math.max(this.W, this.H) * this.sc);
+    let zmin = Infinity;
+    for (const z of this.gz) if (z < zmin) zmin = z;
+    const base = this.Y(Math.min(zmin, this.zref)) - depth;
     const xs = Array.from({ length: this.GX }, (_, i) => Math.min(this.W, i * this.step)), ys = Array.from({ length: this.GY }, (_, j) => Math.min(this.H, j * this.step));
-    edge(xs.map((x) => [x, 0] as [number, number]));
-    edge(xs.map((x) => [x, this.H] as [number, number]).reverse());
-    edge(ys.map((y) => [0, y] as [number, number]).reverse());
-    edge(ys.map((y) => [this.W, y] as [number, number]));
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.computeVertexNormals();
-    // el corte del suelo con estratos: tierra oscura arriba y más clara abajo
-    const cl = new Float32Array((pos.length / 3) * 3);
-    const top = new THREE.Color('#6f5a41'), bot = new THREE.Color('#a48b69'), c = new THREE.Color();
-    const yTop = this.Y(this.zref + 6);
-    for (let v = 0; v < pos.length / 3; v++) {
-      const t = Math.max(0, Math.min(1, (pos[v * 3 + 1] - base) / Math.max(1, yTop - base)));
-      c.copy(bot).lerp(top, t);
-      cl.set([c.r, c.g, c.b], v * 3);
-    }
-    g.setAttribute('color', new THREE.BufferAttribute(cl, 3));
-    return new THREE.Mesh(g, own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide })));
+    const edge: [number, number][] = [
+      ...xs.map((x) => [x, 0] as [number, number]),
+      ...ys.slice(1).map((y) => [this.W, y] as [number, number]),
+      ...xs.slice(0, -1).reverse().map((x) => [x, this.H] as [number, number]),
+      ...ys.slice(0, -1).reverse().map((y) => [0, y] as [number, number]),
+    ].map(([x, y]) => [this.wx(x), this.wz(y)]);
+    const wall = strataWall(edge, (X, Z) => this.Y(this.zAt(this.px0(X), this.py0(Z))) - 0.02, base);
+    // la arista de arriba del corte, un poco más oscura (la capa vegetal húmeda)
+    wall.castShadow = true;
+    g.add(wall, studioFloor(0, 0, Math.hypot(this.W * this.sc, this.H * this.sc) / 2, base));
+    markOwn(g);
+    return g;
   }
 
   // ---------------------------------------------------------------- casas, árboles, calles y el puente
@@ -827,26 +893,51 @@ export class ValleyWorld {
       this.ghostG.add(new THREE.LineSegments(g, own(new THREE.LineBasicMaterial({ color: '#7a4a3a', transparent: true, opacity: 0.45 }))));
       return;
     }
-    // casas con ventanas y techo de dos aguas; con daño, el muro toma el color del daño
+    // casas de barrio: fachada pintada con ventanas, rejas y puerta hacia la calle; techo de teja de dos aguas o
+    // plancha con tanque; con daño, el muro toma el color del daño
     const tint = new THREE.Color();
-    const spots: LitHouse[] = T.buildings.map((b, bi) => {
-      const zb = zg((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    const inStreet = (x: number, y: number) => T.streets.some(([a, b, c, d]) => x >= a && x < b && y >= c && y < d);
+    const vex = s.vex;
+    const specs: HouseSpec[] = T.buildings.map((b, bi) => {
+      const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+      const zb = zg(cx, cy);
       const dm = s.damage ? s.damage[bi] : -1;
       const school = b.name === 'escuela';
+      // el frente: el costado con la calle más cerca (en el plano; el eje y del plano va hacia −z en el mundo)
+      let front: [number, number] = [0, -1], best = Infinity;
+      for (const [dx, dy] of [
+        [0, -1],
+        [0, 1],
+        [1, 0],
+        [-1, 0],
+      ] as const) {
+        const hx = (b.x1 - b.x0) / 2, hy = (b.y1 - b.y0) / 2;
+        for (let d = 0.5; d < 12 && d < best; d += 0.5)
+          if (inStreet(cx + dx * (hx + d), cy + dy * (hy + d))) {
+            best = d;
+            front = [dx, -dy];
+          }
+      }
+      const hash = ((bi * 2654435761) >>> 0) / 4294967296;
+      const teja = !school && (b.h < 4 || hash < 0.55);
       return {
-        x: wx((b.x0 + b.x1) / 2),
+        x: wx(cx),
         y: this.Y(zb),
-        z: wz((b.y0 + b.y1) / 2),
+        z: wz(cy),
         w: (b.x1 - b.x0) * SC,
         d: (b.y1 - b.y0) * SC,
-        h: this.Y(zb + b.h) - this.Y(zb),
-        rot: 0,
-        wall: dm >= 0 ? '#' + ramp(COLORS.damage, dm, tint).getHexString() : school ? '#e6ebee' : WALLS[(bi * 7) % WALLS.length],
-        roof: school ? '#7f8a92' : ROOF_TILE[(bi * 3) % ROOF_TILE.length],
+        h: b.h,
+        hw: this.Y(zb + b.h) - this.Y(zb),
+        wall: dm >= 0 ? '#' + ramp(COLORS.damage, dm, tint).getHexString() : school ? '#f2f0ea' : WALLS[(bi * 7) % WALLS.length],
+        front,
+        roof: teja ? 'teja' : 'plancha',
+        roofColor: teja ? ROOF_TILE[(bi * 3) % ROOF_TILE.length] : ROOF_SLAB[bi % ROOF_SLAB.length],
+        school,
       };
     });
-    const lit = new LitHouses(spots, 4);
-    this.objectsG.add(lit.group);
+    const hg = valleyHouses(specs, SC, SC * vex);
+    markOwn(hg);
+    this.objectsG.add(hg);
     // manchas de barro de cada casa (se ajustan al tiempo en updateWater)
     const stainMat = own(new THREE.MeshStandardMaterial({ color: '#6b5639', transparent: true, opacity: 0.42, roughness: 1, depthWrite: false }));
     const lineMat = own(new THREE.MeshStandardMaterial({ color: '#3f3122', transparent: true, opacity: 0.85, roughness: 1, depthWrite: false }));
@@ -883,7 +974,13 @@ export class ValleyWorld {
       m.receiveShadow = true;
       return m;
     };
-    for (const [a, b, c, d] of T.streets) this.objectsG.add(ribbon(a, b, c, d));
+    // calles del barrio: andenes de concreto a los lados y el asfalto en el medio
+    const curb = paint('#c9c3b6', 0.92, 0);
+    for (const [a, b, c, d] of T.streets) {
+      const ew = b - a > d - c;
+      this.objectsG.add(ribbon(a, b, c, d, curb, 0.05));
+      this.objectsG.add(ew ? ribbon(a, b, c + 1.2, d - 1.2, asph, 0.07) : ribbon(a + 1.2, b - 1.2, c, d, asph, 0.07));
+    }
     const yb = yc(ROAD.x);
     const ySouth = yb - ROAD.open - 2, yNorth = yb + ROAD.open + 2;
     this.objectsG.add(ribbon(ROAD.x - ROAD.half, ROAD.x + ROAD.half, 0, ySouth), ribbon(ROAD.x - ROAD.half, ROAD.x + ROAD.half, yNorth, NY));
@@ -900,6 +997,24 @@ export class ValleyWorld {
     // árboles (las copas del MDS)
     const tspots: TreeSpot[] = T.crowns.map((c) => ({ x: wx(c.x), y: this.Y(zg(c.x, c.y)), z: wz(c.y), r: c.r * SC * 0.9 }));
     this.objectsG.add(trees(tspots, 5));
+    // matas bajas del rastrojo (entre los árboles, en una grilla con azar)
+    const bs: BushSpot[] = [];
+    let seed = 77;
+    const R = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const iR = COVER_KEYS.indexOf('rastrojo');
+    for (let y = 3; y < NY - 3; y += 6.5)
+      for (let x = 3; x < NX - 3; x += 6.5) {
+        const px = x + (R() - 0.5) * 5, py = y + (R() - 0.5) * 5;
+        const k = Math.floor(py) * NX + Math.floor(px);
+        if (T.cover[k] !== iR || R() < 0.25) continue;
+        bs.push({ x: wx(px), y: this.Y(zg(px, py)), z: wz(py), r: (0.9 + R() * 0.9) * SC });
+        if (bs.length >= 1400) break;
+      }
+    const bush = bushes(bs, 3);
+    if (bush) {
+      markOwn(bush);
+      this.objectsG.add(bush);
+    }
   }
 
   /** El puente: tablero con vigas de borde y barandas (de su cara inferior a la rasante) y, si la luz está tapada,
@@ -1188,22 +1303,27 @@ export class ValleyWorld {
     const tm = this.terrainG.children[0] as THREE.Mesh | undefined;
     const tc = tm?.geometry.attributes.color as THREE.BufferAttribute | undefined;
     const smooth = !!tc && tc.count === GX * GY;
+    // con el suelo texturado, el parche lleva la misma mezcla de coberturas (y el talud de la rotura sale en tierra)
+    const tmix = smooth ? (tm!.geometry.attributes.aMix as THREE.BufferAttribute | undefined) : undefined;
+    const mix = tmix ? new Float32Array(n * 4) : null;
     for (let q = 0; q < n; q++) {
       const v = verts[q];
       pos[q * 3] = this.wx(Math.min(this.W, (v % GX) * step));
       pos[q * 3 + 2] = this.wz(Math.min(this.H, Math.floor(v / GX) * step));
       if (smooth) base.set([tc!.getX(v), tc!.getY(v), tc!.getZ(v)], q * 3);
       else base.set([0.5, 0.62, 0.33], q * 3);
+      if (mix && tmix) mix.set([tmix.getX(v), tmix.getY(v), tmix.getZ(v), tmix.getW(v)], q * 4);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (mix) g.setAttribute('aMix', new THREE.BufferAttribute(mix, 4));
     g.setIndex(idx);
-    const m = new THREE.Mesh(g, own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })));
+    const m = new THREE.Mesh(g, mix ? this.groundMat : own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })));
     m.receiveShadow = m.castShadow = true;
     this.breachG.add(m);
     this.breachMesh = m;
-    this.breachData = { v: Int32Array.from(verts), before: bz, after: az, pos, col, base };
+    this.breachData = { v: Int32Array.from(verts), before: bz, after: az, pos, col, base, ground: !!mix };
   }
 
   /** Lleva la rotura al avance p (0: jarillón entero, 1: abierta del todo como en el terreno de después). */
@@ -1212,13 +1332,17 @@ export class ValleyWorld {
     if (!d || !m) return;
     m.visible = p < 0.999;
     if (!m.visible) return;
-    const earth = new THREE.Color('#7a5a3a'), c = new THREE.Color();
+    const earth = new THREE.Color('#7a5a3a'), c = new THREE.Color(), e = new THREE.Color();
     for (let q = 0; q < d.v.length; q++) {
       const drop = d.before[q] - d.after[q];
       const z = d.after[q] + (1 - p) * drop;
       d.pos[q * 3 + 1] = this.Y(z) + 0.02;
-      // la tierra que queda al descubierto, más oscura y húmeda a medida que se abre
-      c.setRGB(d.base[q * 3], d.base[q * 3 + 1], d.base[q * 3 + 2]).lerp(earth, drop > 0.05 ? Math.min(1, p * 1.8) : 0);
+      // la tierra que queda al descubierto, más oscura y húmeda a medida que se abre (con el suelo texturado, el
+      // color del vértice tiñe la textura: tierra mojada sobre la mezcla)
+      c.setRGB(d.base[q * 3], d.base[q * 3 + 1], d.base[q * 3 + 2]);
+      if (d.ground) e.setRGB(c.r * 0.95, c.g * 0.72, c.b * 0.5);
+      else e.copy(earth);
+      c.lerp(e, drop > 0.05 ? Math.min(1, p * 1.8) : 0);
       d.col.set([c.r, c.g, c.b], q * 3);
     }
     const g = m.geometry;
@@ -1542,9 +1666,12 @@ export class ValleyWorld {
       const showProb = layer === 'probabilidad' && w.values && ci0 >= 0 && w.values[ci0] > 0.02;
       const showZone = layer === 'zonas' && w.zones && ci0 >= 0 && w.zones[ci0] > 0;
       // barro: seco ahora, pero ya pasó el agua por aquí
-      const mud = !wet && !showProb && !showZone && tim !== null && fNow !== null && tim.firstWet[v] <= fNow;
-      const drawn = wet || showProb || showZone || mud;
-      pos[v * 3 + 1] = drawn ? (wet ? this.Y(level) + 0.04 : this.Y(this.gz[v]) + (mud ? 0.05 : 0.12)) : this.Y(this.gz[v]) - 0.3;
+      // vértice seco junto al agua: la lámina sigue plana hasta él y el terreno la corta en la orilla (así la orilla
+      // queda donde la cota del agua toca el suelo, no en la grilla de dibujo)
+      const shoreV = !wet && !showProb && !showZone && ci0 >= 0 && sw > 0 && depth > -1.5;
+      const mud = !wet && !shoreV && !showProb && !showZone && tim !== null && fNow !== null && tim.firstWet[v] <= fNow;
+      const drawn = wet || shoreV || showProb || showZone || mud;
+      pos[v * 3 + 1] = drawn ? (wet || shoreV ? this.Y(level) + 0.04 : this.Y(this.gz[v]) + (mud ? 0.05 : 0.12)) : this.Y(this.gz[v]) - 0.3;
       if (!drawn) {
         col[v * 4 + 3] = 0;
         dep[v] = 0;
@@ -1556,22 +1683,27 @@ export class ValleyWorld {
       const speed = Math.hypot(ux, uy);
       fl[v * 2] = ux;
       fl[v * 2 + 1] = uy;
-      dep[v] = wet ? depth : 0;
+      // profundidad para el sombreador: negativa en la orilla (se corta en cero), 0,5 donde no es agua (barro, capas)
+      // (si la celda del vértice está seca en el modelo, ahí no se dibuja agua aunque el suelo esté más bajo)
+      const ownWet = ci0 >= 0 && eta[ci0] - g.zmin[ci0] > 0.005;
+      dep[v] = wet ? depth : shoreV ? Math.max(-0.5, ownWet ? depth : Math.min(depth, -0.01)) : 0.5;
       const Fr = wet ? speed / Math.sqrt(9.81 * Math.max(0.05, depth)) : 0;
-      foam[v] = wet ? Math.max(0, Math.min(1, (Fr - 0.85) / 0.6)) * Math.min(1, speed / 1.4) : 0;
+      // espuma donde el flujo es rápido de verdad (cerca del crítico y por encima): no en todo el cauce
+      foam[v] = wet ? Math.max(0, Math.min(1, (Fr - 1.05) / 0.8)) * Math.min(1, speed / 2) : 0;
       if (mud) {
         c.copy(MUD);
         col[v * 4] = c.r;
         col[v * 4 + 1] = c.g;
         col[v * 4 + 2] = c.b;
-        col[v * 4 + 3] = 0.42;
+        col[v * 4 + 3] = 0.34;
         continue;
       }
-      let alpha = Math.min(0.92, 0.48 + depth * 1.1);
+      const dd = Math.max(0, depth);
+      let alpha = Math.min(0.92, 0.48 + dd * 1.1);
       switch (layer) {
         case 'natural':
-          ramp(COLORS.natural, Math.sqrt(depth / 3), c);
-          alpha = Math.min(0.97, 0.86 + depth * 0.4);
+          ramp(COLORS.natural, Math.sqrt(dd / 3), c);
+          alpha = Math.min(0.97, 0.86 + dd * 0.4);
           break;
         case 'velocidad':
           ramp(COLORS.vel, (r ? (fNow === null ? r.vMax[ci0] : speed) : speed) / 3, c);
@@ -1581,8 +1713,8 @@ export class ValleyWorld {
           break;
         case 'amenaza': {
           const vv = fNow === null ? r!.vMax[ci0] : speed;
-          const DV = fNow === null ? Math.max(0, r!.etaDV[ci0] - zm) * r!.vDV[ci0] : depth * speed;
-          c.set(COLORS.hazard[hazardClass(depth, vv, DV)]);
+          const DV = fNow === null ? Math.max(0, r!.etaDV[ci0] - zm) * r!.vDV[ci0] : dd * speed;
+          c.set(COLORS.hazard[hazardClass(dd, vv, DV)]);
           break;
         }
         case 'llegada': {
@@ -1608,7 +1740,7 @@ export class ValleyWorld {
           alpha = 0.9;
           break;
         default:
-          ramp(COLORS.depth, depth / 2.5, c);
+          ramp(COLORS.depth, dd / 2.5, c);
       }
       col[v * 4] = c.r;
       col[v * 4 + 1] = c.g;

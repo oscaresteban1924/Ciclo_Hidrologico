@@ -58,17 +58,20 @@ const RETOS: Reto<Ctx>[] = [
 
 export function TerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<TerrainScene>(DEFAULT_TERRAIN_SCENE);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
+  // el terreno con su aspecto (pasto, cultivos, rastrojo, cauce) o coloreado por la cota
+  const [paint, setPaint] = useState<'natural' | 'altura'>('natural');
   const [tab, setTab] = useState<PanelTab>('esquema');
   const r = useMemo(() => terrainScene(s), [s]);
   const world = useRef<ValleyWorld | null>(null);
-  const sync = useRef({ s, r, vex });
-  sync.current = { s, r, vex };
+  const sync = useRef({ s, r, vex, paint });
+  sync.current = { s, r, vex, paint };
   const toWorld = () => {
-    const { s: x, r: y, vex: v } = sync.current;
+    const { s: x, r: y, vex: v, paint: pc } = sync.current;
     world.current?.set(
       valleyState({
         vex: v,
+        colorBy: pc,
         fine: y.fine,
         raster: x.p >= 5 ? y.raster : null,
         objects: x.surf === 'mdt' ? 'fantasma' : 'no',
@@ -84,7 +87,7 @@ export function TerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   };
   useEffect(() => {
     toWorld();
-  }, [r, vex]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [r, vex, paint]); // eslint-disable-line react-hooks/exhaustive-deps
   const ctx = useMemo<Ctx>(() => ({ s, r }), [s, r]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<TerrainScene>) => setS((x) => ({ ...x, ...p }));
@@ -103,7 +106,7 @@ export function TerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     <>
       {gl ? (
         <Scene3D
-          label={`Maqueta 3D del valle ilustrativo con su quebrada, el jarillón, el barrio y la vía con su puente, dibujado como lo ve el modelo: ${s.surf === 'mdt' ? 'terreno desnudo' : 'superficie con casas, árboles y el tablero del puente'}, en píxeles de ${s.p} m; ${vexNote(vex)}. Un plano blanco muestra el corte del terreno: la línea oscura es el terreno real y la azul, el que ve el modelo.`}
+          label={`Maqueta 3D del valle ilustrativo con su quebrada, el jarillón, el barrio y la vía con su puente, dibujado como lo ve el modelo: ${s.surf === 'mdt' ? 'terreno desnudo' : 'superficie con casas, árboles y el tablero del puente'}, en píxeles de ${s.p} m, ${paint === 'natural' ? 'con el aspecto de cada cobertura' : 'coloreado por la cota'}; ${vexNote(vex)}. Un plano blanco muestra el corte del terreno: la línea oscura es el terreno real y la azul, el que ve el modelo.`}
           viewNames={[
             { id: 'valle', label: 'El valle' },
             { id: 'corte', label: 'El corte' },
@@ -159,6 +162,15 @@ export function TerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
         onChange={(v) => set({ burn: v === 'si' })}
       />
       <DockRange label="Corte en x" value={s.x} min={20} max={620} step={5} show={`${es(s.x, 0)} m`} onChange={(v) => set({ x: v })} />
+      <DockChoice<'natural' | 'altura'>
+        label="Color del terreno"
+        value={paint}
+        options={[
+          { value: 'natural', label: 'Su aspecto' },
+          { value: 'altura', label: 'Por cota' },
+        ]}
+        onChange={setPaint}
+      />
       <VexChoice value={vex} onChange={setVex} />
     </>
   );

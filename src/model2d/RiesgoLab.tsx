@@ -76,7 +76,7 @@ const RETOS: Reto<Ctx>[] = [
 
 export function RiesgoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<RiskScene>(DEFAULT_RISK);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [ens, setEns] = useState<Ens | null>(null);
   const [busy, setBusy] = useState<{ what: string; done: number; total: number } | null>(null);

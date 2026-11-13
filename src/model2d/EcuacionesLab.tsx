@@ -85,7 +85,7 @@ const RETOS: Reto<Ctx>[] = [
 
 export function EcuacionesLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<EqScene>(DEFAULT_EQ);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const opts = useMemo(() => eqRun(s), [s]);
   const run = useModelRun(opts);

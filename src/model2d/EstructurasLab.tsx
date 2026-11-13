@@ -55,7 +55,7 @@ const RETOS: Reto<Ctx>[] = [
 
 export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<StructScene>(DEFAULT_STRUCT);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [particles, setParticles] = useState(true);
   const opts = useMemo(() => structRun(s), [s]);

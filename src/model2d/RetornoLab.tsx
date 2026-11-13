@@ -73,7 +73,7 @@ const RETOS: Reto<Ctx>[] = [
 
 export function RetornoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<ReturnScene>(DEFAULT_RETURN);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const r = useMemo(() => returnScene(s), [s]);
   const opts = useMemo(() => returnRun(s), [s]);

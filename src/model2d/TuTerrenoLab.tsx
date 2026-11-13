@@ -112,7 +112,7 @@ export function TuTerrenoLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [notice, setNotice] = useState('');
   const [particles, setParticles] = useState(true);
   const [probe, setProbe] = useState<{ x: number; y: number } | null>(null);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [msg, setMsg] = useState('');
   const [drag, setDrag] = useState(false);

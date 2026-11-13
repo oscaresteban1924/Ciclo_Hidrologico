@@ -17,7 +17,7 @@ export const VIEWS_BASE = [
 ];
 
 export function valleyState(p: Partial<ValleyState> & Pick<ValleyState, 'fine'>): ValleyState {
-  return { vex: 3, raster: null, colorBy: 'altura', n: null, objects: 'si', section: null, mesh: null, breaklines: false, bc: false, cell: null, water: null, labels: [], ...p };
+  return { vex: 2, raster: null, colorBy: 'altura', n: null, objects: 'si', section: null, mesh: null, breaklines: false, bc: false, cell: null, water: null, labels: [], ...p };
 }
 
 const levY = (x: number) => yc(x) + LEVEE.dn * Math.sqrt(1 + (((30 * 2 * Math.PI) / 320) * Math.cos((2 * Math.PI * x) / 320)) ** 2);
@@ -100,9 +100,10 @@ export function VexChoice({ value, onChange }: { value: number; onChange: (v: nu
   return (
     <DockChoice
       label="Relieve en la escena"
-      value={String(value) as '1' | '3' | '6'}
+      value={String(value) as '1' | '2' | '3' | '6'}
       options={[
         { value: '1', label: 'Real (×1)' },
+        { value: '2', label: 'Exagerado ×2' },
         { value: '3', label: 'Exagerado ×3' },
         { value: '6', label: 'Exagerado ×6' },
       ]}
@@ -111,7 +112,7 @@ export function VexChoice({ value, onChange }: { value: number; onChange: (v: nu
   );
 }
 
-export const vexNote = (vex: number) => (vex === 1 ? 'relieve a escala real' : `relieve exagerado ×${vex} (el agua y el terreno se estiran lo mismo)`);
+export const vexNote = (vex: number) => (vex === 1 ? 'relieve a escala real' : `relieve exagerado ×${vex} (el terreno, el agua y las casas se estiran lo mismo)`);
 
 /** Diferencia con signo y unidades. */
 export const sg = (v: number, d = 2, u = 'm') => `${v >= 0 ? '+' : '−'}${es(Math.abs(v), d)} ${u}`;

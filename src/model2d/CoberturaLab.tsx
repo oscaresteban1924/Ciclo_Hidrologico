@@ -62,7 +62,7 @@ const RETOS: Reto<Ctx>[] = [
 
 export function CoberturaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<CoverScene>(DEFAULT_COVER);
-  const [vex, setVex] = useState(3);
+  const [vex, setVex] = useState(2);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const cal = s.mode === 'calibrar';
   const opts = useMemo(() => (cal ? calibRun(s.cal) : coverRun(s)), [s, cal]);
