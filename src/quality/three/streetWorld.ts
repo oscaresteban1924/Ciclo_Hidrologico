@@ -700,7 +700,7 @@ export class StreetWorld {
     tm.castShadow = true;
     sc.add(tm);
     // cajas para tocar las casas (invisibles): una por casa, con su número de instancia
-    const hm = houses(pickBoxes);
+    const hm = houses(pickBoxes, { roofs: false });
     hm.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
     hm.castShadow = hm.receiveShadow = false;
     sc.add(hm);

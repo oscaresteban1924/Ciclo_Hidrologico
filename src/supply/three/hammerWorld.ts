@@ -4,7 +4,7 @@
 // grueso que el real para verlo.
 
 import * as THREE from 'three';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { polyline, setPolyline } from '../../canals/three/canalKit';
 import type { HammerResult } from '../hammer';
@@ -72,6 +72,17 @@ export class HammerWorld {
     lead.rotateZ(-Math.PI / 2);
     lead.position.set(X0 - 20, AXIS, 0);
     sc.add(this.pipe, lead);
+    // apoyos de concreto cada 30 m y anclajes en los extremos (el tubo va sobre el terreno para verlo)
+    const conc = new THREE.MeshStandardMaterial({ color: '#cfc9bc', roughness: 0.9 });
+    const saddle = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2, AXIS - 0.4, 3.4), conc, 21);
+    const M = new THREE.Matrix4();
+    for (let k = 0; k <= 20; k++) saddle.setMatrixAt(k, M.makeTranslation(X0 + k * 30, (AXIS - 0.4) / 2, 0));
+    saddle.castShadow = saddle.receiveShadow = true;
+    const anchor = new THREE.Mesh(new THREE.BoxGeometry(6, 5, 6), conc);
+    anchor.position.set(X0 + 2, 2.2, 0);
+    anchor.castShadow = true;
+    sc.add(saddle, anchor);
+    stage.addProbe(this.pipe, (pt) => this.probe(pt.x));
     // casa de válvulas
     const house = new THREE.Mesh(new THREE.BoxGeometry(14, 8, 12), new THREE.MeshStandardMaterial({ color: '#e3dccb', roughness: 0.9 }));
     house.position.set(X1 + 9, 4, -10);
@@ -85,6 +96,31 @@ export class HammerWorld {
     this.wheel.rotation.x = Math.PI / 2;
     sc.add(house, roof, body, this.wheel, this.steady, this.envHi, this.envLo);
     stage.view(this.views.general, false);
+  }
+
+  /** Lo que se lee en un punto del tubo en el instante que se ve. */
+  private probe(x: number): ProbeInfo | null {
+    const r = this.r;
+    if (!r) return null;
+    const fr = r.frames[this.frame], base = r.frames[0].H;
+    const N = fr.H.length - 1;
+    const u = Math.max(0, Math.min(N, ((x - X0) / (X1 - X0)) * N));
+    const i = Math.min(N - 1, Math.floor(u)), t = u - i;
+    const L = (a: number[]) => a[i] * (1 - t) + a[i + 1] * t;
+    const H = L(fr.H), H0 = L(base), Q = L(fr.Q);
+    const es = (v: number, d = 1) => v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const d = H - H0;
+    return {
+      title: `Tubo a ${es((u / N) * r.inp.L, 0)} m del tanque`,
+      rows: [
+        ['Instante', `t = ${es(fr.t, 2)} s`],
+        ['Presión ahora', `${es(H, 1)} m`],
+        ['Cambio por la onda', `${d >= 0 ? '+' : '−'}${es(Math.abs(d), 1)} m`],
+        ['Caudal ahí', `${es(Q * 1000, 1)} L/s`],
+        ['Máxima y mínima', `${es(L(r.Hmax), 1)} y ${es(L(r.Hmin), 1)} m`],
+      ],
+      strong: 2,
+    };
   }
 
   set(r: HammerResult): void {

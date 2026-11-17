@@ -65,7 +65,7 @@ export function TaludLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const world = useRef<SlopeWorld | null>(null);
   const sync = useRef({ s, r });
   sync.current = { s, r };
-  const toWorld = () => world.current?.set({ beta: sync.current.s.beta, z: sync.current.s.z, m: sync.current.r.m, FS: sync.current.r.FS, veg: sync.current.s.veg, drains: sync.current.s.drains, q: sync.current.s.q });
+  const toWorld = () => world.current?.set({ beta: sync.current.s.beta, z: sync.current.s.z, m: sync.current.r.m, FS: sync.current.r.FS, veg: sync.current.s.veg, drains: sync.current.s.drains, q: sync.current.s.q, tau: sync.current.r.tau, sigma: sync.current.r.sigma, u: sync.current.r.u, strength: sync.current.r.strength });
   useEffect(() => {
     toWorld();
   }, [r]); // eslint-disable-line react-hooks/exhaustive-deps

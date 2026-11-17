@@ -6,7 +6,7 @@
 // dice.
 
 import * as THREE from 'three';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { concreteMaterial, rng, tank } from '../../quality/three/kit';
 import { lookMaterial, lookWater } from '../../three/look';
 import { Birds, studioFloor, terrainBlock, trees, type TreeSpot } from '../../three/scenery';
@@ -103,6 +103,8 @@ export class StationWorld {
     stage.setShadowSpan(40);
     stage.controls.minDistance = 2;
     sc.add(this.site, this.plant);
+    stage.addProbe(this.plant, (_p, hit) => this.probeStation(hit.object));
+    stage.addProbe(this.site, (_p, hit) => this.probeStation(hit.object));
     // casa de bombas (fija): losa, columnas y techo de lámina ondulada
     const house = new THREE.Group();
     const slab = new THREE.Mesh(new THREE.BoxGeometry(11.6, SLAB + 0.5, 8.4), concreteMaterial('#c9c6bf'));
@@ -350,6 +352,43 @@ export class StationWorld {
     this.views.tanque = { eye: [Xt + 12, yp + 12, 17], target: [Xt - 1, yp + 2, 0], fit: 20 };
   }
 
+  private probeStation(o: THREE.Object3D): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    const isIn = (g: THREE.Object3D) => {
+      for (let q: THREE.Object3D | null = o; q; q = q.parent) if (q === g) return true;
+      return false;
+    };
+    const pump = this.pumps.findIndex((p) => isIn(p.group));
+    if (pump >= 0) {
+      const each = s.arr === 'paralelo' ? s.Q / Math.max(1, this.pumps.length) : s.Q;
+      return {
+        title: `Bomba ${pump + 1}${this.pumps.length > 1 ? ` (en ${s.arr})` : ''}`,
+        rows: [
+          ['Caudal', `${es(each, 1)} L/s`],
+          ['Altura que da', `${es(s.arr === 'serie' ? s.H / Math.max(1, this.pumps.length) : s.H, 1)} m`],
+          ['Velocidad del eje', `${es(s.n, 0)} rpm`],
+          ['Eficiencia', `${es(s.eta * 100, 0)} %`],
+          ['Potencia en el eje', `${es(s.Pshaft / Math.max(1, this.pumps.length), 1)} kW`],
+        ],
+        strong: 0,
+      };
+    }
+    const pipe = this.pipes.findIndex((p) => p.mesh === o);
+    if (pipe >= 0)
+      return {
+        title: pipe === 1 ? 'Tubería de impulsión' : 'Tubería de la casa de bombas',
+        rows: [
+          ['Caudal', s.flows ? `${es(s.Q, 1)} L/s` : 'sin flujo (no alcanza a subir)'],
+          ...(pipe === 1 ? ([['Diámetro', s.Dname], ['Velocidad', `${es(s.V, 2)} m/s`]] as [string, string][]) : []),
+          ['Presión a la salida de la bomba', `${es(s.pOut, 1)} m de agua`],
+          ['Altura que hay que subir', `${es(s.Hs, 1)} m más las pérdidas`],
+        ],
+        strong: 0,
+      };
+    return null;
+  }
+
   set(s: StationState): void {
     const key = `${s.arr}|${s.D}|${s.Hs}`;
     const first = this.st === null;
@@ -547,6 +586,8 @@ export class CavitationWorld {
     this.waterBody = new THREE.Mesh(new THREE.BoxGeometry(W - 0.02, 1, D - 0.02), own(new THREE.MeshStandardMaterial({ color: '#3a8bbd', transparent: true, opacity: 0.32, roughness: 0.2, depthWrite: false })));
     (this.waterBody.material as THREE.Material).userData.noLook = true;
     sc.add(this.water, this.waterBody, this.arrows);
+    stage.addProbe(this.water, () => this.probeCav('agua'));
+    stage.addProbe(this.waterBody, () => this.probeCav('agua'));
     // flechas de la atmósfera
     const arrowMat = new THREE.MeshStandardMaterial({ color: '#7d55c7', roughness: 0.4, transparent: true, opacity: 0.85 });
     arrowMat.userData.noLook = true;
@@ -565,6 +606,7 @@ export class CavitationWorld {
     this.pump = new CentrifugalPump({ R: CR, glass: true, motorLen: CR * 2.6 });
     this.pump.group.position.set(1.0, -CR * 1.9, 0);
     sc.add(this.pump.group);
+    stage.addProbe(this.pump.group, () => this.probeCav('bomba'));
     // tubería de succión: entra al pozo, baja a la boca de campana cerca del fondo
     const suc = this.pump.suction.clone().add(this.pump.group.position);
     const xi = -2.6;
@@ -609,6 +651,34 @@ export class CavitationWorld {
     for (let k = 0; k < 40; k++) this.steamSeed.push({ x: x0 + 0.3 + RS() * (W - 0.6), z: -D / 2 + 0.3 + RS() * (D - 0.6), v: 0.3 + RS() * 0.4, p: RS() });
     sc.add(this.steam);
     stage.view(this.views.general, false);
+  }
+
+  private probeCav(what: 'agua' | 'bomba' | 'tubo'): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    if (what === 'agua')
+      return {
+        title: 'Agua del pozo',
+        rows: [
+          ['Temperatura', `${es(s.T, 0)} °C`],
+          ['Presión del aire encima', `${es(s.patm, 1)} kPa (${s.place})`],
+          ['Presión de vapor', `${es(s.pv, 2)} kPa`],
+          ['Nivel respecto al eje de la bomba', `${s.zs >= 0 ? '+' : '−'}${es(Math.abs(s.zs), 2)} m`],
+        ],
+        strong: 3,
+      };
+    return {
+      title: s.state === 'cavita' ? 'Bomba que cavita' : s.state === 'justo' ? 'Bomba al límite' : 'Bomba sin cavitación',
+      rows: [
+        ['Presión absoluta a la entrada', `${es(s.pIn, 1)} kPa`],
+        ['NPSH disponible', `${es(s.NPSHa, 2)} m`],
+        ['NPSH que pide', `${es(s.NPSHr, 2)} m`],
+        ['Margen', `${s.margin >= 0 ? '' : '−'}${es(Math.abs(s.margin), 2)} m`],
+        ['Pérdidas en la succión', `${es(s.hfs, 2)} m`],
+        ['Caudal', `${es(s.Q, 1)} L/s`],
+      ],
+      strong: 3,
+    };
   }
 
   set(s: CavState): void {
@@ -789,6 +859,7 @@ export class HydroWorld {
     stage.setShadowSpan(120);
     stage.controls.minDistance = 4;
     stage.scene.add(this.site);
+    stage.addProbe(this.site, (_p, hit) => this.probeHydro(hit.object));
     const birds = new Birds(V3(120, 0, 40), 140, 80, 7, 3);
     stage.scene.add(birds.group);
     stage.animate((t) => birds.update(t));
@@ -1048,6 +1119,52 @@ export class HydroWorld {
   private houseCount = 1;
   private zCanal(x: number): number {
     return (this.g.Hg - this.yr(Math.max(0, x))) / SLOPE + 7 + 1.4;
+  }
+
+  private probeHydro(o: THREE.Object3D): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    const isIn = (g: THREE.Object3D | null) => {
+      for (let q: THREE.Object3D | null = o; q; q = q.parent) if (g && q === g) return true;
+      return false;
+    };
+    const names: Record<string, string> = { pelton: 'Pelton', francis: 'Francis', kaplan: 'Kaplan', banki: 'Banki (flujo cruzado)' };
+    if (this.pen && o === this.pen.mesh)
+      return {
+        title: 'Tubería de presión',
+        rows: [
+          ['Caída bruta', `${es(s.Hg, 0)} m`],
+          ['Diámetro', `${es(s.D, 2)} m`],
+          ['Caudal', `${es(s.Qt, 2)} m³/s`],
+          ['Se pierde en el tubo', `${es(s.lossPct, 1)} % de la caída`],
+        ],
+        strong: 3,
+      };
+    if (isIn(this.runner))
+      return {
+        title: `Turbina ${names[s.turbine] ?? s.turbine}`,
+        rows: [
+          ['Potencia', `${es(s.P, 0)} kW`],
+          ['Eficiencia', `${es(s.eta * 100, 0)} %`],
+          ['Caudal', `${es(s.Qt, 2)} m³/s de ${es(s.Qd, 2)} de diseño`],
+          ['Hogares que abastece', `unos ${es(s.homesNow, 0)}`],
+          ['¿Le sirve esta caída y caudal?', s.inRange ? 'sí' : 'no es su rango'],
+        ],
+        strong: 0,
+      };
+    const k = this.river.indexOf(o as THREE.Mesh);
+    if (k >= 0) {
+      const q = k === 1 ? Math.max(0, s.Qriver - s.Qt) : s.Qriver;
+      return {
+        title: k === 0 ? 'El río antes de la bocatoma' : k === 1 ? 'El tramo con menos agua' : 'El río después de la descarga',
+        rows: [
+          ['Caudal', `${es(q, 2)} m³/s`],
+          ...(k === 1 ? ([['Caudal ecológico pedido', `${es(s.Qeco, 2)} m³/s`], ['¿Lo cumple?', q >= s.Qeco - 1e-6 ? 'sí' : 'no: el río queda casi seco']] as [string, string][]) : []),
+        ],
+        strong: k === 1 ? 2 : 0,
+      };
+    }
+    return null;
   }
 
   set(s: HydroState): void {

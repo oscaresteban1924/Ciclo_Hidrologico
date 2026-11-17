@@ -5,16 +5,25 @@
 
 import * as THREE from 'three';
 import { Birds, RainStreaks, strataWall, studioFloor } from '../../three/scenery';
-import { lookMaterial, lookWater } from '../../three/look';
+import { lookWater } from '../../three/look';
 import { houses, noise2, rng, trees, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { staffGauge } from '../../canals/three/canalKit';
-import { COVERS, type BasinResult, type Cover } from '../hydrology';
+import { COVERS, scsRunoff, type BasinResult, type Cover } from '../hydrology';
+import { groundMaterial } from '../../three/ground';
 
 const X0 = -160, X1 = 160, Z0 = -110, Z1 = 110, NX = 128, NZ = 88;
 const OUTLET = new THREE.Vector3(152, 0, 0);
 const COVER_COLOR: Record<Cover, string> = { pavimento: '#8d8f91', barrio: '#cdb08f', cultivo: '#c9b860', pasto: '#93c06c', bosque: '#3f7a3a' };
 const ORDER: Cover[] = ['pavimento', 'barrio', 'cultivo', 'pasto', 'bosque'];
+/** Metros por unidad del mundo: el cauce principal de la cuenca de 60 ha (unos 1 400 m) mide unas 310 unidades. */
+const M_PER_U = 4.5;
+/** Cuánto más lenta es el agua en la ladera (flujo en lámina) que en el cauce: reparto ilustrativo del tc. */
+const HILL_SLOWER = 8;
+/** Bandas del mapa de tiempos de viaje. */
+const BANDS = 6;
+
+export type BasinLayer = 'aspecto' | 'viaje';
 
 /** Cauce principal: línea central que serpentea hasta la salida. */
 const mainZ = (x: number) => 16 * Math.sin(x * 0.019 + 0.6) * (1 - (x - X0) / (X1 - X0)) ;
@@ -61,11 +70,19 @@ export class BasinWorld {
     const g = new THREE.PlaneGeometry(X1 - X0, Z1 - Z0, NX, NZ);
     g.rotateX(-Math.PI / 2);
     g.translate((X0 + X1) / 2, 0, (Z0 + Z1) / 2);
-    g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
-    this.ground = new THREE.Mesh(g, lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.14, patches: 0.1, clouds: [0.15, 90] }));
+    const nv = g.attributes.position.count;
+    g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(nv * 3).fill(1), 3));
+    // coberturas dibujadas (pasto, cultivos en hileras, bosque, grava del cauce; barrio y vías en concreto)
+    g.setAttribute('aMix', new THREE.Float32BufferAttribute(new Float32Array(nv * 4), 4));
+    g.setAttribute('aTau', new THREE.Float32BufferAttribute(new Float32Array(nv), 1));
+    this.ground = new THREE.Mesh(g, groundMaterial({ value: 1 / M_PER_U }, [0.15, 90]));
     this.ground.receiveShadow = true;
-    sc.add(this.ground, this.veg);
-    this.streamMat = new THREE.MeshStandardMaterial({ color: '#2f84b5', emissive: '#1f5f8a', emissiveIntensity: 0.15, roughness: 0.2, metalness: 0.05 });
+    // capa encima del suelo: mapa de tiempos de viaje y área que ya aporta a la salida durante el aguacero
+    this.overlay = new THREE.Mesh(g, this.overlayMaterial());
+    this.overlay.renderOrder = 2;
+    this.overlay.visible = false;
+    sc.add(this.ground, this.overlay, this.veg);
+    this.streamMat = lookWater(new THREE.MeshStandardMaterial({ color: '#2f84b5', emissive: '#1f5f8a', emissiveIntensity: 0.15, roughness: 0.2, metalness: 0.05 }), [0.9, 0], 0.5);
     // lluvia en trazos con salpicaduras
     this.rain = new RainStreaks({ x0: X0, x1: X1, z0: Z0, z1: Z1, top: 130 }, (x, z) => this.h(x, z, this.slope), 2600, 70, 3.2, [0.1, 0.03], 1.2);
     sc.add(this.rain.group);
@@ -108,7 +125,140 @@ export class BasinWorld {
     this.tank.add(floor, this.tankWater);
     this.tank.visible = false;
     sc.add(this.tank);
+    // lecturas al pasar el puntero: la cobertura y lo que escurre en cada punto, y el tiempo que tarda en salir
+    stage.addProbe(this.ground, (p) => this.probeGround(p));
     stage.view(this.views.general, false);
+  }
+
+  private overlay: THREE.Mesh;
+  private overU = { uMode: { value: 0 }, uT: { value: -1 } };
+  private cover: Cover[] = [];
+  /** Fracciones del área ordenadas por tiempo de viaje (para el área que aporta). */
+  private tauSorted: Float32Array = new Float32Array(0);
+  private layer: BasinLayer = 'aspecto';
+
+  private overlayMaterial(): THREE.MeshBasicMaterial {
+    const m = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    m.userData.noLook = true;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uMode = this.overU.uMode;
+      sh.uniforms.uT = this.overU.uT;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aTau;\nvarying float vTau;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvTau = aTau;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>\nuniform float uMode;\nuniform float uT;\nvarying float vTau;`)
+        .replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+          {
+            vec4 o = vec4(0.0);
+            if (uMode > 0.5) {
+              // bandas de igual tiempo de viaje (isócronas), de claro (cerca de la salida) a oscuro (lo más lejano)
+              float b = floor(vTau * ${BANDS}.0) / ${(BANDS - 1).toFixed(1)};
+              vec3 c = mix(vec3(0.62, 0.8, 0.9), vec3(0.004, 0.047, 0.147), clamp(b, 0.0, 1.0));
+              float fr = fract(vTau * ${BANDS}.0);
+              float w = fwidth(vTau * ${BANDS}.0);
+              float line = 1.0 - smoothstep(0.0, 1.6 * w, min(fr, 1.0 - fr));
+              o = vec4(mix(c, vec3(0.01, 0.03, 0.06), line * 0.7), 0.76);
+            }
+            if (uT >= 0.0) {
+              // lo que ya aporta: el agua de esos puntos alcanzó a llegar a la salida
+              float inA = 1.0 - smoothstep(uT - 0.004, uT + 0.004, vTau);
+              float front = 1.0 - smoothstep(0.0, max(0.006, 2.0 * fwidth(vTau)), abs(vTau - uT));
+              vec4 a = vec4(0.18, 0.55, 0.9, 0.34 * inA);
+              o = vec4(mix(o.rgb, a.rgb, a.a / max(0.001, o.a + a.a)), max(o.a, a.a));
+              o = mix(o, vec4(1.0, 1.0, 1.0, 0.95), front * step(uT, 0.999));
+            }
+            diffuseColor = o;
+          }`,
+        );
+    };
+    return m;
+  }
+
+  /** Mapa del suelo: su aspecto o el tiempo que tarda el agua de cada punto en llegar a la salida. */
+  setLayer(l: BasinLayer): void {
+    this.layer = l;
+    this.overU.uMode.value = l === 'viaje' ? 1 : 0;
+    this.overlay.visible = l === 'viaje' || this.overU.uT.value >= 0;
+    this.stage.setLabels(this.labels(this.playing ? this.tAnim * this.scale : null));
+  }
+
+  /** Tiempo de viaje de cada vértice hasta la salida: ladera hasta el cauce más cercano y luego cauce abajo. */
+  private computeTau(): void {
+    const pos = this.ground.geometry.attributes.position as THREE.BufferAttribute;
+    const tau = this.ground.geometry.attributes.aTau as THREE.BufferAttribute;
+    // distancia por el cauce desde cada punto de cada camino hasta la salida
+    const rest = this.paths.map((p) => {
+      const r = new Float32Array(p.length);
+      for (let k = p.length - 2; k >= 0; k--) r[k] = r[k + 1] + Math.hypot(p[k + 1].x - p[k].x, p[k + 1].z - p[k].z);
+      return r;
+    });
+    const raw = new Float32Array(pos.count);
+    let mx = 0;
+    for (let v = 0; v < pos.count; v++) {
+      const x = pos.getX(v), z = pos.getZ(v);
+      let best = Infinity;
+      this.paths.forEach((p, i) => {
+        for (let k = 0; k < p.length; k++) {
+          const d = Math.hypot(p[k].x - x, p[k].z - z) * HILL_SLOWER + rest[i][k];
+          if (d < best) best = d;
+        }
+      });
+      raw[v] = best;
+      if (best > mx) mx = best;
+    }
+    for (let v = 0; v < pos.count; v++) tau.setX(v, raw[v] / Math.max(1, mx));
+    tau.needsUpdate = true;
+    this.tauSorted = Float32Array.from(tau.array as Float32Array).sort();
+  }
+
+  /** Fracción del área de la cuenca cuya agua tarda menos que t (fracción del tiempo de concentración). */
+  private areaWithin(t: number): number {
+    const a = this.tauSorted;
+    if (!a.length) return 0;
+    let lo = 0, hi = a.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (a[m] <= t) lo = m + 1;
+      else hi = m;
+    }
+    return lo / a.length;
+  }
+
+  private probeGround(p: THREE.Vector3): ProbeInfo | null {
+    const r = this.r;
+    if (!r) return null;
+    const pos = this.ground.geometry.attributes.position as THREE.BufferAttribute;
+    const fx = (p.x - X0) / (X1 - X0), fz = (p.z - Z0) / (Z1 - Z0);
+    if (fx < 0 || fx > 1 || fz < 0 || fz > 1) return null;
+    const v = Math.round(fz * NZ) * (NX + 1) + Math.round(fx * NX);
+    if (v < 0 || v >= pos.count) return null;
+    const es = (x: number, d = 0) => x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const tau = (this.ground.geometry.attributes.aTau as THREE.BufferAttribute).getX(v);
+    const inCh = Math.abs(p.z - mainZ(p.x)) < 3;
+    if (inCh) {
+      return {
+        title: 'Cauce principal',
+        rows: [
+          ['Llega a la salida en', `unos ${es(tau * r.tc.used)} min`],
+          ['Pico en la salida', `${es(r.Qpeak, 2)} m³/s al minuto ${es(r.tPeak)}`],
+        ],
+        strong: 0,
+      };
+    }
+    const c = this.cover[v] ?? 'pasto';
+    const CN = COVERS[c].CN[r.inp.soil];
+    const q = scsRunoff(r.P, CN);
+    return {
+      title: COVERS[c].name,
+      rows: [
+        ['Número de curva', `${CN} (suelo ${r.inp.soil})`],
+        ['De la lluvia', `${es(r.P)} mm`],
+        ['Escurre aquí', `${es(q, 1)} mm (${es((q / Math.max(1e-6, r.P)) * 100)} %)`],
+        ['Llega a la salida en', `unos ${es(tau * r.tc.used)} min`],
+      ],
+      strong: 2,
+    };
   }
 
   private tank = new THREE.Group();
@@ -216,6 +366,7 @@ export class BasinWorld {
       this.stage.scene.add(m);
     });
     this.station.position.y = this.h(this.station.position.x, this.station.position.z, S);
+    this.computeTau();
   }
 
   private paint(mix: Record<Cover, number>, seed: number): void {
@@ -235,15 +386,23 @@ export class BasinWorld {
       if (j < 0) j = ORDER.length - 1;
       cover[k] = ORDER[j];
     });
-    const c = new THREE.Color();
+    const mixA = this.ground.geometry.attributes.aMix as THREE.BufferAttribute;
     for (let k = 0; k < pos.count; k++) {
       const z = pos.getZ(k), x = pos.getX(k);
-      const inCh = Math.abs(z - mainZ(x)) < 3;
-      c.set(inCh ? '#7b6a52' : COVER_COLOR[cover[k]]);
-      const v = 0.9 + 0.12 * noise2(x * 0.2, z * 0.2);
-      col.setXYZ(k, c.r * v, c.g * v, c.b * v);
+      const inCh = Math.abs(z - mainZ(x)) < 3.2;
+      const cv = cover[k];
+      // pasto, cultivo, bosque, grava; barrio y pavimento quedan en concreto (lo que falta para 1)
+      mixA.setXYZW(k, !inCh && cv === 'pasto' ? 1 : 0, !inCh && cv === 'cultivo' ? 1 : 0, !inCh && cv === 'bosque' ? 1 : 0, inCh ? 1 : 0);
+      // el barrio, con algo de pasto en patios y antejardines
+      if (!inCh && cv === 'barrio') mixA.setX(k, 0.3);
+      // las vías y parqueaderos, en asfalto (más oscuro que los patios del barrio)
+      const v = (0.94 + 0.08 * noise2(x * 0.2, z * 0.2)) * (!inCh && cv === 'pavimento' ? 0.62 : 1);
+      col.setXYZ(k, v, v, v);
     }
+    mixA.needsUpdate = true;
     col.needsUpdate = true;
+    this.cover = cover;
+    void COVER_COLOR;
     // árboles en el bosque, casas en el barrio
     this.veg.clear();
     const R = rng(seed);
@@ -252,10 +411,10 @@ export class BasinWorld {
       const x = pos.getX(k), z = pos.getZ(k), y = pos.getY(k);
       if (Math.abs(z - mainZ(x)) < 6) continue;
       if (cover[k] === 'bosque' && R() < 0.35 && ts.length < 900) ts.push({ x: x + (R() - 0.5) * 2, y, z: z + (R() - 0.5) * 2, r: 1.6 + R() * 1.4 });
-      if (cover[k] === 'barrio' && R() < 0.55 && hs.length < 420) hs.push({ x: x + (R() - 0.5), y, z: z + (R() - 0.5), w: 2 + R() * 1.4, d: 2 + R() * 1.2, h: 2 + R() * 3.5, rot: R() * Math.PI, wall: ['#e8d9c0', '#c06c48', '#f0c9a2', '#bcd6e6', '#f2d27a'][Math.floor(R() * 5)] });
+      if (cover[k] === 'barrio' && R() < 0.8 && hs.length < 520) hs.push({ x: x + (R() - 0.5), y, z: z + (R() - 0.5), w: 1.8 + R() * 1.1, d: 1.9 + R() * 1.0, h: 0.66 + R() * 1.3, rot: Math.round(R() * 4) * (Math.PI / 2) + (R() - 0.5) * 0.3, wall: ['#e9d8b4', '#d98c5f', '#7fb3a6', '#e6b655', '#c96f6a', '#9ec1d9', '#f1efe8'][Math.floor(R() * 7)] });
     }
     if (ts.length) this.veg.add(trees(ts, 4));
-    if (hs.length) this.veg.add(houses(hs));
+    if (hs.length) this.veg.add(houses(hs, { sc: 1 / M_PER_U }));
   }
 
   set(r: BasinResult): void {
@@ -283,6 +442,8 @@ export class BasinWorld {
   play(on: boolean): void {
     this.playing = on;
     this.tAnim = 0;
+    this.overU.uT.value = on ? 0 : -1;
+    this.overlay.visible = this.layer === 'viaje' || on;
     this.pulseT.fill(-1);
     if (on && this.tankFill) this.setTankLevel(0);
     if (!on) {
@@ -310,6 +471,8 @@ export class BasinWorld {
     if (this.tankFill) out.push({ id: 'tanque', text: 'Tanque de retención', sub: `${es(this.tankNow * 100, 0)} % lleno`, at: new THREE.Vector3(this.tank.position.x, this.tank.position.y + 6, this.tank.position.z), kind: this.tankNow > 0.99 ? 'alerta' : 'dato', prio: 5 });
     if (head) out.push({ id: 'lejos', text: 'El punto más lejano', sub: `el agua tarda unos ${es(r.tc.used, 0)} min en salir`, at: head.clone().add(new THREE.Vector3(0, 10, 0)), kind: 'lugar', prio: 4 });
     if (tMin !== null) {
+      const fa = this.areaWithin(Math.min(1, tMin / Math.max(1e-6, r.tc.used)));
+      out.push({ id: 'aporta', text: fa >= 0.999 ? 'Ya llega agua de toda la cuenca' : 'Ya alcanza a llegar a la salida', sub: fa >= 0.999 ? `desde el minuto ${es(r.tc.used, 0)} (tc)` : `el agua caída en el ${es(fa * 100, 0)} % del área`, at: new THREE.Vector3(OUTLET.x - 40, 30, -50), kind: 'dato', prio: 5 });
       const kr = Math.floor(tMin / r.dt);
       const i = kr < r.rain.length ? (r.rain[kr] / r.dt) * 60 : 0;
       out.push({ id: 'lluvia', text: i > 0 ? 'Llueve' : 'Ya no llueve', sub: i > 0 ? `${es(i, 0)} mm/h` : `minuto ${es(tMin, 0)}`, at: new THREE.Vector3(-40, 95, 0), kind: i > 0 ? 'alerta' : 'dato', prio: 5 });
@@ -332,6 +495,8 @@ export class BasinWorld {
       return;
     }
     this.onTime?.(tMin);
+    // área que ya aporta: los puntos cuya agua alcanzó a llegar a la salida desde que empezó a llover
+    this.overU.uT.value = Math.min(1, tMin / Math.max(1e-6, r.tc.used));
     if (this.tankFill) {
       const kt = Math.min(this.tankFill.length - 1, Math.floor(tMin / r.dt));
       this.setTankLevel(this.tankFill[kt]);

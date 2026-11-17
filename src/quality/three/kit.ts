@@ -2,6 +2,7 @@
 // vetas que avanzan y espuma) y colores del agua según su calidad.
 
 import * as THREE from 'three';
+import { ROOF_SLAB, ROOF_TILE, facadeHouses, type HouseSpec } from '../../three/houses';
 import { lookWater } from '../../three/look';
 import { trees as sceneryTrees } from '../../three/scenery';
 
@@ -59,45 +60,36 @@ export interface HouseSpot {
   roof?: string;
 }
 
-/** Casas de barrio: volumen con ventanas pintadas en el sombreador y techo plano o de zinc. */
-export function houses(spots: HouseSpot[]): THREE.InstancedMesh {
-  const box = new THREE.BoxGeometry(1, 1, 1);
-  box.translate(0, 0.5, 0);
-  const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 });
-  mat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vL; varying vec3 vS; varying vec3 vN;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvL = position; vN = normal; vS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vL; varying vec3 vS; varying vec3 vN;')
-      .replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-        if (vN.y > 0.5) {
-          diffuseColor.rgb = vec3(0.62, 0.6, 0.57);
-        } else if (vN.y > -0.5) {
-          float hc = (abs(vN.x) > 0.5 ? vL.z * vS.z : vL.x * vS.x) + 20.0;
-          float vc = vL.y * vS.y;
-          float fx = fract(hc / 2.4), fy = fract(vc / 2.7);
-          float win = step(0.32, fx) * step(fx, 0.68) * step(0.38, fy) * step(fy, 0.78) * step(0.4, vc) * step(vc, vS.y - 0.5);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.2, 0.25), win * 0.85);
-          float slab = step(fract(vc / 2.7), 0.06) * step(1.0, vc);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.7, 0.66), slab * 0.6);
-          diffuseColor.rgb *= 0.92 + 0.08 * step(0.5, abs(vN.z));
-        }`,
-      );
-  };
-  const im = new THREE.InstancedMesh(box, mat, Math.max(1, spots.length));
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  spots.forEach((hs, i) => {
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), hs.rot);
-    im.setMatrixAt(i, m.compose(p.set(hs.x, hs.y - 0.6, hs.z), q, s.set(hs.w, hs.h + 0.6, hs.d)));
-    im.setColorAt(i, new THREE.Color(hs.wall));
+/**
+ * Casas de barrio con fachada (zócalo, ventanas por piso con marco y reja, puerta al frente local +z, cornisa) y, en las
+ * casas pequeñas, techo de teja de dos aguas o plancha con tanque; los edificios grandes y las naves de las plantas
+ * llevan azotea. `sc`: unidades del mundo por metro (1 por omisión). Devuelve los muros; los techos van como hijos (se mueven con
+ * ellos). Para mostrar solo una parte del barrio, `showHouses` de src/three/houses.ts.
+ */
+export function houses(spots: HouseSpot[], o: { roofs?: boolean; sc?: number } = {}): THREE.InstancedMesh {
+  const sc = o.sc ?? 1;
+  const specs: HouseSpec[] = spots.map((hs, i) => {
+    const hash = (((i + 1) * 2654435761 + Math.round(hs.x * 7 + hs.z * 13)) >>> 0) / 4294967296;
+    const roofs = o.roofs !== false && hs.h / sc <= 10 && (hs.w * hs.d) / (sc * sc) <= 260;
+    const teja = roofs && (hs.h / sc < 4.5 || hash < 0.5);
+    return {
+      x: hs.x,
+      y: hs.y,
+      z: hs.z,
+      w: hs.w,
+      d: hs.d,
+      h: hs.h / sc,
+      hw: hs.h,
+      wall: hs.wall,
+      front: [0, 1] as [number, number],
+      roof: roofs ? (teja ? 'teja' : 'plancha') : 'none',
+      roofColor: hs.roof ?? (teja ? ROOF_TILE[i % ROOF_TILE.length] : ROOF_SLAB[i % ROOF_SLAB.length]),
+      rot: hs.rot,
+    };
   });
-  im.count = spots.length;
-  im.castShadow = true;
-  im.receiveShadow = true;
-  return im;
+  const { walls, roofs } = facadeHouses(specs, sc, sc, { sink: 0.6 * sc });
+  if (roofs.length) walls.add(...roofs);
+  return walls;
 }
 
 /** Fachadas de Medellín: ladrillo a la vista y pañetes pintados. */

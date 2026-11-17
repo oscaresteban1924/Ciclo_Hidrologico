@@ -110,9 +110,11 @@ export function RedLab({ head, gl }: { head: ReactNode; gl: boolean }) {
             { id: 'tanque', label: 'El tanque' },
             { id: 'arriba', label: 'Desde arriba' },
           ]}
-          make={(st) => new NetWorld(st, barrio(66))}
+          make={(st) => new NetWorld(st, barrio(66), CLOSABLE.map((c) => c.id))}
           onReady={(w) => {
             world.current = w;
+            // tocar un tubo con válvula en la escena la cierra (o la abre si ya estaba cerrada)
+            w.onToggle = (id) => setInp((s) => ({ ...s, closed: s.closed === id ? '' : id }));
             w.set(sync.current.net, sync.current.sol, sync.current.req);
           }}
         />

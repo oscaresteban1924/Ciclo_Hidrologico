@@ -14,7 +14,7 @@ import { BASIN_TOOLS, IDF_NOTE, ROOM } from './design';
 import { COVERS, IDF_ILUS, type BasinResult, type Soil } from './hydrology';
 import { DEFAULT_SCENE, sceneModel, type SceneBasin } from './scene';
 import { StormButton, useStorm, type StormRun } from './storm';
-import { BasinWorld } from './three/basinWorld';
+import { BasinWorld, type BasinLayer } from './three/basinWorld';
 
 interface Snap {
   b: SceneBasin;
@@ -86,6 +86,8 @@ export function CuencaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [b, setB] = useState<SceneBasin>(DEFAULT_SCENE);
   const [tab, setTab] = useState<PanelTab>('esquema');
   const [saved, setSaved] = useState<Snap[]>([]);
+  // el suelo con su aspecto o el mapa de tiempos de viaje hasta la salida
+  const [layer, setLayer] = useState<BasinLayer>('aspecto');
   // la duración del aguacero de diseño: al menos 60 min y al menos dos veces el tiempo de concentración
   const r = useMemo(() => {
     const first = sceneModel({ ...b, dur: 60 });
@@ -96,6 +98,7 @@ export function CuencaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const sync = useRef(r);
   sync.current = r;
   useEffect(() => world.current?.set(sync.current), [r]);
+  useEffect(() => world.current?.setLayer(layer), [layer]);
   const storm = useStorm(r, gl, world);
   const ctx = useMemo<Ctx>(() => ({ b, r, runs: storm.runs, saved }), [b, r, storm.runs, saved]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
@@ -117,7 +120,7 @@ export function CuencaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
     <>
       {gl ? (
         <Scene3D
-          label="Cuenca de ladera ilustrativa en 3D: una quebrada principal con tres afluentes que bajan hasta una estación de aforo en la salida. Las coberturas van del bosque en la cabecera al barrio y las vías cerca de la salida. Al lanzar el aguacero cae la lluvia y unos pulsos de agua bajan por los cauces en el tiempo de concentración."
+          label="Cuenca de ladera ilustrativa en 3D: una quebrada principal con tres afluentes que bajan hasta una estación de aforo en la salida. Las coberturas van del bosque en la cabecera al barrio y las vías cerca de la salida. Al lanzar el aguacero cae la lluvia unos pulsos de agua bajan por los cauces en el tiempo de concentración y se tiñe de azul el área que ya alcanza a aportar a la salida. Al pasar el puntero se lee la cobertura, lo que escurre y el tiempo que tarda el agua de ese punto en salir; el mapa de tiempos de viaje muestra bandas de igual tiempo."
           viewNames={[
             { id: 'general', label: 'La cuenca' },
             { id: 'salida', label: 'La salida' },
@@ -127,6 +130,7 @@ export function CuencaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
           onReady={(w) => {
             world.current = w;
             w.set(sync.current);
+            w.setLayer(layer);
           }}
         />
       ) : (
@@ -155,6 +159,22 @@ export function CuencaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       <DockRange label="Urbanizado (techos y vías)" value={Math.round(b.u * 100)} min={0} max={90} step={5} show={`${es(b.u * 100, 0)} %`} onChange={(v) => set({ u: v / 100 })} />
       <DockChoice<Soil> label="Suelo" value={b.soil} options={(['B', 'C', 'D'] as Soil[]).map((s) => ({ value: s, label: s }))} onChange={(v) => set({ soil: v })} />
       <DockChoice<string> label="Período de retorno (años)" value={String(b.T)} options={T_OPTS.map((t) => ({ value: String(t), label: String(t) }))} onChange={(v) => set({ T: Number(v) })} />
+      {gl && (
+        <DockChoice<BasinLayer>
+          label="Ver la cuenca"
+          value={layer}
+          options={[
+            { value: 'aspecto', label: 'Su aspecto' },
+            { value: 'viaje', label: 'Tiempo de viaje' },
+          ]}
+          onChange={setLayer}
+        />
+      )}
+      {gl && layer === 'viaje' && (
+        <p className="hc-note">
+          Bandas de igual tiempo de viaje hasta la salida, cada {es(r.tc.used / 6, 1)} min: claras cerca de la salida, oscuras en lo más lejano (unos {es(r.tc.used, 0)} min, el tiempo de concentración). Reparto ilustrativo: en la ladera el agua corre unas 8 veces más despacio que en el cauce.
+        </p>
+      )}
     </>
   );
 

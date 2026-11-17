@@ -378,7 +378,7 @@ export function terrainBlock(h: (x: number, z: number) => number, x0: number, x1
     col.set([c.r, c.g, c.b], 3 * k);
   }
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const topMat = lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.15, patches: 0.12, clouds: [0.15, Math.max(30, Math.max(x1 - x0, z1 - z0) / 4)] });
+  const topMat = lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.12, patches: 0.08, ground: 1, clouds: [0.15, Math.max(30, Math.max(x1 - x0, z1 - z0) / 4)] });
   const top = new THREE.Mesh(geo, topMat);
   top.receiveShadow = true;
   top.castShadow = true;

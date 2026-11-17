@@ -4,13 +4,13 @@
 // quebrada que se enturbia). Todo a escala, sin exagerar.
 
 import * as THREE from 'three';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { houses, rng, type HouseSpot } from '../../quality/three/kit';
 import { lookMaterial, lookWater } from '../../three/look';
 import { Birds, RainStreaks, studioFloor, trees, type TreeSpot } from '../../three/scenery';
 import { es } from '../../canals/common';
 import type { GAResult } from '../slope';
-import { COVERS, type Cover, type Practice, type Texture, TEXTURES } from '../slope';
+import { COVERS, PRACTICES, type Cover, type Practice, type Texture, TEXTURES } from '../slope';
 
 const soilMat = (color: string, detail = 0.18) => lookMaterial(new THREE.MeshStandardMaterial({ color, roughness: 1 }), { detail, scale: 2 });
 const rockMat = () => lookMaterial(new THREE.MeshStandardMaterial({ color: '#8b857c', roughness: 0.95 }), { detail: 0.22, patches: 0.08, scale: 0.8 });
@@ -131,6 +131,8 @@ export class InfiltrationWorld {
     // lluvia
     this.rain = new RainStreaks({ x0: -PX - 1, x1: PX + 1, z0: -PZ - 1, z1: PZ + 1, top: 9 }, (x) => topY(x), 1800, 9, 0.5, [0.06, 0.02], 0.12);
     sc.add(this.wet, this.wetTop, this.frontLine, this.pond, this.ditch, this.flow, this.drops, ringG, this.rain.group);
+    // lecturas: en el corte, si el suelo ya está húmedo a esa profundidad; en la superficie, lo que entra y lo que escurre
+    stage.addProbe(this.body, (p) => this.probeInf(p));
     // alrededor: pradera baja con árboles, para dar escala
     const ts: TreeSpot[] = [];
     const RT = rng(5);
@@ -140,6 +142,39 @@ export class InfiltrationWorld {
     }
     sc.add(trees(ts.filter((t) => t.z < -5), 3));
     stage.view(this.views.general, false);
+  }
+
+  private probeInf(p: THREE.Vector3): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    const r = s.r, k = this.k, tx = TEXTURES[s.texture];
+    const F = r.F[k];
+    const front = Math.min(PD - 0.02, F / Math.max(1e-6, s.dTheta) / 1000);
+    const depth = Math.max(0, topY(p.x) - p.y);
+    const tMin = r.t[k] * 60;
+    if (depth > 0.02) {
+      const wet = depth <= front;
+      return {
+        title: `${tx.name} a ${es(depth * 100, 0)} cm de profundidad`,
+        rows: [
+          ['Aquí el suelo está', wet ? 'mojado (ya llegó el agua)' : 'como antes de la lluvia'],
+          ['Frente de humedecimiento', `${es(front * 100, 1)} cm (minuto ${es(tMin, 0)})`],
+          ['Le falta al frente', wet ? 'ya pasó' : `${es((depth - front) * 100, 1)} cm`],
+          ['Porosidad que se llena', `${es(s.dTheta * 100, 0)} % del volumen`],
+        ],
+        strong: 0,
+      };
+    }
+    return {
+      title: `Superficie de ${tx.name.toLowerCase()} · minuto ${es(tMin, 0)}`,
+      rows: [
+        ['Llueve', `${es(s.i, 0)} mm/h`],
+        ['El suelo admite', `${es(Math.min(999, r.fcap[k]), 1)} mm/h`],
+        ['Entra', `${es(r.f[k], 1)} mm/h`],
+        ['Escurrió hasta ahora', `${es(r.R[k], 1)} mm`],
+      ],
+      strong: 2,
+    };
   }
 
   private built = '';
@@ -285,6 +320,11 @@ export interface SlopeState {
   veg: 'desnudo' | 'pasto' | 'bosque';
   drains: boolean;
   q: number;
+  /** Esfuerzos sobre el plano de falla [kPa]: cortante, normal, presión del agua y resistencia (para las lecturas). */
+  tau?: number;
+  sigma?: number;
+  u?: number;
+  strength?: number;
 }
 
 /**
@@ -327,10 +367,32 @@ export class SlopeWorld {
     this.rain = new RainStreaks({ x0: -30, x1: 40, z0: -SW / 2 - 4, z1: SW / 2 + 4, top: 45 }, (x) => this.surfaceY(x), 2200, 40, 1.8, [0.08, 0.03], 0.5);
     sc.add(this.rain.group);
     sc.add(studioFloor(5, 0, 40, -8));
+    stage.addProbe(this.body, (p) => this.probeSlope(p));
+    stage.addProbe(this.slab, (p) => this.probeSlope(p));
     const birds = new Birds(new THREE.Vector3(0, 10, -10), 50, 32, 6, 1.1);
     sc.add(birds.group);
     stage.animate((t) => birds.update(t));
     stage.view(this.views.general, false);
+  }
+
+  private probeSlope(p: THREE.Vector3): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    if (p.x < this.x0 - 0.5 || p.x > this.x1 + 0.5) return { title: p.x < this.x0 ? 'Meseta' : 'Pie de la ladera', rows: [['Pendiente', 'casi plana: aquí no se desliza']], strong: 0 };
+    const ys = this.surfaceY(p.x), depth = Math.max(0, ys - p.y);
+    const inSoil = depth <= s.z + 0.05;
+    const wtab = s.m * s.z;
+    const rows: [string, string][] = [
+      ['Pendiente', `${es(s.beta, 0)}°`],
+      ['Capa de suelo', `${es(s.z, 1)} m sobre la roca`],
+      ['Agua en la capa', `${es(wtab, 2)} m (${es(s.m * 100, 0)} % saturada)`],
+    ];
+    if (s.tau !== undefined && s.strength !== undefined) {
+      rows.push(['En el plano de falla', `empuja ${es(s.tau, 1)} kPa · resiste ${es(s.strength, 1)} kPa`]);
+      if (s.u !== undefined) rows.push(['Presión del agua ahí', `${es(s.u, 1)} kPa`]);
+    }
+    rows.push(['Factor de seguridad', `${es(s.FS, 2)} (${s.FS >= 1.5 ? 'segura' : s.FS >= 1 ? 'aguanta con poco margen' : 'se desliza'})`]);
+    return { title: inSoil ? (depth > s.z - wtab ? 'Suelo saturado' : 'Suelo con aire en los poros') : 'Roca', rows, strong: rows.length - 1 };
   }
 
   /** Cota de la superficie en x (la ladera va de x0 a x1; arriba una meseta y abajo el pie plano). */
@@ -545,6 +607,11 @@ export interface ErosionState {
   practice: Practice;
   A: number;
   ok: boolean;
+  /** Factores de la RUSLE y espesor perdido por año [mm] (para las lecturas). */
+  LS?: number;
+  C?: number;
+  P?: number;
+  mmYear?: number;
 }
 
 /** Ladera de cultivo a escala con su cobertura y prácticas; abajo una quebrada que se enturbia con lo que se lleva la lluvia. */
@@ -587,10 +654,28 @@ export class ErosionWorld {
     this.rain = new RainStreaks({ x0: -60, x1: 50, z0: -EW / 2 - 6, z1: EW / 2 + 6, top: 70 }, (x) => this.surfaceY(x), 2400, 40, 2, [0.06, 0.02], 0.6);
     sc.add(this.rain.group);
     sc.add(studioFloor(0, 0, 70, -6));
+    stage.addProbe(this.body, (p) => this.probeErosion(p));
+    stage.addProbe(this.creek, () => this.probeErosion(null));
     const birds = new Birds(new THREE.Vector3(-10, 10, 0), 60, 40, 6, 1.4);
     sc.add(birds.group);
     stage.animate((t) => birds.update(t));
     stage.view(this.views.general, false);
+  }
+
+  private probeErosion(p: THREE.Vector3 | null): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    if (!p || p.x > this.x1 + 1)
+      return { title: 'La quebrada', rows: [['Le llega de la ladera', `${es(s.A, 1)} t por hectárea al año`], ['Agua', s.A > 11 ? 'turbia: lleva mucho sedimento' : 'casi limpia']], strong: 0 };
+    if (p.x < this.x0 - 0.5) return { title: 'Meseta', rows: [['Pendiente', 'casi plana: pierde muy poco']], strong: 0 };
+    const rows: [string, string][] = [
+      ['Cobertura', `${COVERS[s.cover].name}${s.practice === 'ninguna' ? '' : ` · ${PRACTICES[s.practice].toLowerCase()}`}`],
+      ['Pendiente y largo', `${es(s.slopePct, 0)} % · ${es(s.lambda, 0)} m`],
+      ['Pierde al año', `${es(s.A, 1)} t/ha${s.mmYear !== undefined ? ` (${es(s.mmYear, 2)} mm de suelo)` : ''}`],
+      ['Tolerable', '11 t/ha al año'],
+    ];
+    if (s.LS !== undefined && s.C !== undefined && s.P !== undefined) rows.push(['Factores LS · C · P', `${es(s.LS, 2)} · ${es(s.C, 3)} · ${es(s.P, 2)}`]);
+    return { title: s.ok ? 'Ladera que conserva su suelo' : 'Ladera que pierde suelo', rows, strong: 2 };
   }
 
   private x0 = -30;
@@ -662,7 +747,7 @@ export class ErosionWorld {
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.computeVertexNormals();
-    const surf = new THREE.Mesh(g, lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 }), { detail: 0.16, patches: 0.08, clouds: [0.12, 40] }));
+    const surf = new THREE.Mesh(g, lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 }), { detail: 0.12, patches: 0.06, ground: 1, scale: 2, clouds: [0.12, 40] }));
     surf.receiveShadow = true;
     surf.castShadow = true;
     this.body.add(surf);

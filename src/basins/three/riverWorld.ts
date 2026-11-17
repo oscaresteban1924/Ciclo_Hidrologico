@@ -3,9 +3,10 @@
 // regla en la orilla marca los niveles de 2, 10, 50 y 100 años. El agua se dibuja con su profundidad calculada.
 
 import * as THREE from 'three';
+import { lookMaterial } from '../../three/look';
 import { houses, noise2, rng, trees, waterMaterial, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { RIVER, RIVER_HOUSES, groundAt } from '../river';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
+import { RIVER, RIVER_HOUSES, groundAt, riverQ } from '../river';
 
 const XL = 150, ZW = 110;
 
@@ -63,7 +64,7 @@ export class RiverWorld {
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
     g.computeVertexNormals();
-    const ground = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+    const ground = new THREE.Mesh(g, lookMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), { detail: 0.1, ground: 1, clouds: [0.13, 60] }));
     ground.receiveShadow = true;
     sc.add(ground);
     // agua: un plano al nivel calculado (el terreno tapa lo que queda por debajo)
@@ -74,6 +75,9 @@ export class RiverWorld {
     this.water = new THREE.Mesh(wg, waterMaterial(this.time, { opacity: 0.82, speed: 0.4 }));
     this.water.renderOrder = 2;
     sc.add(this.water);
+    // lecturas: cuánta agua hay en cada punto y qué creciente lo alcanza
+    stage.addProbe(ground, (p) => this.probe(p.z, false));
+    stage.addProbe(this.water, (p) => this.probe(p.z, true));
     // casas en las llanuras a varias distancias del cauce, y árboles en las laderas
     const R = rng(11);
     const hs: HouseSpot[] = RIVER_HOUSES.map((h) => ({ ...h }));
@@ -115,6 +119,43 @@ export class RiverWorld {
     this.label = label;
     if (this.stage.reducedMotion) this.level = y;
     this.labelsNow();
+  }
+
+  /** Lo que se lee en un punto del corte (por su distancia al eje del río). */
+  private probe(z: number, onWater: boolean): ProbeInfo {
+    const es = (x: number, d = 2) => x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const y = Math.max(0, groundAt(z));
+    const depth = this.level - y;
+    const inBed = Math.abs(z) < RIVER.b / 2 + RIVER.z * RIVER.bank;
+    if (onWater && depth > 0.02) {
+      return {
+        title: inBed ? 'El río' : 'Llanura inundada',
+        rows: [
+          ['Profundidad aquí', `${es(depth)} m`],
+          ['Nivel del agua', `${es(this.level)} m sobre el fondo`],
+          ['Caudal', `${es(riverQ(this.level), 0)} m³/s`],
+        ],
+        strong: 0,
+      };
+    }
+    // qué creciente alcanza este punto: entre las marcas de la regla
+    const ms = [...this.marks].sort((a, b) => a.y - b.y);
+    let reach = '';
+    if (ms.length) {
+      if (y <= ms[0].y) reach = `la de ${ms[0].T} años o menos`;
+      else if (y > ms[ms.length - 1].y) reach = `una mayor que la de ${ms[ms.length - 1].T} años`;
+      else for (let k = 1; k < ms.length; k++) if (y <= ms[k].y) reach = `entre la de ${ms[k - 1].T} y la de ${ms[k].T} años`;
+    }
+    return {
+      title: Math.abs(z) < 14 ? 'Orilla' : 'Llanura',
+      rows: [
+        ['Altura sobre el fondo', `${es(y)} m`],
+        ['Agua ahora', depth > 0.02 ? `${es(depth)} m` : 'seca'],
+        ['Se moja desde', `${es(riverQ(y), 0)} m³/s`],
+        ...(reach ? ([['Creciente que la alcanza', reach]] as [string, string][]) : []),
+      ],
+      strong: 1,
+    };
   }
 
   houses(level = this.level): RiverHouse[] {

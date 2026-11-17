@@ -1289,3 +1289,44 @@
     font-size: 0.72rem;
   }
 }
+
+/* lectura de un punto de la escena al pasar el puntero (o al tocarlo) */
+.q3-hover.q3-probe {
+  left: 0;
+  top: 0;
+  bottom: auto;
+  z-index: 5;
+  display: none;
+  gap: 1px;
+  min-width: 150px;
+  max-width: 270px;
+  padding: 7px 10px 8px;
+  border-radius: 10px;
+  background: rgba(16, 36, 56, 0.9);
+  box-shadow: 0 6px 18px rgba(10, 25, 40, 0.25);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: none;
+}
+.q3-probe b {
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+.q3-probe span {
+  color: #e9f1f7;
+}
+.q3-probe i {
+  font-style: normal;
+  color: #a9c2d4;
+}
+.q3-probe .is-key {
+  color: #9fd4f5;
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .q3-hover.q3-probe {
+    transition: none;
+  }
+}

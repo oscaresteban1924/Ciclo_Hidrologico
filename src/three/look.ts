@@ -32,7 +32,16 @@ export interface LookOptions {
   sway?: number;
   /** Sombras de nubes que pasan sobre el terreno: [fuerza 0..0,3, tamaño de las nubes en unidades del mundo]. */
   clouds?: [number, number];
+  /**
+   * Suelo natural según el color de cada punto (0 nada, 1 completo): donde es verde, pasto con manchas de potrero
+   * más secas y más frescas, matas y grano fino; donde es tierra, terrones y gravilla. En metros de `scale`.
+   */
+  ground?: number;
 }
+
+/** Cielo que refleja el agua: claro en el horizonte (ángulo rasante) y azul arriba. */
+const SKY_H = { value: new THREE.Color('#dce8ef') };
+const SKY_T = { value: new THREE.Color('#7fa9cf') };
 
 /**
  * Agrega el acabado a un material estándar, de Lambert o de Phong, encadenado con el onBeforeCompile que ya
@@ -50,13 +59,18 @@ export function lookMaterial<M extends THREE.Material>(mat: M, o: LookOptions): 
   const uW = { value: new THREE.Vector4(o.water?.flow?.[0] ?? 0.35, o.water?.flow?.[1] ?? 0.12, o.water?.strength ?? 0.6, water ? 1 : 0) };
   const uS = { value: o.sway ?? 0 };
   const uC = { value: new THREE.Vector2(o.clouds?.[0] ?? 0, o.clouds?.[1] ?? 100) };
-  mat.userData.lookUniforms = { detail: uD, water: uW, sway: uS, clouds: uC };
+  const ground = (o.ground ?? 0) > 0;
+  const uG = { value: o.ground ?? 0 };
+  mat.userData.lookUniforms = { detail: uD, water: uW, sway: uS, clouds: uC, ground: uG };
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
     sh.uniforms.uLkD = uD;
     sh.uniforms.uLkW = uW;
     sh.uniforms.uLkS = uS;
     sh.uniforms.uLkC = uC;
+    sh.uniforms.uLkG = uG;
+    sh.uniforms.uLkSkyH = SKY_H;
+    sh.uniforms.uLkSkyT = SKY_T;
     sh.uniforms.uLkT = LOOK_TIME;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vLkW;\nvarying vec3 vLkN;\nuniform float uLkS;\nuniform float uLkT;').replace(
       '#include <begin_vertex>',
@@ -80,10 +94,32 @@ export function lookMaterial<M extends THREE.Material>(mat: M, o: LookOptions): 
       }`,
     );
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vLkW;\nvarying vec3 vLkN;\nuniform vec3 uLkD;\nuniform vec4 uLkW;\nuniform vec2 uLkC;\nuniform float uLkT;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vLkW;\nvarying vec3 vLkN;\nuniform vec3 uLkD;\nuniform vec4 uLkW;\nuniform vec2 uLkC;\nuniform float uLkT;\nuniform float uLkG;\nuniform vec3 uLkSkyH;\nuniform vec3 uLkSkyT;\n${NOISE}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+        ${
+          ground
+            ? `{
+          // suelo natural según el color: pasto donde es verde, terrones donde es tierra
+          vec3 lkC0 = diffuseColor.rgb;
+          float lkGr = smoothstep(0.008, 0.05, lkC0.g - max(lkC0.r, lkC0.b) * 0.95);
+          float lkWm = smoothstep(0.015, 0.07, lkC0.r - lkC0.b) * (1.0 - lkGr);
+          vec2 lkPg = vLkW.xz * uLkD.z;
+          float lkNear = 1.0 - smoothstep(0.35, 1.8, length(fwidth(lkPg)));
+          float lkBig = lkF(lkPg * 0.028 + 2.1);
+          vec3 lkTint = mix(vec3(0.88, 0.98, 1.05), vec3(1.13, 1.03, 0.74), smoothstep(0.32, 0.74, lkBig));
+          float lkMid = lkN(lkPg * 0.33 + 5.2), lkFine = lkN(lkPg * 2.3);
+          vec3 lkGrass = lkC0 * lkTint * (0.86 + 0.26 * lkMid) * mix(1.0, 0.84 + 0.32 * lkFine, lkNear);
+          lkGrass *= 1.0 - 0.16 * smoothstep(0.6, 0.8, lkN(lkPg * 0.85 + 3.3)) * mix(0.5, 1.0, lkNear);
+          float lkClod = lkN(lkPg * 1.3 + 7.7), lkPeb = lkN(lkPg * 4.6 + 1.1);
+          vec3 lkSoil = lkC0 * (0.86 + 0.26 * lkClod) * mix(1.0, 0.82 + 0.34 * smoothstep(0.5, 0.78, lkPeb), lkNear);
+          vec3 lkOut = mix(lkC0, lkGrass, lkGr);
+          lkOut = mix(lkOut, lkSoil, lkWm);
+          diffuseColor.rgb = mix(lkC0, lkOut, uLkG);
+        }`
+            : ''
+        }
         if (uLkD.x + uLkD.y > 0.0) {
           vec3 lkA = pow(abs(normalize(vLkN)), vec3(4.0));
           lkA /= (lkA.x + lkA.y + lkA.z + 1e-5);
@@ -120,8 +156,21 @@ export function lookMaterial<M extends THREE.Material>(mat: M, o: LookOptions): 
           #undef LKH
         }`,
       );
+    if (water)
+      sh.fragmentShader = sh.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `{
+          // el cielo reflejado según el ángulo: azul mirando de frente, claro en ángulo rasante
+          vec3 lkVd = normalize(vViewPosition);
+          float lkFr = pow(1.0 - clamp(abs(dot(normal, lkVd)), 0.0, 1.0), 4.0);
+          vec3 lkRw = (vec4(reflect(-lkVd, normal), 0.0) * viewMatrix).xyz;
+          vec3 lkSky = mix(uLkSkyH, uLkSkyT, pow(clamp(lkRw.y, 0.0, 1.0), 0.6));
+          outgoingLight = mix(outgoingLight, lkSky, lkFr * 0.5);
+        }
+        #include <opaque_fragment>`,
+      );
   };
-  mat.customProgramCacheKey = () => `${key0}|look${water ? 'W' : ''}${sway ? 'S' : ''}`;
+  mat.customProgramCacheKey = () => `${key0}|look${water ? 'W' : ''}${sway ? 'S' : ''}${ground ? 'G' : ''}`;
   mat.needsUpdate = true;
   return mat;
 }

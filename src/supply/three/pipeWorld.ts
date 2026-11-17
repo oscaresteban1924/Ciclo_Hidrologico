@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { Birds } from '../../three/scenery';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { polyline, setPolyline } from '../../canals/three/canalKit';
 import { PIPE_PROFILE } from '../scene';
@@ -75,7 +75,13 @@ export class PipeWorld {
     this.path = PIPE_PROFILE.map((p) => new THREE.Vector3(p.x + OFF, p.z, 0.6));
     const dense: THREE.Vector3[] = [];
     for (let x = 0; x <= 420; x += 5) dense.push(new THREE.Vector3(x + OFF, zPipe(x), 0.6));
-    sc.add(pipeMesh(dense, 0.8, new THREE.MeshStandardMaterial({ color: '#e8e2d2', roughness: 0.55 })));
+    // el tubo se tiñe con la presión de cada tramo (de azul con mucha presión a rojo si es negativa)
+    this.pipe = pipeMesh(dense, 0.8, new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.5 }));
+    const pc = new Float32Array((this.pipe.geometry.attributes.position as THREE.BufferAttribute).count * 3).fill(0.9);
+    this.pipe.geometry.setAttribute('color', new THREE.BufferAttribute(pc, 3));
+    sc.add(this.pipe);
+    stage.addProbe(this.pipe, (pt) => this.probe(pt.x - OFF));
+    stage.addProbe(terr, (pt) => this.probeGround(pt.x - OFF));
     this.len = [0];
     for (let k = 1; k < dense.length; k++) this.len.push(this.len[k - 1] + dense[k].distanceTo(dense[k - 1]));
     this.path = dense;
@@ -118,8 +124,75 @@ export class PipeWorld {
     stage.view(this.views.general, false);
   }
 
+  private pipe: THREE.Mesh;
+
+  /** Línea piezométrica, de energía y presión a una distancia horizontal x del tanque (m). */
+  private at(x: number): { hgl: number; egl: number; p: number; s: number } | null {
+    const pts = this.r?.pts;
+    if (!pts) return null;
+    const cx = Math.max(0, Math.min(420, x));
+    for (let k = 1; k < pts.length; k++)
+      if (cx <= pts[k].x && pts[k].x - pts[k - 1].x > 1e-6) {
+        const f = (cx - pts[k - 1].x) / (pts[k].x - pts[k - 1].x);
+        const L = (a: number, b: number) => a + f * (b - a);
+        return { hgl: L(pts[k - 1].hgl, pts[k].hgl), egl: L(pts[k - 1].egl, pts[k].egl), p: L(pts[k - 1].p, pts[k].p), s: L(pts[k - 1].s, pts[k].s) };
+      }
+    const e = pts[pts.length - 1];
+    return { hgl: e.hgl, egl: e.egl, p: e.p, s: e.s };
+  }
+
+  private probe(x: number): ProbeInfo | null {
+    const r = this.r, a = this.at(x);
+    if (!r || !a) return null;
+    const es = (v: number, d = 1) => v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    return {
+      title: `Tubo a ${es(a.s, 0)} m del tanque`,
+      rows: [
+        ['Presión', `${es(a.p, 1)} m de agua (${es(a.p * 9.81, 0)} kPa)`],
+        ['Cota del tubo', `${es(zPipe(x), 1)} m`],
+        ['Línea piezométrica', `${es(a.hgl, 1)} m`],
+        ['Línea de energía', `${es(a.egl, 1)} m`],
+        ['Velocidad', `${es(r.V, 2)} m/s`],
+        ['Perdido desde el tanque', `${es(r.inp.H0 - a.egl, 1)} m`],
+      ],
+      strong: 0,
+    };
+  }
+
+  private probeGround(x: number): ProbeInfo | null {
+    const a = this.at(x);
+    if (!a) return null;
+    const es = (v: number, d = 1) => v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    return {
+      title: 'Terreno sobre el tubo',
+      rows: [
+        ['Cota del terreno', `${es(zPipe(x) + COVER, 1)} m`],
+        ['El tubo va a', `${es(COVER, 1)} m de profundidad`],
+        ['Presión en el tubo', `${es(a.p, 1)} m de agua`],
+      ],
+      strong: 2,
+    };
+  }
+
+  /** Colores del tubo según la presión de cada tramo. */
+  private paintPipe(): void {
+    const pos = this.pipe.geometry.attributes.position as THREE.BufferAttribute;
+    const col = this.pipe.geometry.attributes.color as THREE.BufferAttribute;
+    const c = new THREE.Color(), hi = new THREE.Color('#2b6fae'), mid = new THREE.Color('#e9e4d6'), lo = new THREE.Color('#d1495b');
+    const pMax = Math.max(10, ...(this.r?.pts.map((q) => q.p) ?? [10]));
+    for (let k = 0; k < pos.count; k++) {
+      const a = this.at(pos.getX(k) - OFF);
+      const p = a ? a.p : 0;
+      if (p < 0) c.copy(mid).lerp(lo, Math.min(1, 0.45 - p / 4));
+      else c.copy(mid).lerp(hi, Math.min(1, p / pMax) * 0.85);
+      col.setXYZ(k, c.r, c.g, c.b);
+    }
+    col.needsUpdate = true;
+  }
+
   set(r: PipelineResult): void {
     this.r = r;
+    this.paintPipe();
     this.tankObj.setLevel(r.inp.H0);
     const hglAt = (x: number) => {
       const pts = r.pts;

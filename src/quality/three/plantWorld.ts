@@ -441,7 +441,7 @@ export class PlantWorld {
     // edificio de laboratorio y control, letrero y cerca del predio
     this.buildSite();
     // la casa con la llave (frente abierto) y el vaso
-    const hs = houses([{ x: X.llave + 1.5, y: 0.6, z: -1.8, w: 6, d: 3, h: 4.2, rot: 0, wall: '#efe0c0' }]);
+    const hs = houses([{ x: X.llave + 1.5, y: 0.6, z: -1.8, w: 6, d: 3, h: 4.2, rot: 0, wall: '#efe0c0' }], { roofs: false });
     sc.add(hs);
     const table = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 1.4), new THREE.MeshStandardMaterial({ color: '#8a5a3a' }));
     table.position.set(X.llave, 1.05, 0.6);
@@ -548,7 +548,7 @@ export class PlantWorld {
   private buildPumpHouse(x0: number, x1: number): void {
     const sc = this.stage.scene;
     const cx = (x0 + x1) / 2;
-    const hut = houses([{ x: cx, y: 0, z: 0, w: 4.2, d: 3.6, h: 3, rot: 0, wall: '#e3ddcf' }]);
+    const hut = houses([{ x: cx, y: 0, z: 0, w: 4.2, d: 3.6, h: 3, rot: 0, wall: '#e3ddcf' }], { roofs: false });
     sc.add(hut);
     const roof = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.25, 4.2), concreteMaterial('#9da09c'));
     roof.position.set(cx, 3.15, 0);
@@ -703,7 +703,7 @@ export class PlantWorld {
   /** Edificio de laboratorio y control, letrero de la escena y cerca del predio. */
   private buildSite(): void {
     const sc = this.stage.scene;
-    const lab = houses([{ x: 38, y: 0.6, z: -17, w: 13, d: 7, h: 5.4, rot: 0, wall: '#ebe5d6' }]);
+    const lab = houses([{ x: 38, y: 0.6, z: -17, w: 13, d: 7, h: 5.4, rot: 0, wall: '#ebe5d6' }], { roofs: false });
     sc.add(lab);
     const roof = new THREE.Mesh(new THREE.BoxGeometry(13.8, 0.35, 7.8), concreteMaterial('#a8aaa6'));
     roof.position.set(38, 6.2, -17);

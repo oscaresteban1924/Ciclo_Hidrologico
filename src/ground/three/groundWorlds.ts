@@ -5,12 +5,13 @@
 import * as THREE from 'three';
 import { Birds } from '../../three/scenery';
 import { lookWater } from '../../three/look';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
+import { soilCutMaterial } from '../../three/soil';
 import { houses, noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { polyline, setPolyline } from '../../canals/three/canalKit';
 import { diorama } from '../../supply/three/supplyKit';
 import { SOILS, captureZone, theis, type Particle, type Soil } from '../aquifer';
-import { AQ, PLUME, WELL, plumeQ, wellT, type AquiferResult, type WellScene } from '../scene';
+import { AQ, PLUME, WELL, plumeQ, plumeV, wellT, type AquiferResult, type WellScene } from '../scene';
 
 const es = (x: number, d = 1) => x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
 const SOIL_COLOR: Record<Soil, string> = { grava: '#9a958c', arena: '#d6bf86', arenafina: '#c9b27c', limo: '#9c8063', arcilla: '#a5674a' };
@@ -50,11 +51,14 @@ export class AquiferWorld {
     sc.add(diorama((x, z) => groundAt(x + 320) + (z < -6 ? noise2(x * 0.02, z * 0.03) * 1.5 : 0), -320, 320, -90, 0, 128, 18, (x, z) => green.clone().multiplyScalar(0.93 + 0.08 * noise2(x * 0.2, z * 0.2)), -3));
     // corte del frente: el material del acuífero hasta la superficie, y el agua (saturado) encima
     const g = new THREE.PlaneGeometry(640, 1, 160, 1);
-    this.section = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: '#d6bf86', roughness: 1 }));
+    // el corte con el grano del suelo (agrandado ×3 para verlo en la maqueta) y el saturado más oscuro bajo el nivel
+    this.soilMat = soilCutMaterial('#d6bf86', 'arena', 3);
+    this.section = new THREE.Mesh(g, this.soilMat);
     this.section.position.z = 0.15;
     const wg = new THREE.PlaneGeometry(640, 1, 160, 1);
-    this.water = new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: '#3f8fc4', transparent: true, opacity: 0.4, depthWrite: false }));
+    this.water = new THREE.Mesh(wg, new THREE.MeshBasicMaterial({ color: '#3f8fc4', transparent: true, opacity: 0.16, depthWrite: false }));
     this.water.position.z = 0.35;
+    stage.addProbe(this.section, (p) => this.probe(p.x + 320, p.y));
     this.shapeSection();
     // río
     const river = new THREE.Mesh(new THREE.BoxGeometry(50, 3, 90), lookWater(new THREE.MeshStandardMaterial({ color: '#2f84b5', transparent: true, opacity: 0.85, roughness: 0.1 }), [0, 0.6], 0.5));
@@ -86,6 +90,31 @@ export class AquiferWorld {
     stage.view(this.views.general, false);
   }
 
+  private soilMat: ReturnType<typeof soilCutMaterial>;
+
+  /** Lo que se lee en un punto del corte: si está saturado, la carga y la velocidad del agua. */
+  private probe(x: number, y: number): ProbeInfo | null {
+    const r = this.r;
+    if (!r || x < 0 || x > 590) return null;
+    const h = r.h(Math.min(AQ.L, x)), gnd = groundAt(x);
+    const sat = y <= h;
+    const days = (v: number) => (v < 730 ? `${es(v, 0)} días` : `${es(v / 365, v > 36500 ? 0 : 1)} años`);
+    let rest = 0;
+    for (let s = x; s < AQ.L; s += 2) rest += 2 / Math.max(1e-12, r.v(s));
+    const vv = r.v(Math.min(AQ.L, x));
+    return {
+      title: `${SOILS[r.s.soil].name} a ${es(x, 0)} m de la loma`,
+      rows: [
+        ['Aquí el suelo está', sat ? 'saturado (bajo el nivel freático)' : 'con aire en los poros'],
+        ['Nivel freático', `${es(h, 2)} m (a ${es(gnd - h, 1)} m de la superficie)`],
+        ['Agua en los poros', `${vv < 0.01 ? `${es(vv * 1000, 2)} mm` : vv < 1 ? `${es(vv * 100, 1)} cm` : `${es(vv, 1)} m`} por día`],
+        ['Le falta para el río', days(rest)],
+        ['K y porosidad eficaz', `${r.K < 0.01 ? r.K.toExponential(0).replace('e', '×10^') : es(r.K, r.K < 1 ? 2 : 0)} m/día · ${es(r.ne * 100, 0)} %`],
+      ],
+      strong: sat ? 2 : 0,
+    };
+  }
+
   private shapeSection(): void {
     const top = (x: number) => groundAt(x);
     const sp = this.section.geometry.attributes.position as THREE.BufferAttribute;
@@ -99,7 +128,8 @@ export class AquiferWorld {
 
   set(r: AquiferResult): void {
     this.r = r;
-    (this.section.material as THREE.MeshStandardMaterial).color.set(SOIL_COLOR[r.s.soil]);
+    this.soilMat.setGrain(r.s.soil, SOIL_COLOR[r.s.soil]);
+    this.soilMat.setWaterLine(-320, 280, Array.from({ length: 61 }, (_, k) => r.h(Math.min(AQ.L, k * 10))));
     const wp = this.water.geometry.attributes.position as THREE.BufferAttribute;
     for (let k = 0; k < wp.count; k++) {
       const x = Math.min(600, wp.getX(k) + 320 + (wp.getX(k) === 320 ? 0 : 0));
@@ -164,14 +194,18 @@ export class WellWorld {
     // la mitad de atrás del bloque (z ≤ 0): el corte pasa por el pozo
     sc.add(diorama((x, z) => SURF + noise2(x * 0.01, z * 0.01) * 0.6 * Math.min(1, -z / 20), -RW, RW, -RW, 0, 80, 40, (x, z) => green.clone().multiplyScalar(0.93 + 0.08 * noise2(x * 0.15, z * 0.15)), -2));
     // capas en el corte: arena (acuífero) y arcilla (capa confinante)
-    const layer = (y0: number, y1: number, color: string) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(2 * RW, y1 - y0), new THREE.MeshStandardMaterial({ color, roughness: 1 }));
+    const layer = (y0: number, y1: number, mat: THREE.Material) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(2 * RW, y1 - y0, 1, 1), mat);
       m.position.set(0, (y0 + y1) / 2, 0.15);
       sc.add(m);
+      return m;
     };
-    layer(0, TOP, '#d6bf86');
-    layer(TOP, SURF - 1.5, '#a5674a');
-    layer(SURF - 1.5, SURF, '#7f5f40');
+    this.aqMat = soilCutMaterial('#d6bf86', 'arena', 1.6);
+    const aqLayer = layer(0, TOP, this.aqMat);
+    const clay = layer(TOP, SURF - 1.5, soilCutMaterial('#a5674a', 'arcilla', 1.6));
+    layer(SURF - 1.5, SURF, soilCutMaterial('#7f5f40', 'limo', 1.6));
+    stage.addProbe(aqLayer, (pt) => this.probe(pt.x, pt.y, 'acuifero'));
+    stage.addProbe(clay, (pt) => this.probe(pt.x, pt.y, 'arcilla'));
     // cono: superficie piezométrica en una malla polar sobre la mitad de atrás
     const nr = 60, nt = 48;
     const geo = new THREE.BufferGeometry();
@@ -205,8 +239,30 @@ export class WellWorld {
     const ts: TreeSpot[] = [];
     for (let k = 0; k < 70; k++) ts.push({ x: -RW + 10 + R() * (2 * RW - 20), y: SURF, z: -20 - R() * (RW - 30), r: 2 + R() * 2 });
     sc.add(trees(ts, 3));
-    sc.add(houses(Array.from({ length: 18 }, () => ({ x: -230 + R() * 170, y: SURF, z: -40 - R() * 190, w: 8 + R() * 4, d: 8 + R() * 4, h: 4 + R() * 5, rot: R() * 0.3, wall: ['#e8d9c0', '#c06c48', '#f0c9a2', '#bcd6e6'][Math.floor(R() * 4)] }))));
+    sc.add(houses(Array.from({ length: 18 }, () => ({ x: -230 + R() * 170, y: SURF, z: -40 - R() * 190, w: 8 + R() * 4, d: 8 + R() * 4, h: [3, 5.8, 5.8][Math.floor(R() * 3)], rot: R() * 0.3, wall: ['#e9d8b4', '#d98c5f', '#7fb3a6', '#e6b655', '#c96f6a', '#9ec1d9'][Math.floor(R() * 6)] }))));
     stage.view(this.views.general, false);
+  }
+
+  private aqMat: ReturnType<typeof soilCutMaterial>;
+
+  private probe(x: number, y: number, what: 'acuifero' | 'arcilla'): ProbeInfo | null {
+    const s = this.s;
+    if (!s) return null;
+    const r = Math.max(WELL.rw, Math.abs(x));
+    const sd = this.sOf(r, this.t);
+    const t = this.t < 1 ? `${es(this.t * 24, 1)} horas` : `${es(this.t, 1)} días`;
+    if (what === 'arcilla')
+      return { title: 'Capa de arcilla', rows: [['Qué hace', 'casi no deja pasar el agua: confina el acuífero'], ['Distancia al pozo', `${es(r, 0)} m`]], strong: 0 };
+    return {
+      title: `Acuífero a ${es(r, 0)} m del pozo`,
+      rows: [
+        ['Profundidad del corte', `${es(SURF - y, 1)} m bajo el terreno`],
+        ['El nivel bajó aquí', `${es(sd, sd < 0.1 ? 3 : 2)} m`],
+        ['Tiempo de bombeo', t],
+        ['Nivel sin bombear', `${es(SURF - STATIC, 1)} m bajo el terreno`],
+      ],
+      strong: 1,
+    };
   }
 
   /** Abatimiento del modelo (m) a la distancia r en el tiempo t. */
@@ -217,6 +273,7 @@ export class WellWorld {
 
   set(s: WellScene, t = s.t): void {
     this.s = s;
+    this.aqMat.setGrain(s.soil, SOIL_COLOR[s.soil]);
     this.t = t;
     // exageración vertical: el cono a 10 m llega a unos 15 m de dibujo, con un factor redondo
     const s10 = this.sOf(10, s.t);
@@ -247,6 +304,8 @@ export class WellWorld {
     p.needsUpdate = true;
     this.cone.geometry.computeVertexNormals();
     const xs = Array.from({ length: 161 }, (_, k) => -RW + (k * 2 * RW) / 160);
+    // el acuífero confinado sigue lleno de agua: lo que baja es la presión (la línea azul), no el material saturado
+    this.aqMat.setWaterLine(-RW, RW, xs.map(() => TOP + 10));
     setPolyline(this.profile, xs.map((x) => new THREE.Vector3(x, STATIC - this.ex * this.sOf(Math.abs(x), this.t), 0.5)));
     for (const o of this.obs) {
       const h = STATIC - this.ex * this.sOf(o.r, this.t);
@@ -291,7 +350,9 @@ export class PlumeWorld {
     const sc = stage.scene;
     stage.setShadowSpan(520);
     const green = new THREE.Color('#9cc373'), field = new THREE.Color('#c9c27a');
-    sc.add(diorama((x, z) => PGROUND + noise2(x * 0.01, z * 0.01) * 0.5, PX0, PX1, -PZ, PZ, 92, 52, (x, z) => (noise2(x * 0.006 + 3, z * 0.006) > 0.25 ? field.clone() : green.clone()).multiplyScalar(0.94 + 0.06 * noise2(x * 0.1, z * 0.1)), -4));
+    const terr = diorama((x, z) => PGROUND + noise2(x * 0.01, z * 0.01) * 0.5, PX0, PX1, -PZ, PZ, 92, 52, (x, z) => (noise2(x * 0.006 + 3, z * 0.006) > 0.25 ? field.clone() : green.clone()).multiplyScalar(0.94 + 0.06 * noise2(x * 0.1, z * 0.1)), -4);
+    sc.add(terr);
+    stage.addProbe(terr.children[0], (p) => this.probe(p.x, p.z));
     // flechas del flujo regional
     for (let k = 0; k < 5; k++) {
       const arrow = new THREE.Mesh(new THREE.ConeGeometry(4, 14, 3), new THREE.MeshStandardMaterial({ color: '#2f84b5', emissive: '#1b4f86', emissiveIntensity: 0.4 }));
@@ -323,8 +384,37 @@ export class PlumeWorld {
     stage.view(this.views.general, false);
   }
 
+  private Qls = 0;
+  private tDays = 0;
+
+  /** ¿El agua de este punto termina en el pozo? (dentro de la zona de captura) y cuánto tarda el flujo en llegar. */
+  private probe(x: number, z: number): ProbeInfo | null {
+    const dist = Math.hypot(x, z);
+    const v = plumeV();
+    let caught = false;
+    if (this.Qls > 0) {
+      const cz = captureZone(this.Qls * 86.4, PLUME.b, plumeQ());
+      caught = Math.abs(z) < cz.width / 2 && x <= cz.boundary(z) + 1e-6;
+    }
+    const near = this.ps.filter((p) => p.caught < 0 && Math.hypot(p.x - x, p.y - z) < 25).length;
+    const years = (d: number) => (d < 730 ? `${es(d, 0)} días` : `${es(d / 365, 1)} años`);
+    return {
+      title: caught ? 'El agua de aquí llega al pozo' : 'El agua de aquí no llega al pozo',
+      rows: [
+        ['Distancia al pozo', `${es(dist, 0)} m`],
+        ['Flujo del agua subterránea', `${es(v, 2)} m/día hacia el río`],
+        ...(x < 0 && Math.abs(z) < 20 ? ([['Llegaría al pozo en', `unos ${years(-x / v)} (sin el bombeo)`]] as [string, string][]) : []),
+        ['Mancha cerca', near ? `${near} partículas en ${es(25, 0)} m` : 'no'],
+      ],
+      strong: 0,
+    };
+  }
+
   set(Qls: number, y0: number, ps: Particle[], tDays: number, frac: number): void {
     this.ps = ps;
+    this.Qls = Qls;
+    this.tDays = tDays;
+    void this.tDays;
     this.source.position.set(PLUME.x0, 0, y0);
     if (Qls > 0) {
       const cz = captureZone(Qls * 86.4, PLUME.b, plumeQ());

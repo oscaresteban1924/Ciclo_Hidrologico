@@ -5,7 +5,7 @@
 // partículas que se aceleran en la garganta. Todo a escala.
 
 import * as THREE from 'three';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { concreteMaterial, rng } from '../../quality/three/kit';
 import { lookMaterial, lookWater } from '../../three/look';
 import { Birds, RainStreaks, meadow, terrainBlock, trees, type TreeSpot } from '../../three/scenery';
@@ -263,7 +263,36 @@ export class RainWorld {
     const birds = new Birds(V3(0, 0, 0), 50, 30, 5, 1);
     sc.add(birds.group);
     stage.animate((t) => birds.update(t));
+    stage.addProbe(this.mapMesh, () => this.probeRain('radar'));
+    stage.addProbe(this.seesaw.parent ?? this.seesaw, () => this.probeRain('pluvio'));
+    stage.addProbeZone((this.seesaw.parent ?? this.seesaw).getWorldPosition(V3(0, 0, 0)).add(V3(0, 0.6, 0)), 0.45, () => this.probeRain('pluvio'));
     stage.view(this.views.estacion, false);
+  }
+
+  private probeRain(what: 'pluvio' | 'radar'): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    if (what === 'radar')
+      return {
+        title: 'Radar meteorológico',
+        rows: [
+          ['Reflectividad', `${es(s.dbz, 0)} dBZ`],
+          ['Lluvia que estima (Z = 200·R^1,6)', `${es(s.Rr, 1)} mm/h`],
+          ['Lluvia real en la estación', `${es(s.I, 1)} mm/h`],
+        ],
+        strong: 1,
+      };
+    return {
+      title: 'Pluviómetro de balancín',
+      rows: [
+        ['Llueve ahora', `${es(s.I, 1)} mm/h`],
+        ['Registra', `${es(s.Im, 1)} mm/h`],
+        ['Vuelcos', `${s.tips} (0,2 mm cada uno)`],
+        ['Lluvia acumulada / registrada', `${es(s.P, 1)} / ${es(s.Pm, 1)} mm`],
+        ['Viento', `${es(s.u, 1)} m/s`],
+      ],
+      strong: 2,
+    };
   }
 
   set(s: RainState): void {
@@ -433,6 +462,10 @@ export class RiverGaugeWorld {
     this.water = new THREE.Mesh(new THREE.PlaneGeometry(1, 2 * REACH, 1, 40), waterMat('#4a8db0', 0.72, [0, 1], 0.9));
     this.water.rotation.x = -Math.PI / 2;
     sc.add(this.water, this.section, this.vlines);
+    // lecturas: en la superficie, la profundidad y la velocidad; en el corte de la línea de aforo, la velocidad de
+    // cada punto (más lenta junto al fondo)
+    stage.addProbe(this.water, (p) => this.probeRiver(p.x, null));
+    stage.addProbe(this.section, (p) => this.probeRiver(p.x, p.y));
     // regla limnimétrica en la orilla izquierda
     const rl = screen(64, 512);
     const c = rl.ctx;
@@ -564,6 +597,27 @@ export class RiverGaugeWorld {
     }
   }
 
+  private probeRiver(x: number, y: number | null): ProbeInfo | null {
+    const s = this.st;
+    if (!s) return null;
+    const bed = bedZ(x), d = s.h - bed;
+    if (d <= 0.01) return { title: 'Orilla seca', rows: [['Altura del terreno', `${es(bed, 2)} m en la regla`]], strong: 0 };
+    const yy = y === null ? d : Math.max(0, Math.min(d, y - bed));
+    const v = pointVelocity(x, yy, s.h);
+    const vs = pointVelocity(x, d, s.h), v6 = pointVelocity(x, 0.4 * d, s.h);
+    return {
+      title: y === null ? `Río a ${es(Math.abs(x), 1)} m del centro` : `Punto a ${es(yy, 2)} m del fondo`,
+      rows: [
+        ['Profundidad', `${es(d, 2)} m`],
+        ['Velocidad aquí', `${es(v, 2)} m/s`],
+        ['En la superficie / a 0,6 de la profundidad', `${es(vs, 2)} / ${es(v6, 2)} m/s`],
+        ['Nivel en la regla', `${es(s.h, 2)} m`],
+        ['Caudal del río', `${es(s.Q, 2)} m³/s`],
+      ],
+      strong: 1,
+    };
+  }
+
   set(s: RiverState): void {
     const prev = this.st;
     this.st = s;
@@ -671,6 +725,8 @@ export class MeterWorld {
     const sc = stage.scene;
     stage.setShadowSpan(12);
     stage.controls.minDistance = 0.6;
+    stage.addProbe(this.dyn, (p) => this.probeMeter(p.x));
+    stage.addProbeZone(V3(0, AX, 0), V3(12.4, 0.3, 0.3), (p) => this.probeMeter(p.x));
     // piso y pared del laboratorio
     const floor = new THREE.Mesh(new THREE.BoxGeometry(26, 0.2, 12), concreteMaterial('#cfccc6'));
     floor.position.set(0, -0.1, 0);
@@ -784,6 +840,27 @@ export class MeterWorld {
       this.cols.push(col);
       this.bubbles.push(bub);
     }
+  }
+
+  private probeMeter(x: number): ProbeInfo | null {
+    const s = this.st;
+    if (!s || x < -6.2 || x > 6) return null;
+    const r = this.profile(x);
+    const V = s.V1 * (PR / Math.max(1e-4, r)) ** 2;
+    let k = 0;
+    for (let i = 1; i < TAPS.length; i++) if (Math.abs(TAPS[i] - x) < Math.abs(TAPS[k] - x)) k = i;
+    const venturi = x > -3.6 && x < -1.2, orif = x > 1.9 && x < 2.8;
+    return {
+      title: venturi ? 'Venturi' : orif ? 'Placa de orificio' : 'Tubería de acrílico',
+      rows: [
+        ['Diámetro aquí', `${es(r * 2000, 0)} mm`],
+        ['Velocidad aquí', `${es(V, 2)} m/s`],
+        ['Caudal', `${es(s.Q, 2)} L/s`],
+        [`Piezómetro ${k + 1} (el más cerca)`, `${es((s.piezo[k] ?? 0) * 100, 1)} cm`],
+        ...(venturi ? ([['Diferencia que mide', `${es(s.dhV * 100, 1)} cm → ${es(s.Qv, 2)} L/s`]] as [string, string][]) : orif ? ([['Diferencia que mide', `${es(s.dhO * 100, 1)} cm → ${es(s.Qo, 2)} L/s`]] as [string, string][]) : []),
+      ],
+      strong: 1,
+    };
   }
 
   set(s: PipeState): void {

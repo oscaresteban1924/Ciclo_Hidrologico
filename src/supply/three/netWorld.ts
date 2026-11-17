@@ -4,7 +4,7 @@
 // presión como altura de agua a escala.
 
 import * as THREE from 'three';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { houses, noise2, trees, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
 import type { Network, NetSolution } from '../network';
 import { StorageTank, diorama } from './supplyKit';
@@ -45,13 +45,21 @@ export class NetWorld {
     arriba: { eye: [10, 360, 30], target: [10, 0, 0] },
   };
 
-  constructor(stage: QStage, net: Network) {
+  /** Tubos que tienen válvula (se cierran tocándolos) y aviso al tocarlos. */
+  private closable: string[];
+  onToggle: ((id: string) => void) | null = null;
+  private houseSpots: { x: number; y: number }[] = [];
+
+  constructor(stage: QStage, net: Network, closable: string[] = []) {
+    this.closable = closable;
     this.stage = stage;
     const sc = stage.scene;
     stage.setShadowSpan(260);
-    const green = new THREE.Color('#93bf6c'), street = new THREE.Color('#8f9499');
+    const green = new THREE.Color('#93bf6c'), street = new THREE.Color('#6f7378'), walk = new THREE.Color('#c9c3b6');
+    // andén: la franja de concreto a cada lado del asfalto
+    const onWalk = (x: number, y: number) => [0, 130, 260].some((c) => Math.abs(x - c) < 7.5 && y > -8 && y < 228) || [0, 110, 220].some((r) => Math.abs(y - r) < 7.5 && x > -8 && x < 268);
     const onStreet = (x: number, y: number) => [0, 130, 260].some((c) => Math.abs(x - c) < 5 && y > -6 && y < 226) || [0, 110, 220].some((r) => Math.abs(y - r) < 5 && x > -6 && x < 266) || (Math.abs(y - 110) < 4 && x < 0 && x > -200);
-    const terr = diorama((x, z) => netGround(x - DX, z - DZ), -260, 320, -150, 150, 116, 60, (x, z) => (onStreet(x - DX, z - DZ) ? street.clone() : green.clone().multiplyScalar(0.92 + 0.1 * noise2(x * 0.1, z * 0.1))), -4);
+    const terr = diorama((x, z) => netGround(x - DX, z - DZ), -260, 320, -150, 150, 232, 120, (x, z) => (onStreet(x - DX, z - DZ) ? street.clone().multiplyScalar(0.95 + 0.08 * noise2(x * 0.3, z * 0.3)) : onWalk(x - DX, z - DZ) ? walk.clone() : green.clone().multiplyScalar(0.92 + 0.1 * noise2(x * 0.1, z * 0.1))), -4);
     sc.add(terr);
     // casas en las manzanas y árboles alrededor
     const R = (() => {
@@ -61,9 +69,14 @@ export class NetWorld {
     const hs: HouseSpot[] = [];
     for (const bx of [0, 130]) for (const by of [0, 110]) for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) {
       const x = bx + 14 + i * 19 + R() * 3, y = by + 14 + j * 22 + R() * 3;
-      hs.push({ x: x + DX, y: netGround(x, y), z: y + DZ, w: 9 + R() * 4, d: 9 + R() * 4, h: 4 + R() * 6, rot: (R() - 0.5) * 0.2, wall: ['#e8d9c0', '#c06c48', '#f0c9a2', '#bcd6e6', '#f2d27a', '#efe0c0'][Math.floor(R() * 6)] });
+      // la fachada mira hacia la calle más cercana (al norte o al sur de la manzana)
+      const rot = (j < 2 ? Math.PI : 0) + (R() - 0.5) * 0.06;
+      hs.push({ x: x + DX, y: netGround(x, y), z: y + DZ, w: 9 + R() * 4, d: 9 + R() * 4, h: [3, 5.8, 5.8, 8.6][Math.floor(R() * 4)], rot, wall: ['#e9d8b4', '#d98c5f', '#7fb3a6', '#e6b655', '#c96f6a', '#9ec1d9', '#f1efe8', '#b5c98f'][Math.floor(R() * 8)] });
     }
-    sc.add(houses(hs));
+    this.houseSpots = hs.map((h) => ({ x: h.x - DX, y: h.z - DZ }));
+    const hm = houses(hs);
+    sc.add(hm);
+    stage.addProbe(hm, (_p, hit) => this.probeHouse(hit.instanceId ?? -1));
     const ts: TreeSpot[] = [];
     for (let k = 0; k < 160; k++) {
       const x = -250 + R() * 560, y = -140 + R() * 280 - DZ;
@@ -92,6 +105,9 @@ export class NetWorld {
       mesh.castShadow = true;
       sc.add(mesh);
       this.pipes.push({ id: p.id, a, b, mesh, mat });
+      stage.addProbe(mesh, () => this.probePipe(p.id));
+      // tocar un tubo que tiene válvula la cierra o la abre
+      if (this.closable.includes(p.id)) stage.addPick(mesh, () => this.onToggle?.(p.id), 'Toca para cerrar o abrir la válvula de este tubo');
     }
     // columnas de presión en las esquinas
     for (const n of net.nodes) {
@@ -103,6 +119,8 @@ export class NetWorld {
       const col = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 1, 14), mat);
       col.position.set(n.x + DX, base, n.y + DZ);
       sc.add(glass, col);
+      stage.addProbe(glass, () => this.probeNode(n.id));
+      stage.addProbe(col, () => this.probeNode(n.id));
       this.cols.set(n.id, { col, base, mat, level: 0, target: 0, x: n.x + DX, z: n.y + DZ });
     }
     // flechas que viajan por los tubos
@@ -140,6 +158,74 @@ export class NetWorld {
       if (this.stage.reducedMotion) c.level = c.target;
     }
     this.labels();
+  }
+
+  private probePipe(id: string): ProbeInfo | null {
+    const net = this.net, sol = this.sol;
+    const p = net?.pipes.find((x) => x.id === id);
+    if (!net || !sol || !p) return null;
+    const es = (x: number, d = 1) => x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    if (p.closed)
+      return { title: `Tubo ${id} cerrado`, rows: [['Diámetro', `${es(p.D * 1000, 0)} mm`], ['Largo', `${es(p.L, 0)} m`], ...(this.closable.includes(id) ? ([['Válvula', 'tócalo para abrirla']] as [string, string][]) : [])], strong: 0 };
+    const q = sol.Q[id] ?? 0;
+    const from = q >= 0 ? p.a : p.b, to = q >= 0 ? p.b : p.a;
+    return {
+      title: `Tubo ${id}`,
+      rows: [
+        ['Caudal', `${es(Math.abs(q), 2)} L/s, de ${from} a ${to}`],
+        ['Velocidad', `${es(sol.V[id] ?? 0, 2)} m/s`],
+        ['Pérdida', `${es(Math.abs(sol.h[id] ?? 0), 2)} m en ${es(p.L, 0)} m`],
+        ['Diámetro', `${es(p.D * 1000, 0)} mm (C = ${es(p.C, 0)})`],
+        ...(this.closable.includes(id) ? ([['Válvula', 'tócalo para cerrarla']] as [string, string][]) : []),
+      ],
+      strong: 0,
+    };
+  }
+
+  private probeNode(id: string): ProbeInfo | null {
+    const net = this.net, sol = this.sol;
+    const n = net?.nodes.find((x) => x.id === id);
+    if (!net || !sol || !n) return null;
+    const es = (x: number, d = 1) => x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const pr = sol.p[id];
+    if (!Number.isFinite(pr)) return { title: `Esquina ${id}`, rows: [['Agua', 'sin conexión con el tanque']], strong: 0 };
+    return {
+      title: `Esquina ${id}`,
+      rows: [
+        ['Presión', `${es(pr, 1)} m (${es(pr * 9.81, 0)} kPa)`],
+        ['Mínima pedida', `${es(this.pmin, 0)} m`],
+        ['Cota del terreno', `${es(n.z, 1)} m`],
+        ['Cota piezométrica', `${es(sol.H[id], 1)} m`],
+        ['Sin consumo (estática)', `${es(net.H0 - n.z, 1)} m`],
+      ],
+      strong: 0,
+    };
+  }
+
+  /** Una casa toma el agua de la esquina más cercana: su presión, menos lo que la casa está más alta. */
+  private probeHouse(i: number): ProbeInfo | null {
+    const net = this.net, sol = this.sol, h = this.houseSpots[i];
+    if (!net || !sol || !h) return null;
+    const es = (x: number, d = 1) => x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+    let best = net.nodes[0], bd = Infinity;
+    for (const n of net.nodes) {
+      if (n.id === net.source) continue;
+      const d = Math.hypot(n.x - h.x, n.y - h.y);
+      if (d < bd) [best, bd] = [n, d];
+    }
+    const pr = sol.p[best.id];
+    if (!Number.isFinite(pr)) return { title: 'Casa', rows: [['Agua', `sin servicio (esquina ${best.id} cortada)`]], strong: 0 };
+    const zH = netGround(h.x, h.y);
+    const tap = pr - (zH - best.z) - 1.2;
+    return {
+      title: 'Casa',
+      rows: [
+        ['Toma el agua de', `la esquina ${best.id}`],
+        ['Presión en la llave del primer piso', `unos ${es(Math.max(0, tap), 0)} m`],
+        ['¿Sube al tanque del techo?', tap > 8 ? 'sí' : 'apenas o no'],
+      ],
+      strong: 1,
+    };
   }
 
   private labels(): void {

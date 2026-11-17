@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { Birds } from '../../three/scenery';
 import { lookWater } from '../../three/look';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { noise2, trees, type TreeSpot } from '../../quality/three/kit';
 import { diorama } from '../../supply/three/supplyKit';
 import { wesTangent, wesY, type GravityDam, type RoutingResult, type StabilityResult } from '../dam';
@@ -15,7 +15,42 @@ const seeded = (seed: number) => {
   let s = seed;
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
 };
-const concrete = () => new THREE.MeshStandardMaterial({ color: '#cfcac0', roughness: 0.85 });
+/**
+ * Concreto de presa: juntas de vaciado horizontales cada 1,5 m, manchas de lavado que bajan por las caras y un poco de
+ * verdín cerca del agua. Medidas en metros (1 unidad = 1 m).
+ */
+const concrete = () => {
+  const m = new THREE.MeshStandardMaterial({ color: '#cfcac0', roughness: 0.85 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vCW;\nvarying vec3 vCN;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvCW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvCN = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vCW;
+        varying vec3 vCN;
+        float cH(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float cN(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(cH(i), cH(i + vec2(1.0, 0.0)), u.x), mix(cH(i + vec2(0.0, 1.0)), cH(i + vec2(1.0, 1.0)), u.x), u.y); }`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        if (abs(vCN.y) < 0.85) {
+          float y = vCW.y;
+          float fw = max(fwidth(y), 1e-4);
+          float lift = 1.0 - smoothstep(0.0, 1.4 * fw + 0.02, abs(fract(y / 1.5 + 0.5) - 0.5) * 1.5);
+          float far = smoothstep(0.08, 0.3, fw);
+          diffuseColor.rgb *= 1.0 - 0.16 * lift * (1.0 - far);
+          // lavado: vetas verticales más oscuras que bajan desde las juntas
+          vec2 q = vec2((abs(vCN.x) > 0.5 ? vCW.z : vCW.x) * 0.6, y * 0.05);
+          diffuseColor.rgb *= 0.93 + 0.1 * cN(q) + 0.04 * cN(vec2(q.x * 7.0, y * 1.3));
+        }`,
+      );
+  };
+  m.customProgramCacheKey = () => 'damConcrete1';
+  return m;
+};
 const waterMat = (opacity = 0.82) => lookWater(new THREE.MeshStandardMaterial({ color: '#2a7fb0', roughness: 0.08, metalness: 0.05, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }), [0.3, 0.05], 0.55);
 
 /** Perfil de una presa de gravedad con cresta WES: corona en y = top; devuelve puntos (x, y) del contorno. */
@@ -65,7 +100,11 @@ export class ReservoirWorld {
     const sc = stage.scene;
     stage.setShadowSpan(420);
     const green = new THREE.Color('#8fbf6a'), rock = new THREE.Color('#a59a83');
-    sc.add(diorama(valley, -420, 260, -130, 130, 120, 52, (x, z, y) => (y < 2 ? new THREE.Color('#9a8566') : green.clone().lerp(rock, Math.min(1, y / 70) * 0.5)).multiplyScalar(0.93 + 0.08 * noise2(x * 0.2, z * 0.2)), -4));
+    // la orilla del embalse: una franja sin vegetación hasta unos 4 m sobre la cresta (donde el agua sube y baja)
+    const bare = new THREE.Color('#a8957a'), bed = new THREE.Color('#9a8566');
+    const terr = diorama(valley, -420, 260, -130, 130, 240, 104, (x, z, y) => (y < 2 ? bed.clone() : x < 0 && y < CREST + 4 ? bare.clone().lerp(green, THREE.MathUtils.smoothstep(y, CREST + 1, CREST + 4)) : green.clone().lerp(rock, Math.min(1, y / 70) * 0.5)).multiplyScalar(0.93 + 0.08 * noise2(x * 0.2, z * 0.2)), -4);
+    sc.add(terr);
+    stage.addProbe(terr.children[0], (p) => this.probe(p.x, p.z, 'tierra'));
     const R = seeded(6);
     const ts: TreeSpot[] = [];
     for (let k = 0; k < 220; k++) {
@@ -88,6 +127,9 @@ export class ReservoirWorld {
     // la lámina sobre el vertedero
     this.sheet = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: '#cfeaf8', emissive: '#4f9fd2', emissiveIntensity: 0.35, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
     sc.add(this.lake, this.river, this.spill, this.sheet);
+    stage.addProbe(this.lake, (p) => this.probe(p.x, p.z, 'lago'));
+    stage.addProbe(this.river, (p) => this.probe(p.x, p.z, 'rio'));
+    stage.addProbe(this.spill, () => this.probe(0, 0, 'presa'));
     this.build(30);
     stage.view(this.views.general, false);
   }
@@ -121,11 +163,51 @@ export class ReservoirWorld {
     this.at(0);
   }
 
+  private k = 0;
+
+  private probe(x: number, z: number, what: 'lago' | 'rio' | 'presa' | 'tierra'): ProbeInfo | null {
+    const res = this.res;
+    if (!res) return null;
+    const i = this.k, h = res.h[i];
+    const g = valley(x, z);
+    if (what === 'lago' && x < 0) {
+      const lev = CREST + h;
+      return {
+        title: 'El embalse',
+        rows: [
+          ['Profundidad aquí', `${es(Math.max(0, lev - g), 1)} m`],
+          ['Nivel', `${es(h, 2)} m sobre la cresta del vertedero`],
+          ['Entra / sale', `${es(res.I[i], 0)} / ${es(res.O[i], 0)} m³/s`],
+          ['Hora', es(res.t[i], 1)],
+        ],
+        strong: 2,
+      };
+    }
+    if (what === 'rio' || (what === 'lago' && x >= 0)) {
+      const d = Math.max(0, this.river.position.y - g);
+      return { title: 'El río abajo de la presa', rows: [['Caudal', `${es(res.O[i], 0)} m³/s (sale del vertedero)`], ['Profundidad aquí', `unos ${es(d, 1)} m`], ['Pico que sale', `${es(res.Opeak, 0)} m³/s a la hora ${es(res.tOpeak, 1)}`]], strong: 0 };
+    }
+    if (what === 'presa')
+      return {
+        title: 'Presa y vertedero',
+        rows: [
+          ['Cresta del vertedero', `${CREST} m sobre el cauce, ${es(this.L, 0)} m de ancho`],
+          ['Corona', `${CREST + FB} m (borde libre de ${FB} m)`],
+          ['Agua sobre la cresta', `${es(h, 2)} m · máximo ${es(res.hMax, 2)} m`],
+          ['Le queda de borde', `${es(FB - h, 2)} m`],
+        ],
+        strong: 3,
+      };
+    const lev = CREST + h;
+    return { title: x < 0 && g < lev + 4 ? 'Orilla del embalse' : 'Ladera', rows: [['Cota', `${es(g, 1)} m sobre el cauce`], ['Agua ahora', g < lev && x < 0 ? `${es(lev - g, 1)} m` : 'seca'], ...(x < 0 ? ([['Sobre el embalse', `${es(g - lev, 1)} m`]] as [string, string][]) : [])], strong: 1 };
+  }
+
   /** Muestra el instante k del tránsito. */
   at(k: number): void {
     const res = this.res;
     if (!res) return;
     const i = Math.max(0, Math.min(res.t.length - 1, k));
+    this.k = i;
     const h = res.h[i];
     this.lake.position.y = CREST + h;
     // río aguas abajo: profundidad de un cauce ancho con Manning, para que se vea crecer
@@ -199,8 +281,12 @@ export class SpillWorld {
     const sc = stage.scene;
     stage.setShadowSpan(140);
     sc.add(this.body);
-    this.water = new THREE.Mesh(new THREE.BufferGeometry(), waterMat(0.8));
+    // el agua se blanquea donde corre muy rápido (lámina aireada en la rápida) y en el resalto
+    const wm = waterMat(0.86);
+    wm.vertexColors = true;
+    this.water = new THREE.Mesh(new THREE.BufferGeometry(), wm);
     sc.add(this.water);
+    stage.addProbe(this.water, (pt) => this.probe(pt.x));
     const n = 500, p = new Float32Array(n * 3);
     this.foamBase = new Float32Array(n * 3);
     const R = seeded(3);
@@ -211,6 +297,30 @@ export class SpillWorld {
     this.foam.frustumCulled = false;
     sc.add(this.foam);
     stage.view(this.views.general, false);
+  }
+
+  private prof: [number, number, number][] = [];
+
+  /** Profundidad, velocidad y número de Froude a lo largo del agua. */
+  private probe(x: number): ProbeInfo | null {
+    const s = this.st, P = this.prof;
+    if (!s || P.length < 2) return null;
+    let k = 1;
+    while (k < P.length - 1 && P[k][0] < x) k++;
+    const a = P[k - 1], b = P[k], t = Math.max(0, Math.min(1, (x - a[0]) / Math.max(1e-6, b[0] - a[0])));
+    const zb = a[1] + (b[1] - a[1]) * t, y = a[2] + (b[2] - a[2]) * t;
+    const d = Math.max(0.01, y - zb), V = s.q / d, Fr = V / Math.sqrt(9.81 * d);
+    const where = x < 0 ? 'Llegando a la cresta' : x < this.toeX(s) ? 'Bajando por la rápida' : x >= this.jumpX && x <= this.jumpX + this.jumpL ? 'En el resalto' : x < this.toeX(s) + 6 * s.y2 ? 'En el pozo de disipación' : 'En el río';
+    return {
+      title: where,
+      rows: [
+        ['Profundidad', `${es(d, 2)} m`],
+        ['Velocidad', `${es(V, 1)} m/s`],
+        ['Número de Froude', `${es(Fr, 2)} (${Fr > 1.05 ? 'supercrítico' : Fr < 0.95 ? 'subcrítico' : 'crítico'})`],
+        ['Caudal', `${es(s.q, 1)} m³/s por metro`],
+      ],
+      strong: 1,
+    };
   }
 
   private toeX(s: SpillState): number {
@@ -275,13 +385,21 @@ export class SpillWorld {
       } else y = s.tw;
       pts.push([x, zb, Math.max(zb + 0.1, y)]);
     }
-    const pos: number[] = [], idx: number[] = [];
-    pts.forEach(([x, , y], n) => {
+    const pos: number[] = [], idx: number[] = [], cols: number[] = [];
+    this.prof = pts;
+    const blue = new THREE.Color('#ffffff'), white = new THREE.Color('#f4f1ea').multiplyScalar(2.6), c = new THREE.Color();
+    pts.forEach(([x, zb, y], n) => {
       pos.push(x, y, -W / 2, x, y, W / 2);
       if (n < pts.length - 1) idx.push(2 * n, 2 * n + 2, 2 * n + 1, 2 * n + 1, 2 * n + 2, 2 * n + 3);
+      const d = Math.max(0.05, y - zb), Fr = s.q / d / Math.sqrt(9.81 * d);
+      const inJump = x >= this.jumpX && x <= this.jumpX + this.jumpL;
+      const air = x > 0 ? Math.min(1, Math.max(0, (Fr - 2.5) / 6)) * 0.55 : 0;
+      c.copy(blue).lerp(white, Math.max(air, inJump ? 0.7 * Math.sin(Math.PI * Math.min(1, (x - this.jumpX) / this.jumpL)) : 0));
+      cols.push(c.r, c.g, c.b, c.r, c.g, c.b);
     });
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     g.setIndex(idx);
     g.computeVertexNormals();
     this.water.geometry.dispose();
@@ -326,10 +444,54 @@ export class GravityWorld {
     this.stage = stage;
     stage.setShadowSpan(120);
     stage.scene.add(this.body, this.arrows);
+    stage.addProbe(this.body, (p, hit) => {
+      const o = hit.object as THREE.Mesh;
+      const mat = o.material as THREE.MeshStandardMaterial;
+      const what = mat.transparent && mat.opacity < 0.9 && o.geometry.type === 'BoxGeometry' ? 'agua' : o.geometry.type === 'BoxGeometry' && p.y < 0 ? 'roca' : 'presa';
+      return this.probe(p.x, p.y, what);
+    });
     stage.view(this.views.general, false);
   }
 
+  private d: GravityDam | null = null;
+  private r: StabilityResult | null = null;
+  private drains = false;
+
+  private probe(x: number, y: number, what: 'presa' | 'roca' | 'agua'): ProbeInfo | null {
+    const d = this.d, r = this.r;
+    if (!d || !r) return null;
+    const g = 9.81;
+    if (what === 'agua') {
+      const up = x < 0;
+      const depth = Math.max(0, (up ? d.hw : d.tail) - y);
+      return { title: up ? 'El embalse' : 'El agua de abajo', rows: [['Profundidad aquí', `${es(depth, 1)} m`], ['Presión del agua', `${es(g * depth, 0)} kPa`]], strong: 1 };
+    }
+    if (what === 'roca' || y < 0.6) {
+      const t = Math.max(0, Math.min(1, x / r.B));
+      const sv = r.sHeel + (r.sToe - r.sHeel) * t;
+      const up = d.uplift * g * (d.hw + (d.tail - d.hw) * t);
+      return {
+        title: x > r.B ? "Roca al pie de la presa" : `Base de la presa a ${es(Math.max(0, x), 1)} m del talón`,
+        rows: [
+          ['Esfuerzo en la roca', `${es(Math.abs(sv), 0)} kPa (${sv >= 0 ? 'compresión' : 'tracción'})`],
+          ['Subpresión', `${es(up, 0)} kPa${this.drains ? ' (con drenes)' : ''}`],
+          ['Resultante', `a ${es(r.xR, 1)} m del talón (tercio medio: ${es(r.B / 3, 1)} a ${es((2 * r.B) / 3, 1)} m)`],
+        ],
+        strong: 0,
+      };
+    }
+    // en la presa: si es la cara de aguas arriba, la presión del agua; si no, el concreto
+    if (x < 0.4) {
+      const depth = Math.max(0, d.hw - y);
+      return { title: 'Paramento aguas arriba', rows: [['Profundidad del agua', `${es(depth, 1)} m`], ['Presión del agua', `${es(g * depth, 0)} kPa`], ['Empuje total', `${es((g * d.hw * d.hw) / 2, 0)} kN por metro`]], strong: 1 };
+    }
+    return { title: 'Concreto de la presa', rows: [['Altura', `${es(y, 1)} de ${es(d.H, 0)} m`], ['Peso', '23,5 kN por m³'], ['Factores', `volcamiento ${es(r.FSo, 2)} · deslizamiento ${es(r.FSs, 2)}`]], strong: 2 };
+  }
+
   set(d: GravityDam, r: StabilityResult, drains: boolean): void {
+    this.d = d;
+    this.r = r;
+    this.drains = drains;
     this.body.clear();
     this.arrows.clear();
     const W = 50, B = r.B;

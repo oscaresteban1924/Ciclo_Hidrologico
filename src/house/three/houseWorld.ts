@@ -4,13 +4,13 @@
 // lluvia con la canoa, el bajante, el separador del primer lavado y el rebose. Tres modos: consumo, factura y lluvia.
 
 import * as THREE from 'three';
-import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
+import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/three/stage';
 import { concreteMaterial, rng } from '../../quality/three/kit';
 import { lookMaterial, lookWater } from '../../three/look';
 import { RainStreaks, meadow, trees, type TreeSpot } from '../../three/scenery';
 import { FlowPipe, glass, paint, roundedPath, steel } from '../../three/machines';
 import { es } from '../../canals/common';
-import { meterDigits, type Use } from '../house';
+import { USE_NAMES, meterDigits, type Use } from '../house';
 
 const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const FLOOR = 0.15;
@@ -312,6 +312,14 @@ export class HouseWorld {
     ts.push({ x: -7.5, y: 0, z: 2.5, r: 1.3 }, { x: 8.6, y: 0, z: -1.5, r: 1.5 });
     sc.add(trees(ts, 2));
     this.applyMode(mode);
+    // lecturas: cada tubo dice cuánto gasta su aparato a esta hora y en el día; el tanque, cuánta agua guarda
+    for (const f of this.fixtures) {
+      stage.addProbe(f.pipe.mesh, () => this.probeUse(f.use));
+      stage.addProbeZone(f.at.clone().add(V3(0, 0.4, 0)), 0.55, () => this.probeUse(f.use));
+    }
+    stage.addProbeZone(V3(-3.5, 0.25, 5.4), 0.3, () => this.probeUse(null));
+    stage.addProbe(this.main.mesh, () => this.probeUse(null));
+    stage.addProbe(this.tankG, () => this.probeTank());
     stage.view(this.views[mode === 'consumo' ? 'casa' : mode === 'factura' ? 'fachada' : 'tanque'], false);
   }
 
@@ -497,6 +505,51 @@ export class HouseWorld {
     }
     this.drawClock(s.hour);
     this.labels(s);
+  }
+
+  private probeUse(use: Use | null): ProbeInfo | null {
+    const s = this.st;
+    if (!s || !s.hrs) return null;
+    const h = Math.min(23, Math.max(0, Math.floor(s.hour)));
+    if (use === null) {
+      const now = (Object.keys(s.hrs) as Use[]).reduce((a, u) => a + (s.hrs?.[u][h] ?? 0), 0);
+      const day = (Object.keys(s.hrs) as Use[]).reduce((a, u) => a + (s.hrs?.[u].reduce((x, y) => x + y, 0) ?? 0), 0);
+      return {
+        title: 'Acometida (del medidor a la casa)',
+        rows: [
+          ['Pasa ahora', `${es(now, 0)} L/h`],
+          ['En el día', `${es(day, 0)} L (${es(day / Math.max(1, s.people), 0)} L por persona)`],
+          ['Fuga escondida', s.leak > 0 ? `${es(s.leak, 1)} L/h, de día y de noche` : 'no hay'],
+          ['Lectura del medidor', `${es(s.reading, 3)} m³`],
+        ],
+        strong: 0,
+      };
+    }
+    const now = s.hrs[use][h] ?? 0, day = s.hrs[use].reduce((a, b) => a + b, 0);
+    return {
+      title: USE_NAMES[use],
+      rows: [
+        ['A esta hora', now > 0.05 ? `${es(now, 0)} L/h` : 'cerrado'],
+        ['En el día', `${es(day, 0)} L`],
+        ['Al mes', `${es((day * 30) / 1000, 2)} m³`],
+      ],
+      strong: 0,
+    };
+  }
+
+  private probeTank(): ProbeInfo | null {
+    const t = this.st?.tank;
+    if (!t) return null;
+    return {
+      title: 'Tanque de agua lluvia',
+      rows: [
+        ['Guarda ahora', `${es(t.S * 1000, 0)} de ${es(t.V * 1000, 0)} L (${es((t.S / Math.max(1e-6, t.V)) * 100, 0)} %)`],
+        ['Lluvia del día', `${es(t.rain, 1)} mm sobre ${es(t.A, 0)} m² de techo`],
+        ['Se gasta del tanque', `${es(t.D, 0)} L al día`],
+        ['Rebosa', t.spill ? 'sí: el tanque se llenó' : 'no'],
+      ],
+      strong: 0,
+    };
   }
 
   private labels(s: HouseState): void {

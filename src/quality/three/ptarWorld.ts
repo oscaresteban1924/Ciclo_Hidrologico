@@ -313,7 +313,7 @@ export class PtarWorld {
     this.padSign.position.set(-19, 1.6, LZ2 + 11.5);
     sc.add(this.padSign);
     // casa de sopladores entre las dos líneas
-    const blow = houses([{ x: PT.reactor.x, y: 0, z: -14.6, w: 11, d: 3.4, h: 3.6, rot: 0, wall: '#dfe3e6' }]);
+    const blow = houses([{ x: PT.reactor.x, y: 0, z: -14.6, w: 11, d: 3.4, h: 3.6, rot: 0, wall: '#dfe3e6' }], { roofs: false });
     sc.add(blow);
     const bs = this.signBoard('Sopladores', '', 3.2, 0.7, '#1f5f8b');
     bs.position.set(PT.reactor.x, 2.6, -12.85);
@@ -763,7 +763,7 @@ export class PtarWorld {
     sc.add(gb, this.gasDome);
     pick(this.gasDome, 'digestor');
     // motor-generador y tea
-    const gen = houses([{ x: gx + 11, y: 0, z: G.z, w: 6, d: 4.4, h: 3.4, rot: 0, wall: '#dfe3e6' }]);
+    const gen = houses([{ x: gx + 11, y: 0, z: G.z, w: 6, d: 4.4, h: 3.4, rot: 0, wall: '#dfe3e6' }], { roofs: false });
     sc.add(gen);
     const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 3), new THREE.MeshStandardMaterial({ color: '#6b7177' }));
     stack.position.set(gx + 12.5, 4.6, G.z - 1);
@@ -966,7 +966,7 @@ export class PtarWorld {
   /** Laboratorio y oficinas, letrero de la escena y cerca del predio. */
   private buildSite(): void {
     const sc = this.stage.scene;
-    const lab = houses([{ x: 36, y: 0, z: -25, w: 13, d: 7, h: 5, rot: 0, wall: '#ebe5d6' }]);
+    const lab = houses([{ x: 36, y: 0, z: -25, w: 13, d: 7, h: 5, rot: 0, wall: '#ebe5d6' }], { roofs: false });
     sc.add(lab);
     const roof = new THREE.Mesh(new THREE.BoxGeometry(13.8, 0.35, 7.8), concreteMaterial('#a8aaa6'));
     roof.position.set(36, 5.3, -25);

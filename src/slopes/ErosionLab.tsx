@@ -65,7 +65,7 @@ export function ErosionLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const world = useRef<ErosionWorld | null>(null);
   const sync = useRef({ s, r });
   sync.current = { s, r };
-  const toWorld = () => world.current?.set({ slopePct: sync.current.s.slopePct, lambda: sync.current.s.lambda, cover: sync.current.s.cover, practice: sync.current.s.practice, A: sync.current.r.A, ok: sync.current.r.ok });
+  const toWorld = () => world.current?.set({ slopePct: sync.current.s.slopePct, lambda: sync.current.s.lambda, cover: sync.current.s.cover, practice: sync.current.s.practice, A: sync.current.r.A, ok: sync.current.r.ok, LS: sync.current.r.LS, C: sync.current.r.C, P: sync.current.r.P, mmYear: sync.current.r.mmYear });
   useEffect(() => {
     toWorld();
   }, [r]); // eslint-disable-line react-hooks/exhaustive-deps

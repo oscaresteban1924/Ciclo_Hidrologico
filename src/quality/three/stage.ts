@@ -32,6 +32,18 @@ interface Pickable {
   hint?: string;
 }
 
+/** Lo que se lee en un punto de la escena: un título y filas (dato, valor); `strong` resalta la fila. */
+export interface ProbeInfo {
+  title: string;
+  rows: [string, string][];
+  strong?: number;
+}
+
+interface Probe {
+  obj: THREE.Object3D;
+  read: (pt: THREE.Vector3, hit: THREE.Intersection) => ProbeInfo | null;
+}
+
 export function hasWebGL(): boolean {
   try {
     const cv = document.createElement('canvas');
@@ -67,6 +79,12 @@ export class QStage {
   private ro: ResizeObserver;
   private disposed = false;
   private hoverAt = 0;
+  private probes: Probe[] = [];
+  private probeEl: HTMLDivElement | null = null;
+  private probeDot: THREE.Mesh | null = null;
+  private probeTimer = 0;
+  /** El último punto leído y cómo releerlo (la lectura se refresca mientras la escena cambia). */
+  private probeLast: { p: Probe; pt: THREE.Vector3; h: THREE.Intersection; x: number; y: number; at: number } | null = null;
   readonly sun: THREE.DirectionalLight;
   readonly hemi: THREE.HemisphereLight;
   private envRT: THREE.WebGLRenderTarget | null = null;
@@ -149,6 +167,7 @@ export class QStage {
     cv.addEventListener('pointerleave', () => {
       cv.style.cursor = '';
       this.onHover?.(null);
+      this.hideProbe();
     });
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(container);
@@ -222,6 +241,11 @@ export class QStage {
     LOOK_TIME.value = this.time;
     this.update?.(this.reducedMotion ? 0 : dt, this.time);
     for (const fn of this.animators) fn(this.time, this.reducedMotion ? 0 : dt);
+    this.refreshProbe();
+    if (this.probeDot?.visible) {
+      this.probeDot.quaternion.copy(this.camera.quaternion);
+      this.probeDot.scale.setScalar(this.camera.position.distanceTo(this.probeDot.position) * 0.009);
+    }
     // el acabado llega a lo que el mundo agregó (se revisa cada medio segundo, más seguido al empezar)
     if (this.frames++ % (this.frames < 120 ? 5 : 30) === 0) lookScene(this.scene, this.looked);
     this.sky.follow(this.camera);
@@ -330,6 +354,11 @@ export class QStage {
     if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7 || performance.now() - d.t > 700) return;
     const r = this.hit(e.clientX, e.clientY);
     if (r) r.p.onPick(r.h.point.clone(), r.h);
+    // con el dedo no hay puntero que pase: el toque muestra la lectura un momento
+    else if (e.pointerType === 'touch' && this.probeAt(e.clientX, e.clientY)) {
+      window.clearTimeout(this.probeTimer);
+      this.probeTimer = window.setTimeout(() => this.hideProbe(), 3500);
+    }
   };
 
   private onMove = (e: PointerEvent) => {
@@ -340,7 +369,104 @@ export class QStage {
     const r = this.hit(e.clientX, e.clientY);
     this.renderer.domElement.style.cursor = r ? 'pointer' : '';
     this.onHover?.(r?.p.hint ?? null);
+    if (!this.probeAt(e.clientX, e.clientY)) this.hideProbe();
   };
+
+  // ------------------------------------------------------------ lecturas al pasar el puntero
+  /**
+   * Registra un objeto que se puede leer: al pasar el puntero (o al tocarlo en una pantalla táctil) aparece junto al
+   * puntero una ficha con los datos de ese punto, que se actualiza mientras la escena cambia.
+   */
+  addProbe(obj: THREE.Object3D, read: Probe['read']): void {
+    this.probes.push({ obj, read });
+  }
+
+  /**
+   * Zona de lectura invisible (una esfera o una caja) para objetos pequeños o delgados que serían difíciles de
+   * señalar con el puntero: no se dibuja, pero se puede leer.
+   */
+  addProbeZone(at: THREE.Vector3, size: number | THREE.Vector3, read: Probe['read']): THREE.Mesh {
+    const g = typeof size === 'number' ? new THREE.SphereGeometry(size, 10, 8) : new THREE.BoxGeometry(size.x, size.y, size.z);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ visible: false }));
+    m.position.copy(at);
+    m.userData.noLook = true;
+    this.scene.add(m);
+    this.probes.push({ obj: m, read });
+    return m;
+  }
+
+  private probeAt(clientX: number, clientY: number): boolean {
+    if (!this.probes.length) return false;
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(ndc, this.camera);
+    const objs = this.probes.filter((p) => p.obj.visible).map((p) => p.obj);
+    for (const h of this.ray.intersectObjects(objs, true)) {
+      let o: THREE.Object3D | null = h.object;
+      while (o) {
+        const p = this.probes.find((q) => q.obj === o);
+        if (p) {
+          const info = p.read(h.point.clone(), h);
+          if (!info) return false;
+          this.probeLast = { p, pt: h.point.clone(), h, x: clientX - r.left, y: clientY - r.top, at: performance.now() };
+          this.showProbe(info, clientX - r.left, clientY - r.top, h.point);
+          return true;
+        }
+        o = o.parent;
+      }
+    }
+    return false;
+  }
+
+  private showProbe(info: ProbeInfo, x: number, y: number, pt: THREE.Vector3): void {
+    if (!this.probeEl) {
+      const el = document.createElement('div');
+      el.className = 'q3-hover q3-probe';
+      el.setAttribute('aria-hidden', 'true');
+      this.container.appendChild(el);
+      this.probeEl = el;
+    }
+    const el = this.probeEl;
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string);
+    el.innerHTML =
+      `<b>${esc(info.title)}</b>` +
+      info.rows.map(([k, v], i) => `<span${i === info.strong ? ' class="is-key"' : ''}><i>${esc(k)}</i> ${esc(v)}</span>`).join('');
+    el.style.display = 'grid';
+    const W = this.container.clientWidth, H = this.container.clientHeight;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const left = x + 16 + w > W - 6 ? Math.max(6, x - 16 - w) : x + 16;
+    const top = Math.min(Math.max(6, y - h - 12), H - h - 6);
+    el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+    if (!this.probeDot) {
+      const m = new THREE.Mesh(new THREE.RingGeometry(0.62, 1, 28), new THREE.MeshBasicMaterial({ color: '#ffffff', depthTest: false, transparent: true, opacity: 0.95 }));
+      m.renderOrder = 20;
+      m.userData.noLook = true;
+      this.scene.add(m);
+      this.probeDot = m;
+    }
+    this.probeDot.visible = true;
+    this.probeDot.position.copy(pt);
+    this.probeDot.quaternion.copy(this.camera.quaternion);
+    this.probeDot.scale.setScalar(this.camera.position.distanceTo(pt) * 0.009);
+  }
+
+  private hideProbe(): void {
+    if (this.probeEl) this.probeEl.style.display = 'none';
+    if (this.probeDot) this.probeDot.visible = false;
+    this.probeLast = null;
+  }
+
+  /** Vuelve a leer el último punto (la escena cambió: otro instante, otro caudal). */
+  private refreshProbe(): void {
+    const l = this.probeLast;
+    if (!l || !this.probeEl || this.probeEl.style.display === 'none') return;
+    const now = performance.now();
+    if (now - l.at < 250) return;
+    l.at = now;
+    const info = l.p.read(l.pt.clone(), l.h);
+    if (info) this.showProbe(info, l.x, l.y, l.pt);
+    else this.hideProbe();
+  }
 
   // ------------------------------------------------------------ rótulos
   setLabels(labels: StageLabel[]): void {
@@ -427,6 +553,8 @@ export class QStage {
 
   dispose(): void {
     this.disposed = true;
+    window.clearTimeout(this.probeTimer);
+    this.probeEl?.remove();
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     this.controls.dispose();

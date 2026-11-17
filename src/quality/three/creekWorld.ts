@@ -3,6 +3,7 @@
 // calculado (model.ts) en cada punto. Dibujo esquemático: la distancia se comprime (más espacio cerca del tubo).
 
 import * as THREE from 'three';
+import { showHouses } from '../../three/houses';
 import { Birds } from '../../three/scenery';
 import { plumeFactor, plumeMixing, type CreekInput, type CreekModel } from '../model';
 import { naturalWater, doColor, fishGeometry, houses, rng, trees, waterMaterial, noise2, WALLS, type HouseSpot, type TreeSpot } from './kit';
@@ -417,7 +418,7 @@ export class CreekWorld {
     (this.water.material as THREE.MeshStandardMaterial).opacity = v.mode === 'oxigeno' ? 0.94 : 0.72 + 0.22 * Math.min(1, maxTurb / 80);
     // barrio, tratamiento y tubo
     const nH = Math.min(this.houseSpots.length, Math.ceil(inp.houses / 10));
-    this.houseMesh.count = nH;
+    showHouses(this.houseMesh, nH);
     this.septic.count = inp.treatment === 'septico' ? nH : 0;
     this.ptar.visible = inp.treatment === 'ptar';
     this.collector.visible = inp.treatment === 'alcantarillado';
