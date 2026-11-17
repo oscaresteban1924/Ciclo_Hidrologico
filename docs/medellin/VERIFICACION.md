@@ -1033,7 +1033,7 @@ Cada sala se documenta en su `MODELO_*.md`, sección «La escena» o «Lecturas�
   - Canales: Froude 0,54 en el canal uniforme y 6,07 al pie de la caída.
   - Quebrada: oxígeno, DBO y coliformes a 320 m del tubo.
   - Calle de prueba de Medellín: concreto seco y edificio de 2 y 3 pisos.
-- Superposiciones: RESULTADO_OV.
+- Superposiciones: **452 de 452 estados**, 113 en cada pantalla (escritorio, portátil, tableta y teléfono), sin choques ni cortes; incluye el estado nuevo «cuencas-viaje». Con dos navegadores por software a la vez, cuatro estados de Medellín dieron choques de rótulos con la leyenda; ese código no cambió y, corridos uno a uno, pasaron todos: era la carga del equipo.
 
 **Ajustes durante la verificación.**
 
