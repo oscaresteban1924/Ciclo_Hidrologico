@@ -53,6 +53,10 @@ El cálculo está en módulos sin interfaz: `measure.ts` (pluviómetro, radar, r
 | Aforo | aforo con molinete a 0,2 y 0,8 por sección media, con la ecuación del molinete | curva de gasto con h0 automático o elegido, y caudal para un nivel | — |
 | Tubería | caudal desde la lectura de un Venturi o una placa | β para que el caudal máximo llene la escala, y si el mínimo se lee bien | — |
 
+## 4 bis. La escena: lecturas
+
+La ficha del pluviómetro da la lluvia real y la registrada, los vuelcos, el acumulado y el viento; la del radar, la reflectividad y la lluvia que estima con Z = 200·R^1,6 frente a la real. En el río, la ficha da la profundidad, la velocidad en ese punto (en la superficie o, en el corte de la línea de aforo, a la altura que se señala, con el perfil de potencia 1/6 del modelo), la de la superficie y la de 0,6 de la profundidad, el nivel en la regla y el caudal. En el banco de tuberías, la ficha da el diámetro y la velocidad en ese punto del tubo (por continuidad), el piezómetro más cercano y, en el Venturi o la placa, la diferencia que mide y el caudal que resulta.
+
 ## 5. Verificación
 
 `npm run test:measure` ejecuta diez pruebas (M1 a M10): relaciones Z-R con valores de tabla, la fórmula del balancín contra una simulación vuelco a vuelco, el aguacero, el perfil de velocidades y las reglas del molinete, el área de la sección y la convergencia del aforo, la curva de gasto con datos exactos y con los aforos de la escena, el Venturi contra Bernoulli, el coeficiente de la placa y las pérdidas, la robustez de las siete herramientas y las escenas de partida.

@@ -63,6 +63,14 @@ El cálculo está en módulos sin interfaz: `pipes.ts` (agua, materiales, fricci
 
 **Normas citadas.** Resolución 0330 de 2017 (RAS): Art. 56 (velocidad mínima de 0,5 m/s en aducción y conducción, o la que dé un esfuerzo cortante de 1,5 Pa, según la modificación de la Res. 799 de 2021), Art. 58 (sectorización hidráulica), Art. 61 (presiones mínimas) y Art. 62 (presión estática máxima). Los artículos 61 y 62 se verificaron en un concepto de la Superintendencia de Servicios Públicos que los transcribe; los cambios del Art. 56, en el anexo del Ministerio de Vivienda que resume la Res. 799 de 2021. El límite de 3 m/s y las clases de los tubos son criterios usuales, no artículos del RAS. **No se incluyen**: el diámetro mínimo de la red (Art. 63), los factores de mayoración de la demanda ni los artículos sobre golpe de ariete, porque su texto no se pudo leer en esta sesión.
 
+## 4 bis. La escena: lecturas y válvulas
+
+En «La tubería y su energía», el tubo se tiñe con la presión de cada tramo: azul con mucha presión, claro con poca y rojo si es negativa. Al pasar el puntero sobre el tubo aparece una ficha con su distancia al tanque, la presión (en metros de agua y kPa), la cota del tubo, la línea piezométrica, la de energía, la velocidad y lo que se ha perdido desde el tanque, interpolados entre los puntos del cálculo.
+
+En «La red del barrio», las calles tienen asfalto y andenes, y las casas, fachada con la puerta hacia la calle. La ficha de cada tubo da su caudal y sentido, la velocidad, la pérdida, el diámetro y el coeficiente de Hazen-Williams; la de cada esquina, la presión, la mínima pedida, la cota del terreno, la piezométrica y la estática. La de una casa toma la presión de la esquina más cercana, le resta lo que la casa está más alta y 1,2 m hasta la llave del primer piso, y dice si alcanza para subir a un tanque de techo (más de 8 m); es una estimación ilustrativa. Los tubos con válvula se cierran o se abren **tocándolos** en la escena (lo mismo que el control «Válvula cerrada»).
+
+En «El golpe de ariete», el tubo va sobre apoyos de concreto cada 30 m con un anclaje junto al tanque; la ficha da, en el instante que se ve, la cota piezométrica, el cambio que trae la onda, el caudal y las envolventes máxima y mínima en ese punto.
+
 ## 5. Verificación
 
 `npm run test:supply` ejecuta doce pruebas (A1 a A12): fricción, pérdidas, cierre de la ecuación de energía, presión negativa en la loma, gradiente contra Hardy Cross, mallas y tubos en paralelo, curva de consumo, celeridad, Joukowsky y el periodo, cierre lento entre Allievi y Michaud con fricción y vapor, independencia de la malla de cálculo, y robustez de las siete herramientas.

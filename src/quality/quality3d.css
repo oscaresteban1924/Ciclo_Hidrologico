@@ -1291,7 +1291,7 @@
 }
 
 /* lectura de un punto de la escena al pasar el puntero (o al tocarlo) */
-.q3-hover.q3-probe {
+.q3-hover.q3-reading {
   left: 0;
   top: 0;
   bottom: auto;
@@ -1310,23 +1310,23 @@
   white-space: nowrap;
   transition: none;
 }
-.q3-probe b {
+.q3-reading b {
   font-size: 0.8rem;
   font-weight: 750;
 }
-.q3-probe span {
+.q3-reading span {
   color: #e9f1f7;
 }
-.q3-probe i {
+.q3-reading i {
   font-style: normal;
   color: #a9c2d4;
 }
-.q3-probe .is-key {
+.q3-reading .is-key {
   color: #9fd4f5;
   font-weight: 700;
 }
 @media (prefers-reduced-motion: reduce) {
-  .q3-hover.q3-probe {
+  .q3-hover.q3-reading {
     transition: none;
   }
 }

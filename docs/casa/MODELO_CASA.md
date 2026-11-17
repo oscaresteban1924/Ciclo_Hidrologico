@@ -55,6 +55,10 @@ El cálculo está en módulos sin interfaz: `house.ts` (consumo por uso y en el 
 | Factura | factura desde dos lecturas, con el estrato y una tarifa editable | prueba nocturna de fugas: litros por hora, metros cúbicos y costo al mes |
 | Agua lluvia | balance de un año de un tanque | el tanque más pequeño (en pasos de 100 L) que atiende la fracción pedida |
 
+## 4 bis. La escena: lecturas
+
+Al pasar el puntero por un aparato o por su tubo aparece lo que gasta a esa hora, en el día y al mes; la acometida, lo que pasa ahora por el medidor, el total del día por persona, la fuga escondida y la lectura. El tanque de agua lluvia da lo que guarda, la lluvia del día sobre el techo, lo que se gasta de él y si rebosa.
+
 ## 5. Verificación
 
 `npm run test:house` ejecuta ocho pruebas (H1 a H8): el consumo de cada uso contra la cuenta a mano y su reparto en el día, el goteo contra la cuenta del USGS, la factura (rangos, subsidio solo en el básico, contribución en todo y que siempre sube con el consumo), la lectura del medidor, el año de lluvia (meses exactos y régimen bimodal), el balance de masa del tanque, la robustez de las seis herramientas y las escenas de partida con los retos alcanzables.

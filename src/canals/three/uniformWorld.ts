@@ -10,7 +10,7 @@ import { Birds, meadow, strataWall } from '../../three/scenery';
 import { MATERIALS, SHAPES, geom, type Material, type Section, type UniformInput, type UniformResult } from '../hydraulics';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { WATER, WaterBody, glassMaterial, slab, staffGauge } from './canalKit';
+import { WATER, WaterBody, glassMaterial, slab, staffGauge, waterProbe } from './canalKit';
 
 const L = 60;
 const W = 26;
@@ -208,6 +208,8 @@ export class UniformWorld {
     }
     sc.add(this.leaves);
     for (const w of [this.water, this.flood]) w.setEnvironment(stage.scene.environment);
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, 'El canal'));
+    stage.addProbe(this.flood.group, (p) => waterProbe(this.flood, p.x, 'El agua que se sale del canal'));
     stage.view(this.views.general, false);
   }
 

@@ -8,7 +8,7 @@ import { meadow } from '../../three/scenery';
 import { WAVE, type WaveSim } from '../waves';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { Splash, Tracers, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station } from './canalKit';
+import { Splash, Tracers, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station, waterProbe } from './canalKit';
 
 const HB = WAVE.b / 2;
 
@@ -93,6 +93,7 @@ export class WavesWorld {
     this.mark.frustumCulled = false;
     this.mark.renderOrder = 4;
     sc.add(this.mark);
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, `A ${Math.round(p.x)} m del inicio`));
     stage.view(this.views.general, false);
   }
 

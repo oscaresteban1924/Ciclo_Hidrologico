@@ -10,7 +10,7 @@ import { CREEK, DEBRIS, PIER_A, type BridgeResult } from '../hydraulics';
 import { bridgeSurface } from '../profiles';
 import { concreteMaterial, houses, rng, trees, WALLS, type HouseSpot, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { Tracers, WaterBody, glassMaterial, polyline, setPolyline, slab, stationField, type Station } from './canalKit';
+import { Tracers, WaterBody, glassMaterial, polyline, setPolyline, slab, stationField, type Station, waterProbe } from './canalKit';
 
 const X0 = -220;
 const X1 = 80;
@@ -53,6 +53,7 @@ export class BridgeWorld {
     this.normal = polyline('#17324d');
     sc.add(this.normal);
     for (const w of [this.water, this.flood]) w.setEnvironment(stage.scene.environment);
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, p.x < -2 ? 'Remanso antes del puente' : p.x < 6 ? 'Bajo el puente' : 'Después del puente'));
     stage.view(this.views.general, false);
   }
 

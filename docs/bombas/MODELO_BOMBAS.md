@@ -57,6 +57,10 @@ El cálculo está en módulos sin interfaz: `pump.ts` (curvas de bombas, sistema
 | Cavitación | NPSH disponible y margen | altura máxima de la bomba sobre el agua (o cuánto debe quedar por debajo) |
 | Central | potencia, altura neta, energía al año y factor de planta | diámetro de la tubería de presión con pérdidas máximas y espesor orientativo de acero (Barlow con sobrepresión por golpe de ariete) |
 
+## 4 bis. La escena: lecturas
+
+Al pasar el puntero sobre una bomba aparece su caudal, la altura que da, la velocidad del eje, la eficiencia y la potencia (repartidas si hay dos bombas en serie o en paralelo); sobre la tubería, el caudal, el diámetro, la velocidad y la presión a la salida de la bomba. En «El agua hierve en la bomba», la ficha del agua da la temperatura, la presión atmosférica del lugar y la de vapor (en kPa) y el nivel respecto al eje; la de la bomba, la presión absoluta a la entrada, el NPSH disponible y el que pide, el margen y las pérdidas de la succión. En la central, la ficha de la turbina da la potencia, la eficiencia, el caudal y los hogares que abastece; la de la tubería de presión, la caída, el diámetro y lo que se pierde; la del río, el caudal de cada tramo y si el tramo con menos agua cumple el caudal ecológico.
+
 ## 5. Verificación
 
 `npm run test:pumps` ejecuta once pruebas (B1 a B11): leyes de afinidad, el punto de operación en 300 sistemas al azar, serie contra paralelo según la fricción, atmósfera, presión de vapor y densidad contra tablas, NPSH y caudal máximo sin cavitar, potencia de la central contra un caso a mano, curva de duración y energía del año, elección de turbina, válvula contra variador, robustez de las seis herramientas con sus gráficas, y las escenas de partida.

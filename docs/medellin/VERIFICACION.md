@@ -997,6 +997,59 @@ Las marcas de agua, los valores de las viviendas y la zonificación son de ejerc
 
 **Pendiente.** No se probó en un equipo con GPU, y la página publicada no se abrió desde este entorno.
 
+## 4 tredecquatricies. Todas las salas: lecturas en la escena y acabado común (ejecutada)
+
+**Pedido.** «Mejora sustancialmente todos los módulos», con las tres líneas a la vez (escena, interactividad y contenido) en todas las salas.
+
+**Qué cambió.**
+
+Piezas comunes:
+
+| Pieza | Archivo | Qué hace |
+|---|---|---|
+| Lecturas en la escena | `src/quality/three/stage.ts` | `addProbe` y `addProbeZone`: ficha junto al puntero (o al tocar en pantallas táctiles), refrescada mientras la escena cambia, con un anillo en el punto leído; las zonas invisibles sirven para objetos pequeños. |
+| Casas de barrio | `src/three/houses.ts` | Fachada, ventanas, reja, puerta, zócalo y techo de teja o plancha con tanque. Las usan la sala 2D y el kit de las demás salas; los edificios grandes y las naves de las plantas llevan azotea. |
+| Suelo por cobertura | `src/three/ground.ts` | El de la sala 2D, ahora compartido. |
+| Corte de suelo con grano | `src/three/soil.ts` | Cantos, granos, grano fino o arcilla lisa con grietas, más la franja saturada bajo el nivel. |
+| Suelo natural y agua | `src/three/look.ts` | Pasto con manchas de potrero y terrones según el color de las maquetas; en el agua, reflejo del cielo según el ángulo. |
+
+Cada sala se documenta en su `MODELO_*.md`, sección «La escena» o «Lecturas»:
+
+- **Cuencas:** coberturas dibujadas, mapa de tiempos de viaje (isócronas) y área que ya aporta durante el aguacero.
+- **Acueducto:** tubo teñido por la presión y válvulas de la red que se cierran tocando el tubo.
+- **Aguas subterráneas, presas, laderas, bombas, medir y casa:** lecturas en cada parte.
+- **Canales:** lectura del agua (profundidad, velocidad, Froude, energía específica) en las siete partes.
+- **Calidad:** lectura de la sonda al pasar el puntero.
+- **Medellín:** lectura al pasar el puntero por la maqueta del sector, sin seleccionar. Da la cobertura, la profundidad ahora y la máxima, la velocidad y su dirección, y si infiltra; en un edificio, los pisos, la altura y el techo; en una rejilla, lo que capta. La ficha completa sigue saliendo al tocar.
+
+**Comprobado.**
+
+- Tipos sin errores. Pruebas: cuencas 12/12, canales 33/33, Medellín 64/64 (el informe `docs/medellin/PRUEBAS.md` se regeneró), presas 8/8, aguas subterráneas 9/9, casa 8/8, medir 10/10, modelación 2D 28/28, bombas 11/11, calidad 26/26, laderas 9/9 y acueducto 12/12. Las dos compilaciones cumplen.
+- Fichas leídas en Chrome con dibujo por software, sin errores en la consola, en al menos una parte de cada sala. Por ejemplo:
+  - Cuencas: pavimento con CN 98, 45,1 mm de 51 mm (89 %) y unos 5 min hasta la salida; bosque con CN 70 y 6,1 mm.
+  - Acuífero: arena gruesa a 170 m de la loma, saturada, 1,0 m por día y 389 días hasta el río.
+  - Vertedero: Froude 12,3 en el pozo con el resalto afuera.
+  - Presa de gravedad: 279 kPa de compresión en la base.
+  - Canales: Froude 0,54 en el canal uniforme y 6,07 al pie de la caída.
+  - Quebrada: oxígeno, DBO y coliformes a 320 m del tubo.
+  - Calle de prueba de Medellín: concreto seco y edificio de 2 y 3 pisos.
+- Superposiciones: RESULTADO_OV.
+
+**Ajustes durante la verificación.**
+
+- El sombreador de grano usaba la normal antes de declararla y no compilaba; ahora usa una normal propia.
+- Las presiones de la bomba que cavita estaban en kPa y la ficha decía «m de agua»; se corrigió la unidad.
+- La clase de la ficha chocaba con la tarjeta de la sonda de la quebrada (`.q3-probe`) y le cambiaba el color del texto; la ficha pasó a `.q3-reading`.
+- La ficha genérica de la estación de bombeo salía sobre todo el terreno; ahora solo sale sobre bombas y tubos.
+- En el acuífero confinado el saturado quedaba demasiado oscuro; se aclaró.
+
+**Pendiente.**
+
+- No se probó en un equipo con GPU, y la página publicada no se abrió desde este entorno.
+- La sala «Ciclo hidrológico» (ilustración en SVG, que ya tenía su lectura al pasar el puntero) no cambió en esta ronda.
+- Las casas de Medellín vienen de su propio generador y del catastro: no usan las casas nuevas.
+- No todas las zonas de lectura se recorrieron con el puntero: en la casa, las fichas de los aparatos se leyeron por la acometida, pero no por cada aparato.
+
 ## 5. Rendimiento medido
 
 **Costo del cálculo en Node, en esta CPU** (`docs/medellin/perf-calculo.txt`):

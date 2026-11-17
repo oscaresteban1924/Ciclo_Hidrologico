@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import type { CulvertResult } from '../culvert';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { Tracers, WaterBody, glassMaterial, slab, stationField, type Station } from './canalKit';
+import { Tracers, WaterBody, glassMaterial, slab, stationField, type Station, waterProbe } from './canalKit';
 import { geom } from '../hydraulics';
 
 const SIDE = 2; // talud del terraplén (horizontal por vertical)
@@ -70,6 +70,10 @@ export class CulvertWorld {
       sc.add(w.group);
     }
     for (const w of [this.pond, this.down, this.inner, this.over]) w.setEnvironment(stage.scene.environment);
+    stage.addProbe(this.pond.group, (p) => waterProbe(this.pond, p.x, 'Agua represada a la entrada'));
+    stage.addProbe(this.inner.group, (p) => waterProbe(this.inner, p.x, 'Dentro de la alcantarilla'));
+    stage.addProbe(this.down.group, (p) => waterProbe(this.down, p.x, 'A la salida'));
+    stage.addProbe(this.over.group, (p) => waterProbe(this.over, p.x, 'Pasando por encima de la vía'));
     stage.view(this.views.general, false);
   }
 

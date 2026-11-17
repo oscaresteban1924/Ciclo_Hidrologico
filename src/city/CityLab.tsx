@@ -87,6 +87,9 @@ export default function CityLab() {
   const resumeRef = useRef<string | null>(null);
   const lastCfg = useRef('');
   const down = useRef<[number, number] | null>(null);
+  // lectura al pasar el puntero por la maqueta del sector (con el dedo no hay: se toca para la ficha completa)
+  const [hover, setHover] = useState<{ x: number; y: number; title: string; rows: [string, string][] } | null>(null);
+  const hoverAt = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
@@ -226,6 +229,52 @@ export default function CityLab() {
     else go();
   }, [dispatch]);
 
+  const onMove = (e: React.PointerEvent) => {
+    if (e.buttons || e.pointerType === 'touch' || !ctrl || ctrl.scale !== 'sector') {
+      if (hover) setHover(null);
+      return;
+    }
+    const now = performance.now();
+    if (now - hoverAt.current < 90) return;
+    hoverAt.current = now;
+    const p = ctrl.peekAt(e.clientX, e.clientY);
+    const sim = ctrl.displayed();
+    const host = stageRef.current?.getBoundingClientRect();
+    if (!p || !sim || !host || !ctrl.sc) {
+      setHover(null);
+      return;
+    }
+    const c = sim.c;
+    let title = '';
+    const rows: [string, string][] = [];
+    if (p.kind === 'drain') {
+      const d = ctrl.sc.drains[p.index], cd = c.drains[p.index];
+      title = d.name;
+      rows.push(['Capta ahora', `${fmtNum(sim.lastDt > 0 ? (sim.lastDrain[p.index] / sim.lastDt) * 1000 : 0, 1)} L/s de ${d.capacityLps}`]);
+      rows.push(['Agua sobre la rejilla', fmtDepth(sim.h[cd.cell])]);
+    } else if (p.kind === 'building') {
+      const b = ctrl.sc.buildings[p.index];
+      const ex = exposureOf(sim)[p.index];
+      title = ex && ex.depth >= 0.01 ? buildingName(b.id) : 'Edificio';
+      rows.push(['Pisos y altura', `${b.floors} · ${fmtNum(b.heightM, 1)} m`]);
+      rows.push(['Techo', `${fmtNum(c.buildings[p.index].roofArea, 0)} m², su lluvia va a ${c.buildings[p.index].tank >= 0 ? 'un depósito' : 'la bajante'}`]);
+      if (ex && ex.depth >= 0.01) rows.push(['Agua contra sus muros (máximo)', fmtDepth(ex.depth)]);
+    } else {
+      const k = p.k;
+      const cov = COVERS[COVER_LIST[c.cover[k]]];
+      const [ux, uy] = sim.velocityAt(k);
+      const sp = Math.hypot(ux, uy), wet = sim.h[k] >= H_WET;
+      title = cov.name;
+      rows.push(['Profundidad ahora', fmtDepth(sim.h[k])]);
+      rows.push(['Máxima hasta ahora', fmtDepth(sim.hmaxField[k])]);
+      rows.push(['Velocidad', wet ? `${fmtNum(sp, 2)} m/s` : '—']);
+      if (wet && sp > 0.005) rows.push(['Va hacia', dirText(ux, uy)]);
+      rows.push(['Infiltra', cov.permeable ? `${cov.ksMmH} mm/h` : 'no (impermeable)']);
+    }
+    const x = e.clientX - host.left, y = e.clientY - host.top;
+    setHover({ x: x + 220 > host.width ? x - 216 : x + 16, y: Math.max(6, y - 70), title, rows });
+  };
+
   const onUp = (e: React.PointerEvent) => {
     const d = down.current;
     down.current = null;
@@ -280,7 +329,19 @@ export default function CityLab() {
           ref={hostRef}
           onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
           onPointerUp={onUp}
+          onPointerMove={onMove}
+          onPointerLeave={() => setHover(null)}
         />
+        {hover && (
+          <div className="city-reading" aria-hidden="true" style={{ transform: `translate(${Math.round(hover.x)}px, ${Math.round(hover.y)}px)` }}>
+            <b>{hover.title}</b>
+            {hover.rows.map(([k, v]) => (
+              <span key={k}>
+                <i>{k}</i> {v}
+              </span>
+            ))}
+          </div>
+        )}
         {!ctrl && (
           <div className="city-loading" role="status">
             Preparando el laboratorio: midiendo el equipo para elegir la resolución…

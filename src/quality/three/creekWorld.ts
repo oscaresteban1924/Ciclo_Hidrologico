@@ -168,6 +168,32 @@ export class CreekWorld {
       const x = xOf(us[best]);
       cb.onProbe(Math.max(-400, Math.min(3000, Math.round(x / 10) * 10)));
     }, 'Toca el agua para medir con la sonda');
+    // al pasar el puntero: lo que mediría la sonda en ese punto, sin moverla
+    stage.addProbe(this.water, (p) => {
+      const m = this.v?.m;
+      if (!m) return null;
+      let best = 0, bd = Infinity;
+      for (let k = 0; k < n; k++) {
+        const mid = (k * NS + (NS - 1) / 2) * 3;
+        const d = Math.hypot(this.wPos[mid] - p.x, this.wPos[mid + 2] - p.z);
+        if (d < bd) [bd, best] = [d, k];
+      }
+      const x = Math.max(-400, Math.min(3000, Math.round(xOf(us[best]) / 10) * 10));
+      const r = m.at(x);
+      const f = (v: number, d = 1) => v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+      return {
+        title: x < 0 ? `${f(-x, 0)} m arriba del tubo` : x === 0 ? 'En el tubo de las casas' : `${f(x, 0)} m abajo del tubo`,
+        rows: [
+          ['Oxígeno disuelto', `${f(r.dissolvedO2)} mg/L (${f(r.satPct, 0)} % de saturación)`],
+          ['Materia orgánica (DBO)', `${f(r.dbo)} mg/L`],
+          ['Coliformes', r.coliforms >= 1000 ? `${f(r.coliforms / 1000, 0)} mil por 100 mL` : `${f(r.coliforms, 0)} por 100 mL`],
+          ['Amonio', `${f(r.ammoniaN, 2)} mg/L`],
+          ['Turbiedad', `${f(r.turbidity, 0)} UNT`],
+          ['Tiempo desde el tubo', x <= 0 ? '—' : `${f(r.travelH, 1)} h`],
+        ],
+        strong: 0,
+      };
+    });
 
     // ---- barrio: casas (cada una representa 10) ordenadas desde el tubo hacia afuera
     const R = rng(11);

@@ -307,6 +307,23 @@ export class Splash {
  */
 export class WaterBody {
   readonly group = new THREE.Group();
+  /** Estaciones dibujadas (para leer el agua en un punto). */
+  stations: Station[] = [];
+
+  /** El agua en la posición x (interpolada entre estaciones), o null fuera del agua. */
+  sampleAt(x: number): { bed: number; depth: number; vel: number; halfW: number } | null {
+    const S = this.stations;
+    if (S.length < 2) return null;
+    let k = 1;
+    const asc = S[S.length - 1].x >= S[0].x;
+    while (k < S.length - 1 && (asc ? S[k].x < x : S[k].x > x)) k++;
+    const a = S[k - 1], b = S[k];
+    const t = Math.max(0, Math.min(1, (x - a.x) / (b.x - a.x || 1e-9)));
+    const L = (p: number, q: number) => p + (q - p) * t;
+    const depth = L(a.depth, b.depth);
+    if (depth <= 0.002) return null;
+    return { bed: L(a.bed, b.bed), depth, vel: L(a.vel ?? this.vel, b.vel ?? this.vel), halfW: L(a.halfW, b.halfW) };
+  }
   private top: THREE.Mesh;
   private side: THREE.Mesh;
   private caust: THREE.Mesh;
@@ -366,6 +383,7 @@ export class WaterBody {
    * los mismos búferes en lugar de rehacer la geometría.
    */
   updateFast(st: Station[]): void {
+    this.stations = st;
     const n = st.length, C = this.cols;
     const tg = this.top.geometry, sg = this.side.geometry;
     const tp = tg.getAttribute('position') as THREE.BufferAttribute | undefined;
@@ -421,6 +439,7 @@ export class WaterBody {
   }
 
   update(st: Station[]): void {
+    this.stations = st;
     const n = st.length;
     if (n < 2) return;
     const C = this.cols;
@@ -706,3 +725,27 @@ export function slab(mat: THREE.Material, x0: number, x1: number, y0: number, y1
 
 /** Colores del agua: limpia, turbia (erosión) y con limo (sedimentación). */
 export const WATER = { clear: '#2f84b5', turbid: '#8a7350', silty: '#4f8a7a', lab: '#4fa3d8' };
+
+/**
+ * Lectura del agua de un canal en un punto: profundidad, velocidad, número de Froude (con la profundidad como
+ * profundidad hidráulica, lo que vale para secciones anchas y rectangulares) y energía específica.
+ */
+export function waterProbe(w: WaterBody, x: number, title = 'El agua aquí', extra: [string, string][] = []): { title: string; rows: [string, string][]; strong: number } | null {
+  const s = w.sampleAt(x);
+  if (!s) return null;
+  const g = 9.81, Fr = s.vel / Math.sqrt(g * Math.max(1e-4, s.depth)), E = s.depth + (s.vel * s.vel) / (2 * g);
+  const f = (v: number, d: number) => v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const dd = s.depth < 0.1 ? 3 : 2;
+  return {
+    title,
+    rows: [
+      ['Profundidad', `${f(s.depth, dd)} m`],
+      ['Velocidad media', `${f(s.vel, 2)} m/s`],
+      ['Número de Froude', `${f(Fr, 2)} (${Fr > 1.05 ? 'supercrítico: rápido y poco profundo' : Fr < 0.95 ? 'subcrítico: lento y profundo' : 'crítico'})`],
+      ['Energía específica', `${f(E, dd)} m`],
+      ['Cota del agua', `${f(s.bed + s.depth, 2)} m`],
+      ...extra,
+    ],
+    strong: 2,
+  };
+}

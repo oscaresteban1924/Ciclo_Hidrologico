@@ -122,6 +122,9 @@ def cuencas(pg, screen, shots, report):
         pg.get_by_role('tab', name=part, exact=True).first.click(); pg.wait_for_timeout(3500)
         top(pg); check(pg, screen, f'cuencas-{tag}', shots, report)
         if tag == 'cuenca':
+            pg.evaluate(BTN, 'Tiempo de viaje'); pg.wait_for_timeout(2500)
+            top(pg); check(pg, screen, 'cuencas-viaje', shots, report)
+            pg.evaluate(BTN, 'Su aspecto'); pg.wait_for_timeout(1500)
             pg.evaluate(BTN, 'Lanzar el aguacero'); pg.wait_for_timeout(9000)
             top(pg); check(pg, screen, 'cuencas-aguacero', shots, report)
         if tag == 'hidrograma':

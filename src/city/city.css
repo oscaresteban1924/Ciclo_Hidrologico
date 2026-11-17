@@ -2213,3 +2213,35 @@
     min-height: 36px;
   }
 }
+
+/* lectura al pasar el puntero por la maqueta del sector */
+.city-reading {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  gap: 1px;
+  min-width: 150px;
+  max-width: 230px;
+  padding: 7px 10px 8px;
+  border-radius: 10px;
+  background: rgba(16, 36, 56, 0.9);
+  box-shadow: 0 6px 18px rgba(10, 25, 40, 0.25);
+  color: #fff;
+  font-size: 0.76rem;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.city-reading b {
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+.city-reading span {
+  color: #e9f1f7;
+}
+.city-reading i {
+  font-style: normal;
+  color: #a9c2d4;
+}

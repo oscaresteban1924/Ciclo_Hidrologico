@@ -230,6 +230,10 @@ La resolución trata el alcantarillado y el drenaje urbano. Las alcantarillas ba
 
 **Entradas siempre válidas.** Las escenas sanean sus entradas (`sanitizeUniform`, `sanitizeJump`, `sanitizeBridge`, `sanitizeGauge`, `sanitizeCulvert`, `sanitizeSediment`, `sanitizeWave`): un número que no es finito toma el valor por defecto y uno fuera de rango se lleva al borde. Las herramientas revisan los datos y responden con un aviso cuando no sirven. La prueba H15 llama 10 000 veces las veinticinco herramientas con datos al azar y exige que no haya excepciones ni valores no numéricos; la H23 hace lo mismo con los planos, las gráficas y la memoria.
 
+## 8 bis. Lecturas del agua en la escena
+
+En las siete partes, al pasar el puntero sobre el agua (o al tocarla) aparece una ficha con la profundidad, la velocidad media, el número de Froude, la energía específica y la cota del agua en ese punto, interpoladas entre las estaciones que dibujan el agua. El número de Froude de la ficha toma la profundidad como profundidad hidráulica, lo que vale para secciones anchas o rectangulares; en una sección trapecial angosta el valor exacto, el del panel, es algo mayor. En las alcantarillas se leen por separado el agua represada a la entrada, la de adentro, la de la salida y la que pasa por encima de la vía.
+
 ## 9. Límites
 
 - Flujo unidimensional; permanente en las seis primeras partes y no permanente (Saint-Venant) en «Ondas y crecientes» y en el arranque del resalto; sin pérdidas locales en contracciones salvo donde se dicen.

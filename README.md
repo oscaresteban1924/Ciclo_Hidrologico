@@ -89,6 +89,8 @@ Ilustración científica viva de una cuenca andina, con luz de mañana desde la 
 - Los rótulos tienen jerarquía: el proceso principal es más grande, los demás más discretos. Se colocan evitando chocar entre sí, con los controles y con las lupas, y usan una línea guía cuando se separan de su lugar.
 - Tipografías incluidas (licencia SIL OFL): *Atkinson Hyperlegible* y *Bricolage Grotesque*. El rosa rodamina, el color del trazador fluorescente de los hidrólogos, marca la gota trazadora, las preguntas y el foco del teclado.
 
+- **Lecturas en la escena.** En las salas con partes (cuencas, acueducto, aguas subterráneas, presas, laderas, bombas, medir, casa, canales, calidad, modelación 2D y los sectores de Medellín), al pasar el puntero por el agua, el suelo, un tubo o una máquina aparece una ficha con los datos calculados en ese punto (profundidad, velocidad, número de Froude, presión, cobertura, escorrentía, tiempo de viaje, según la parte); en una pantalla táctil, al tocar. La ficha se actualiza mientras la escena cambia y un anillo marca el punto leído.
+
 ## Criterios científicos aplicados
 
 - El ciclo no tiene un comienzo único: todos los procesos ocurren a la vez y la gota trazadora ofrece muchas rutas.
@@ -232,8 +234,7 @@ src/house/     Sala «El agua en casa»: consumo, factura y tanque de agua lluvi
 tests/house/   Pruebas de la sala del agua en casa
 src/model2d/   Sala «Modelación hidráulica 2D»: terreno y fuentes (terrain.ts), preprocesador subgrid, malla refinada y motor 2D (solver.ts), hidrología (hydrology.ts), rotura de presa (dambreak.ts), calibración, ensamble, zonificación y daños (analysis.ts), exportación (exports.ts), terreno propio (importDem.ts), escenas (scene.ts), corridas en un hilo aparte (runs.ts, worker.ts), herramientas de diseño (design.ts), gráficas (charts.tsx), el valle en 3D (three/) y un laboratorio por parte
 tests/model2d/ Pruebas de la sala de modelación 2D
-src/three/     Acabado común (look.ts), paisaje (scenery.ts) y piezas de máquinas (machines.ts: tuberías con flujo, manómetros, válvulas, bombas, turbinas, red y casas)
-src/three/     Acabado visual común de las escenas 3D (look.ts) y paisaje (scenery.ts: árboles, pradera, maqueta de terreno, lluvia, aves)
+src/three/     Acabado común (look.ts: grano, suelo natural, agua con reflejo del cielo), paisaje (scenery.ts: árboles, pradera, maqueta de terreno, lluvia, aves), piezas de máquinas (machines.ts), casas de barrio con fachada y techos (houses.ts), suelo dibujado por cobertura (ground.ts) y cortes de suelo con su grano (soil.ts)
 tools/geo/     Pipeline de datos reales y su prueba sin red
 ```
 

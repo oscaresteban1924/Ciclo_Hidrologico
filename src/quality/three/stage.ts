@@ -421,7 +421,7 @@ export class QStage {
   private showProbe(info: ProbeInfo, x: number, y: number, pt: THREE.Vector3): void {
     if (!this.probeEl) {
       const el = document.createElement('div');
-      el.className = 'q3-hover q3-probe';
+      el.className = 'q3-hover q3-reading';
       el.setAttribute('aria-hidden', 'true');
       this.container.appendChild(el);
       this.probeEl = el;

@@ -56,6 +56,8 @@ En la tabla fuente Hydropsychidae aparece con 7 y con 5; aquí se usa 7. Clases 
 
 **Regla didáctica de presencia.** Una familia aparece si el oxígeno y la DBO están dentro de lo que tolera según su puntaje: 10 → oxígeno ≥ 7 mg/L y DBO ≤ 2,5 mg/L; 9 → 6,5 y 3,5; 8 → 6 y 5; 7 → 5,5 y 7; 6 → 5 y 10; 3 → 2 y 40; 2 → 1 y 120; 1 → siempre. En agua muy limpia los tolerantes son escasos (salvo la larva roja). Los bichos se calculan con tiempo seco: muestran cómo ha estado el agua durante semanas, no solo el día de la lluvia. En la naturaleza influyen también el fondo, la corriente y la época; un muestreo real reúne muchas más familias.
 
+**Lectura al pasar el puntero.** Además de la sonda que se mueve tocando el agua, al pasar el puntero sobre la quebrada aparece una ficha con lo que mediría la sonda en ese punto (oxígeno y saturación, DBO, coliformes, amonio, turbiedad y tiempo de viaje desde el tubo), sin moverla. Las casas del barrio tienen fachada con ventanas y techo de teja o plancha con tanque.
+
 ## 2. Del río a la llave
 
 | Pieza | Regla | Tipo |

@@ -11,7 +11,7 @@ import { SaintVenant } from '../unsteady';
 import { JUMP_DOWN as DOWN, JUMP_UP as UP, jumpSurface } from '../profiles';
 import { concreteMaterial, rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { Tracers, WATER, WaterBody, glassMaterial, polyline, setPolyline, slab, stationField, type Station } from './canalKit';
+import { Tracers, WATER, WaterBody, glassMaterial, polyline, setPolyline, slab, stationField, type Station, waterProbe } from './canalKit';
 
 const B = CHUTE.b;
 
@@ -61,6 +61,7 @@ export class JumpWorld {
     this.water.setColor(WATER.clear);
     sc.add(this.water.group);
     for (const w of [this.water]) w.setEnvironment(stage.scene.environment);
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, 'El agua aquí'));
     this.egl = polyline('#d0342c');
     sc.add(this.egl);
     this.spray = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.05, 0), new THREE.MeshStandardMaterial({ color: '#f6fbff', roughness: 0.3, transparent: true, opacity: 0.7, depthWrite: false }), 260);

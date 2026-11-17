@@ -413,6 +413,11 @@ export class CityController {
     return this.valley ? this.valley.pick(clientX, clientY) : null;
   }
 
+  /** Lo que hay bajo el puntero, sin seleccionarlo (para la lectura al pasar el puntero). */
+  peekAt(clientX: number, clientY: number): Pick | null {
+    return this.scale === 'sector' ? (this.view?.pick(clientX, clientY) ?? null) : null;
+  }
+
   pickAt(clientX: number, clientY: number): Pick | null {
     const p = this.view?.pick(clientX, clientY) ?? null;
     this.select(p);

@@ -10,7 +10,7 @@ import { BED_W, rouseProfile, type SedimentResult } from '../sediment';
 import { BEDFORM_NAME, transport, type TransportResult } from '../advanced';
 import { rng, trees, type TreeSpot } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { WaterBody, glassMaterial, slab, staffGauge } from './canalKit';
+import { WaterBody, glassMaterial, slab, staffGauge, waterProbe } from './canalKit';
 
 const LEN = 40;
 const HB = BED_W / 2;
@@ -103,6 +103,7 @@ export class SedimentWorld {
     sc.add(this.bed, this.moving);
     for (let k = 0; k < NM; k++) this.seeds.push({ x: R(), z: R(), zf: R(), ph: R() });
     for (const w of [this.water]) w.setEnvironment(stage.scene.environment);
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, 'El agua sobre el lecho'));
     stage.view(this.views.general, false);
   }
 

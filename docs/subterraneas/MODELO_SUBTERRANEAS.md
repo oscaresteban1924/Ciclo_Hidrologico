@@ -52,6 +52,12 @@ El cálculo está en módulos sin interfaz: `aquifer.ts` (Darcy, permeámetros, 
 | El pozo | Theis y Cooper-Jacob | caudal máximo de un pozo con pérdidas del pozo e interferencia | prueba de bombeo con Cooper-Jacob |
 | La mancha | Ogata-Banks | zona de captura y una fuente | — |
 
+## 4 bis. La escena: el grano del suelo y las lecturas
+
+Los cortes muestran el grano de cada material, dibujado en el sombreador y agrandado para que se vea en la maqueta: cantos en la grava, granos en la arena, grano fino en el limo y una superficie lisa con grietas en la arcilla. Bajo el nivel freático el suelo saturado se oscurece; justo encima queda una franja húmeda (capilar) y la línea del nivel en azul. En el pozo, el acuífero confinado está lleno de agua en todo su espesor: lo que baja con el bombeo es la presión (el cono), no el material saturado.
+
+Al pasar el puntero por el corte del acuífero aparece una ficha con el material, si el punto está saturado, el nivel freático y su profundidad, la velocidad del agua en los poros, lo que le falta para llegar al río (integrando la velocidad de Dupuit por tramos) y K y la porosidad eficaz. En el pozo, la ficha da la distancia al pozo, el abatimiento de Theis en ese punto y el tiempo de bombeo. En la mancha, la ficha del terreno dice si el agua de ese punto termina en el pozo (dentro de la zona de captura), la velocidad del flujo regional y cuántas partículas de la mancha hay cerca.
+
 ## 5. Verificación
 
 `npm run test:ground` ejecuta nueve pruebas (S1 a S9): W(u) contra las tablas de Theis, Theis contra Cooper-Jacob y Thiem, recuperación de T y S en una prueba con error de lectura, Darcy y permeámetros, continuidad de Dupuit, partículas contra la solución con entrada de flujo (diferencia 0,002), zona de captura contra trayectorias, orden de los suelos y robustez de las ocho herramientas.

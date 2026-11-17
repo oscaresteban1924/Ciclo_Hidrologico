@@ -52,6 +52,10 @@ El cálculo está en módulos sin interfaz: `slope.ts` (Green-Ampt, talud infini
 | La ladera | talud infinito (factor, términos y fracción crítica) | pendiente máxima con el factor pedido |
 | Erosión | RUSLE | largo máximo de ladera sin cortes (espaciamiento de barreras o terrazas) |
 
+## 4 bis. La escena: lecturas
+
+En «La lluvia entra al suelo», la ficha del corte dice si el suelo ya está mojado a esa profundidad, dónde va el frente de humedecimiento y cuánto le falta; la de la superficie da la lluvia, la capacidad de infiltración, lo que entra y lo que ha escurrido hasta ese minuto. En «La ladera y el agua», la ficha da la pendiente, el espesor de suelo, el agua en la capa, los esfuerzos sobre el plano de falla (el cortante que empuja, la resistencia y la presión del agua) y el factor de seguridad. En «La ladera pierde suelo», la ficha da la cobertura y la práctica, la pendiente y el largo, la pérdida anual en toneladas por hectárea y en milímetros de suelo, la pérdida tolerable y los factores LS, C y P; la de la quebrada, lo que le llega de la ladera.
+
 ## 5. Verificación
 
 `npm run test:slopes` ejecuta nueve pruebas (L1 a L9): Green-Ampt contra los ejemplos de Chow y otros, balance de agua y lluvia menor que Ks, la ecuación implícita, el talud sin cohesión (soluciones cerradas), un caso con cohesión a mano con la fracción y la lluvia críticas, la parcela unitaria de RUSLE, la robustez y coherencia de las seis herramientas y las escenas de partida.

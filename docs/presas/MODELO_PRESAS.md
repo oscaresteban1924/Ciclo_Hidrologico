@@ -56,6 +56,12 @@ El cálculo está en módulos sin interfaz: `dam.ts` (hidrograma gamma, tránsit
 
 Cada herramienta tiene memoria de cálculo con su gráfica.
 
+## 4 bis. La escena: el concreto, la orilla y las lecturas
+
+El concreto de las presas muestra las juntas de vaciado cada 1,5 m y manchas de lavado; la orilla del embalse tiene una franja sin vegetación hasta unos 4 m sobre la cresta, donde el agua sube y baja. En la rápida del vertedero, el agua se blanquea donde corre muy rápido (lámina aireada, con número de Froude mayor que 2,5) y en el resalto.
+
+Las fichas al pasar el puntero dan: en el embalse, la profundidad en ese punto, el nivel sobre la cresta y lo que entra y sale a esa hora; en el río de abajo, el caudal y la profundidad; en la presa, la cresta, la corona y el borde libre que queda. En el vertedero, la profundidad, la velocidad, el número de Froude y el caudal por metro a lo largo del agua, con la zona (cresta, rápida, pozo, resalto o río). En la presa de gravedad, la presión del agua en el paramento a esa profundidad, el esfuerzo en la roca y la subpresión en ese punto de la base (lineales entre el talón y la punta) y la posición de la resultante frente al tercio medio.
+
 ## 5. Verificación
 
 `npm run test:dams` ejecuta ocho pruebas (D1 a D8): Puls contra el embalse lineal exacto; masa, atenuación, retraso y pico en el cruce en el embalse de la escena; perfil WES, tangencia, energía al pie y fuerza específica del resalto; una sección triangular calculada a mano; tercio medio, esfuerzos y efecto de los drenes; volumen y área del embalse; robustez de las seis herramientas con datos al azar; y el coeficiente de la cresta con otras cargas, el pozo justo y la pérdida del resalto.

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { FLUME, G, type GaugeResult } from '../hydraulics';
 import { concreteMaterial } from '../../quality/three/kit';
 import type { QStage, StageLabel, StageView } from '../../quality/three/stage';
-import { Tracers, WATER, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station } from './canalKit';
+import { Tracers, WATER, WaterBody, glassMaterial, slab, staffGauge, stationField, type Station, waterProbe } from './canalKit';
 
 const X0 = -4;
 const X1 = 3;
@@ -104,6 +104,7 @@ export class GaugeWorld {
     this.float = new THREE.Mesh(new THREE.SphereGeometry(0.025, 14, 10), new THREE.MeshStandardMaterial({ color: '#f07a1a', roughness: 0.5 }));
     sc.add(this.float);
     for (const w of [this.water, this.jet, this.fall]) w.setEnvironment(stage.scene.environment);
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, 'Canal de laboratorio'));
     stage.view(this.views.general, false);
   }
 
