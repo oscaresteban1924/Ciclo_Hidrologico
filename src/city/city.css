@@ -2245,3 +2245,18 @@
   font-style: normal;
   color: #a9c2d4;
 }
+
+/* punto de lectura del teclado (mismo dibujo que en las otras salas) */
+.city-kbcursor {
+  position: absolute;
+  left: -13px;
+  top: -13px;
+  z-index: 6;
+  display: block;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #1f6fb2;
+  pointer-events: none;
+}

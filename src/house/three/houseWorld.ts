@@ -509,7 +509,33 @@ export class HouseWorld {
 
   private probeUse(use: Use | null): ProbeInfo | null {
     const s = this.st;
-    if (!s || !s.hrs) return null;
+    if (!s) return null;
+    const name = use === null ? 'Acometida (del medidor a la casa)' : USE_NAMES[use];
+    // en la factura: lo que marca el medidor (todo lo que pasa por la acometida, la fuga incluida)
+    if (s.mode === 'factura')
+      return {
+        title: name,
+        rows: [
+          ['Lectura del medidor', `${es(s.reading, 3)} m³`],
+          ['Fuga escondida', s.leak > 0 ? `${es(s.leak, 1)} L/h: el medidor la cuenta aunque nadie use agua` : 'no hay'],
+          ...(use === null ? ([['Personas en la casa', String(s.people)]] as [string, string][]) : []),
+        ],
+        strong: 0,
+      };
+    // con el tanque de lluvia: los sanitarios toman del tanque y lo demás del acueducto
+    if (s.mode === 'lluvia') {
+      const t = s.tank;
+      const fromTank = use === 'sanitario';
+      return {
+        title: name,
+        rows: [
+          ['Toma el agua de', use === null ? 'el acueducto (lo que no da el tanque)' : fromTank ? (t && t.S > 0.001 ? 'el tanque de lluvia' : 'el acueducto: el tanque está vacío') : 'el acueducto'],
+          ...(fromTank && t ? ([['Demanda de los sanitarios', `${es(t.D, 0)} L al día`]] as [string, string][]) : []),
+        ],
+        strong: 0,
+      };
+    }
+    if (!s.hrs) return null;
     const h = Math.min(23, Math.max(0, Math.floor(s.hour)));
     if (use === null) {
       const now = (Object.keys(s.hrs) as Use[]).reduce((a, u) => a + (s.hrs?.[u][h] ?? 0), 0);

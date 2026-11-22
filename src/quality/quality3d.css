@@ -1330,3 +1330,43 @@
     transition: none;
   }
 }
+
+/* punto de lectura del teclado */
+.q3-kbcursor {
+  position: absolute;
+  left: -13px;
+  top: -13px;
+  z-index: 5;
+  display: none;
+  width: 26px;
+  height: 26px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #1f6fb2, inset 0 0 0 2px rgba(31, 111, 178, 0.6);
+  pointer-events: none;
+}
+.q3-kbcursor::before,
+.q3-kbcursor::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 0 1px #1f6fb2;
+}
+.q3-kbcursor::before {
+  left: 11px;
+  top: -9px;
+  width: 0;
+  height: 40px;
+  border-left: 2px solid #fff;
+  background: none;
+  box-shadow: none;
+}
+.q3-kbcursor::after {
+  left: -9px;
+  top: 11px;
+  width: 40px;
+  height: 0;
+  border-top: 2px solid #fff;
+  background: none;
+  box-shadow: none;
+}

@@ -179,7 +179,7 @@ export class SectorScene {
     this.renderer.domElement.className = 'city-canvas';
     this.renderer.domElement.tabIndex = 0;
     this.renderer.domElement.setAttribute('role', 'img');
-    this.renderer.domElement.setAttribute('aria-label', `Maqueta 3D del sector: ${sc.title}. Usa los botones de vista o las flechas del teclado para mover la cámara.`);
+    this.renderer.domElement.setAttribute('aria-label', `Maqueta 3D del sector: ${sc.title}. Con las flechas se mueve un punto de lectura y se leen el agua, el edificio o la rejilla de ese punto; Enter lo selecciona y Escape quita la lectura. Mayúsculas con las flechas gira la cámara; los botones de vista la mueven.`);
     container.appendChild(this.renderer.domElement);
     this.labels = new LabelLayer(container);
 

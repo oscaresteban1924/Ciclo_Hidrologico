@@ -57,7 +57,7 @@ El cálculo está en módulos sin interfaz: `house.ts` (consumo por uso y en el 
 
 ## 4 bis. La escena: lecturas
 
-Al pasar el puntero por un aparato o por su tubo aparece lo que gasta a esa hora, en el día y al mes; la acometida, lo que pasa ahora por el medidor, el total del día por persona, la fuga escondida y la lectura. El tanque de agua lluvia da lo que guarda, la lluvia del día sobre el techo, lo que se gasta de él y si rebosa.
+Al pasar el puntero por un aparato o por su tubo aparece lo que gasta a esa hora, en el día y al mes; la acometida, lo que pasa ahora por el medidor, el total del día por persona, la fuga escondida y la lectura. El tanque de agua lluvia da lo que guarda, la lluvia del día sobre el techo, lo que se gasta de él y si rebosa. En «El medidor y la factura», los aparatos y la acometida dan la lectura del medidor y la fuga escondida, que el medidor cuenta aunque nadie use agua (la acometida, además, las personas de la casa). En «Agua lluvia para la casa», cada aparato dice de dónde toma el agua: el sanitario, del tanque de lluvia (o del acueducto si el tanque está vacío), con lo que pide al día; lo demás, del acueducto.
 
 ## 5. Verificación
 

@@ -53,6 +53,19 @@ const RETOS: Reto<Ctx>[] = [
   },
 ];
 
+/**
+ * Lo que pasa por la rotura en el instante tm: hacia el barrio, de vuelta al río, o nada (antes de que el agua llegue
+ * o cuando el río ya bajó del fondo de la rotura).
+ */
+function breachFlowText(t: number[], q: number[], tm: number): string {
+  const v = seriesAt(t, q, tm);
+  if (v > 0.05) return `pasan ${es(v, 1)} m³/s al barrio`;
+  if (v < -0.05) return `vuelven ${es(-v, 1)} m³/s al río`;
+  let kPeak = 0;
+  for (let k = 1; k < q.length; k++) if (q[k] > q[kPeak]) kPeak = k;
+  return q[kPeak] > 0.05 && tm > t[kPeak] ? 'ya no pasa agua: el río bajó del fondo de la rotura' : 'todavía no pasa agua';
+}
+
 export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [s, setS] = useState<StructScene>(DEFAULT_STRUCT);
   const [vex, setVex] = useState(2);
@@ -85,7 +98,7 @@ export function EstructurasLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       tm !== null && r && broke
         ? tm < (r.breach!.t0 as number)
           ? { text: `t = ${es(tm / 60, 0)} min: el jarillón resiste`, sub: `se rompe a los ${es((r.breach!.t0 as number) / 60, 0)} min` }
-          : { text: `t = ${es(tm / 60, 0)} min: ${r.breach!.full !== null && tm < r.breach!.full ? 'la rotura se abre' : 'rotura abierta'}`, sub: `pasan ${es(Math.max(0, seriesAt(r.series.t, r.series.qBreach, tm)), 1)} m³/s` }
+          : { text: `t = ${es(tm / 60, 0)} min: ${r.breach!.full !== null && tm < r.breach!.full ? 'la rotura se abre' : 'rotura abierta'}`, sub: breachFlowText(r.series.t, r.series.qBreach, tm) }
         : null;
     const nowBridge = tm !== null && r && x.kind === 'puente' ? { text: `t = ${es(tm / 60, 0)} min: ${es(seriesAt(r.series.t, r.series.wseBridge, tm), 2)} m`, sub: `pasan ${es(seriesAt(r.series.t, r.series.qBridge, tm), 1)} m³/s bajo el puente` } : null;
     world.current?.set(

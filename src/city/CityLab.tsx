@@ -229,21 +229,12 @@ export default function CityLab() {
     else go();
   }, [dispatch]);
 
-  const onMove = (e: React.PointerEvent) => {
-    if (e.buttons || e.pointerType === 'touch' || !ctrl || ctrl.scale !== 'sector') {
-      if (hover) setHover(null);
-      return;
-    }
-    const now = performance.now();
-    if (now - hoverAt.current < 90) return;
-    hoverAt.current = now;
-    const p = ctrl.peekAt(e.clientX, e.clientY);
+  /** Lo que se lee en un punto de la pantalla (celda, edificio o rejilla), sin seleccionarlo. */
+  const readAt = (clientX: number, clientY: number): { title: string; rows: [string, string][] } | null => {
+    if (!ctrl || ctrl.scale !== 'sector') return null;
+    const p = ctrl.peekAt(clientX, clientY);
     const sim = ctrl.displayed();
-    const host = stageRef.current?.getBoundingClientRect();
-    if (!p || !sim || !host || !ctrl.sc) {
-      setHover(null);
-      return;
-    }
+    if (!p || !sim || !ctrl.sc) return null;
     const c = sim.c;
     let title = '';
     const rows: [string, string][] = [];
@@ -271,8 +262,63 @@ export default function CityLab() {
       if (wet && sp > 0.005) rows.push(['Va hacia', dirText(ux, uy)]);
       rows.push(['Infiltra', cov.permeable ? `${cov.ksMmH} mm/h` : 'no (impermeable)']);
     }
-    const x = e.clientX - host.left, y = e.clientY - host.top;
-    setHover({ x: x + 220 > host.width ? x - 216 : x + 16, y: Math.max(6, y - 70), title, rows });
+    return { title, rows };
+  };
+
+  const placeReading = (clientX: number, clientY: number, r: { title: string; rows: [string, string][] }) => {
+    const host = stageRef.current?.getBoundingClientRect();
+    if (!host) return;
+    const x = clientX - host.left, y = clientY - host.top;
+    setHover({ x: x + 220 > host.width ? x - 216 : x + 16, y: Math.max(6, y - 70), ...r });
+  };
+
+  const onMove = (e: React.PointerEvent) => {
+    if (e.buttons || e.pointerType === 'touch' || !ctrl || ctrl.scale !== 'sector') {
+      if (hover) setHover(null);
+      return;
+    }
+    if (kb) setKb(null);
+    const now = performance.now();
+    if (now - hoverAt.current < 90) return;
+    hoverAt.current = now;
+    const r = readAt(e.clientX, e.clientY);
+    if (r) placeReading(e.clientX, e.clientY, r);
+    else setHover(null);
+  };
+
+  // con el teclado: las flechas mueven un punto de lectura, Enter lo selecciona (ficha completa) y Escape lo quita;
+  // Mayúsculas con las flechas gira la cámara
+  const [kb, setKb] = useState<{ x: number; y: number } | null>(null);
+  const [said, setSaid] = useState('');
+  const sayTimer = useRef(0);
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!ctrl || ctrl.scale !== 'sector' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const host = hostRef.current?.getBoundingClientRect();
+    if (!host) return;
+    const step = Math.max(8, Math.round(Math.min(host.width, host.height) * 0.035));
+    const d: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (e.key === 'Escape') {
+      if (!kb) return;
+      setKb(null);
+      setHover(null);
+    } else if (!d[e.key] && e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') return;
+    const cur = kb ?? { x: host.width / 2, y: host.height / 2 };
+    const [dx, dy] = kb && d[e.key] ? d[e.key] : [0, 0];
+    const nk = { x: Math.max(4, Math.min(host.width - 4, cur.x + dx)), y: Math.max(4, Math.min(host.height - 4, cur.y + dy)) };
+    setKb(nk);
+    const cx = host.left + nk.x, cy = host.top + nk.y;
+    if (e.key === 'Enter' || e.key === ' ') {
+      ctrl.pickAt(cx, cy);
+      return;
+    }
+    const r = readAt(cx, cy);
+    if (r) placeReading(cx, cy, r);
+    else setHover(null);
+    window.clearTimeout(sayTimer.current);
+    sayTimer.current = window.setTimeout(() => setSaid(r ? `${r.title}. ${r.rows.map(([k, v]) => `${k}: ${v}`).join('. ')}.` : 'Sin datos en este punto.'), 350);
   };
 
   const onUp = (e: React.PointerEvent) => {
@@ -330,8 +376,17 @@ export default function CityLab() {
           onPointerDown={(e) => (down.current = [e.clientX, e.clientY])}
           onPointerUp={onUp}
           onPointerMove={onMove}
-          onPointerLeave={() => setHover(null)}
+          onPointerLeave={() => !kb && setHover(null)}
+          onKeyDownCapture={onKey}
+          onBlurCapture={() => {
+            setKb(null);
+            setHover(null);
+          }}
         />
+        {kb && <div className="city-kbcursor" aria-hidden="true" style={{ transform: `translate(${Math.round(kb.x)}px, ${Math.round(kb.y)}px)` }} />}
+        <p className="sr-only" aria-live="polite">
+          {said}
+        </p>
         {hover && (
           <div className="city-reading" aria-hidden="true" style={{ transform: `translate(${Math.round(hover.x)}px, ${Math.round(hover.y)}px)` }}>
             <b>{hover.title}</b>

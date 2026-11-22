@@ -167,7 +167,7 @@ Diez pasos, cada uno con su sección de HEC-RAS:
 7. Plan y opciones de cálculo (onda difusiva, inercia local o aguas someras completas).
 8. Correr (preprocesador y cálculo, con su registro y el agua avanzando en la escena mientras calcula).
 9. Resultados: profundidad, velocidad, cota, amenaza, llegada, Courant e iteraciones, con la reproducción en el tiempo, una sonda (tocar el agua: nivel, profundidad y velocidad en el tiempo), una línea de caudal norte-sur y el perfil longitudinal por el eje del cauce.
-10. Comparar las corridas de la sesión y descargar.
+10. Comparar las corridas de la sesión, descargar, comparar con la profundidad máxima de HEC-RAS, sacar el reporte de la corrida y guardar el proyecto (también en el paso 1, para abrir uno).
 
 Por omisión: LiDAR con el cauce levantado, n normales, celdas de 10 m con líneas de quiebre, creciente de 100 años, onda difusiva con Δt = 15 s, θ = 1, 3 mm y 20 iteraciones.
 
@@ -188,6 +188,12 @@ La profundidad de cada píxel es la cota del agua de su celda menos la cota del 
 
 - *Paquete para HEC-RAS*: el terreno a 1 m (GeoTIFF Float32), las coberturas (GeoTIFF de clases) con su tabla de n, el área 2D, las líneas de borde, las líneas de quiebre y, si las hay, las regiones de refinamiento (shapefiles con su .prj de EPSG:9377 y su .cpg), el hidrograma de entrada y las condiciones de borde (CSV) y un LEAME. **Las coordenadas son inventadas** (esquina suroeste en E 4 200 000, N 2 000 000 de EPSG:9377) para que se pueda armar el modelo en HEC-RAS; el valle no está en ningún lugar.
 - *Resultados de la corrida*: la profundidad, la cota y la velocidad máximas (GeoTIFF) y las series de la corrida (CSV), con un LEAME.
+
+**Proyecto, reporte y comparación con HEC-RAS** (`src/model2d/project.ts`, `src/model2d/ProjectTools.tsx`). Todo ocurre en el navegador: los archivos no salen del equipo y no se pide ninguna cuenta.
+
+- *Guardar y abrir el proyecto* (pasos 1 y 10): las decisiones del modelo (fuente del terreno, cauce, n, casas, malla, líneas de quiebre, refinamiento, bordes, creciente, tiempos y plan) en un archivo JSON con su tipo y versión. Al abrirlo, cada dato se valida contra las opciones y los rangos de la sala; un dato que no es una opción, que está fuera de rango o que falta queda en el valor por omisión y se avisa uno por uno, y los datos desconocidos se ignoran. Los resultados no se guardan: se recalculan al correr.
+- *Reporte de la corrida* (paso 10): una página HTML autocontenida con los resultados, una imagen de la escena tomada al descargar, el hidrograma de entrada, de salida y bajo el puente, todas las decisiones del modelo, la comparación con HEC-RAS si se hizo y las series cada pocos minutos. Lleva el aviso de que es un ejercicio sobre un valle ficticio. Se abre en cualquier navegador y se imprime a PDF.
+- *Comparar con HEC-RAS* (paso 10, con una corrida terminada): se carga la profundidad máxima que exporta RAS Mapper como GeoTIFF, corrida sobre el paquete de la sala. Cada píxel de la sala se ubica en el archivo por la georreferencia (origen y tamaño del píxel, vecino más cercano), así que el archivo puede tener otra resolución u otra extensión; los píxeles fuera del archivo no se comparan y se avisa si queda menos de la mitad del valle. Un píxel está mojado si pasa de 5 cm. Se dan las áreas mojadas, el índice de ajuste F = A∩B / A∪B, los aciertos (de lo que moja HEC-RAS, lo que moja la sala), las falsas alarmas (de lo que moja la sala, lo que HEC-RAS deja seco) y, donde mojan los dos, la diferencia media de profundidad y su raíz del error cuadrático medio. En «Experimentos» queda un mapa de acuerdo (mojado en los dos, solo la sala, solo HEC-RAS, seco), con colores revisados para daltonismo en todos sus pares, una lectura por píxel al pasar el puntero y la misma información en tabla. La comparación vale solo para la corrida con la que se hizo: si se corre otra, desaparece. Las dos manchas salen de modelos; ninguna es una inundación observada.
 
 ## 8. Tu terreno
 
@@ -265,6 +271,8 @@ Las corridas se calculan en un Web Worker (hasta dos a la vez) para que la pági
 - M26: el GeoTIFF, el shapefile y el ZIP para HEC-RAS.
 - M27: un terreno propio leído, mallado y corrido.
 - M28: los mapas de diagnóstico.
+
+`npm run test:project` ejecuta nueve pruebas más (P1 a P9, informe en `docs/modelo2d/PRUEBAS_PROYECTO.md`): el proyecto guardado y vuelto a abrir sin cambios; un proyecto con datos inválidos, faltantes y desconocidos; archivos que no son proyectos; la comparación con un GeoTIFF idéntico (F = 100 %, sesgo y RMSE nulos), con uno 10 cm más profundo (sesgo de −0,100 m y RMSE de 0,100 m), con una mancha distinta contra un conteo píxel por píxel independiente, con uno a 2 m y corrido 100 m (se comparan exactamente los píxeles que caen dentro), con uno fuera del valle y con un archivo dañado; y el reporte HTML completo. Los GeoTIFF de prueba se escriben con el mismo escritor del paquete de resultados sobre una corrida real del valle.
 
 Además, `tools/verificacion/superposiciones.py` recorre las ocho partes en escritorio, portátil, tableta y teléfono y revisa que los elementos flotantes no se monten ni queden cortados.
 

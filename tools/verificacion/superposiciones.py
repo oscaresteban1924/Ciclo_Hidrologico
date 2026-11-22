@@ -310,6 +310,7 @@ SIN_MEDELLIN = '--sin-medellin' in sys.argv
 def run(screens, shots):
     os.makedirs(OUT, exist_ok=True)
     report = []
+    errors = []
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=ARGS)
         for screen in screens:
@@ -317,6 +318,9 @@ def run(screens, shots):
             ctx = b.new_context(**SCREENS[screen])
             pg = ctx.new_page()
             pg.set_default_timeout(90000)
+            # errores de la página y de la consola (los avisos de WebGL del dibujo por software no cuentan)
+            pg.on('pageerror', lambda e, scr=screen: errors.append({'pantalla': scr, 'tipo': 'página', 'texto': str(e)[:300]}))
+            pg.on('console', lambda m, scr=screen: errors.append({'pantalla': scr, 'tipo': 'consola', 'texto': m.text[:300]}) if m.type == 'error' and 'WebGL' not in m.text and 'GPU' not in m.text else None)
             pg.goto(URL); pg.wait_for_timeout(900)
             pg.evaluate('() => localStorage.clear()'); pg.reload(); pg.wait_for_timeout(2500)
             # portada (sin sala en la dirección) y luego el recorrido
@@ -407,9 +411,14 @@ def run(screens, shots):
         b.close()
     with open(f'{OUT}/informe.json', 'w') as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
+    with open(f'{OUT}/errores.json', 'w') as f:
+        json.dump(errors, f, ensure_ascii=False, indent=1)
     bad = [r for r in report if r['choques'] or r['cortados']]
     print(f'\n{len(report) - len(bad)} de {len(report)} estados sin choques ni cortes.')
-    return 1 if bad else 0
+    print(f'{len(errors)} errores de la página o de la consola.' if errors else 'Sin errores de la página ni de la consola.')
+    for e in errors[:10]:
+        print(f"  [{e['pantalla']}] {e['tipo']}: {e['texto'][:160]}")
+    return 1 if bad or errors else 0
 
 
 if __name__ == '__main__':

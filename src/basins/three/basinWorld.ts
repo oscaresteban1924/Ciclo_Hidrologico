@@ -11,6 +11,8 @@ import type { ProbeInfo, QStage, StageLabel, StageView } from '../../quality/thr
 import { staffGauge } from '../../canals/three/canalKit';
 import { COVERS, scsRunoff, type BasinResult, type Cover } from '../hydrology';
 import { groundMaterial } from '../../three/ground';
+import { fractionWithin } from '../../three/readings';
+import { NRCS_K, manningV, travelTimes } from '../travel';
 
 const X0 = -160, X1 = 160, Z0 = -110, Z1 = 110, NX = 128, NZ = 88;
 const OUTLET = new THREE.Vector3(152, 0, 0);
@@ -18,8 +20,6 @@ const COVER_COLOR: Record<Cover, string> = { pavimento: '#8d8f91', barrio: '#cdb
 const ORDER: Cover[] = ['pavimento', 'barrio', 'cultivo', 'pasto', 'bosque'];
 /** Metros por unidad del mundo: el cauce principal de la cuenca de 60 ha (unos 1 400 m) mide unas 310 unidades. */
 const M_PER_U = 4.5;
-/** Cuánto más lenta es el agua en la ladera (flujo en lámina) que en el cauce: reparto ilustrativo del tc. */
-const HILL_SLOWER = 8;
 /** Bandas del mapa de tiempos de viaje. */
 const BANDS = 6;
 
@@ -183,46 +183,49 @@ export class BasinWorld {
     this.stage.setLabels(this.labels(this.playing ? this.tAnim * this.scale : null));
   }
 
-  /** Tiempo de viaje de cada vértice hasta la salida: ladera hasta el cauce más cercano y luego cauce abajo. */
+  /**
+   * Tiempo de viaje de cada vértice hasta la salida con el método de velocidades del NRCS (src/basins/travel.ts):
+   * por la ladera según la pendiente del terreno y la cobertura, y por el cauce con Manning. Se guarda como fracción
+   * del más lento; la ficha y las bandas lo escalan al tiempo de concentración del panel.
+   */
   private computeTau(): void {
     const pos = this.ground.geometry.attributes.position as THREE.BufferAttribute;
     const tau = this.ground.geometry.attributes.aTau as THREE.BufferAttribute;
+    const nx = NX + 1, nz = NZ + 1;
     // distancia por el cauce desde cada punto de cada camino hasta la salida
     const rest = this.paths.map((p) => {
       const r = new Float32Array(p.length);
       for (let k = p.length - 2; k >= 0; k--) r[k] = r[k + 1] + Math.hypot(p[k + 1].x - p[k].x, p[k + 1].z - p[k].z);
       return r;
     });
-    const raw = new Float32Array(pos.count);
-    let mx = 0;
-    for (let v = 0; v < pos.count; v++) {
-      const x = pos.getX(v), z = pos.getZ(v);
-      let best = Infinity;
+    const z = new Float64Array(nx * nz), k = new Float64Array(nx * nz), ch = new Float64Array(nx * nz).fill(-1);
+    for (let v = 0; v < pos.count && v < nx * nz; v++) {
+      const x = pos.getX(v), zz = pos.getZ(v);
+      z[v] = pos.getY(v) * M_PER_U;
+      k[v] = NRCS_K[this.cover[v] ?? 'pasto'];
+      let best = Infinity, d = -1;
       this.paths.forEach((p, i) => {
-        for (let k = 0; k < p.length; k++) {
-          const d = Math.hypot(p[k].x - x, p[k].z - z) * HILL_SLOWER + rest[i][k];
-          if (d < best) best = d;
+        for (let q = 0; q < p.length; q++) {
+          const dd = Math.hypot(p[q].x - x, p[q].z - zz);
+          if (dd < best) [best, d] = [dd, rest[i][q]];
         }
       });
-      raw[v] = best;
-      if (best > mx) mx = best;
+      if (best < 3.2) ch[v] = d * M_PER_U;
     }
-    for (let v = 0; v < pos.count; v++) tau.setX(v, raw[v] / Math.max(1, mx));
+    // el cauce: Manning con n = 0,045 y radio hidráulico de 0,4 m, con la pendiente media del cauce principal
+    const main = this.paths[0];
+    const Sch = main && main.length > 1 ? Math.max(0.005, (main[0].y - main[main.length - 1].y) / Math.max(1, rest[0][0])) : 0.02;
+    const t = travelTimes({ nx, nz, dx: ((X1 - X0) / NX) * M_PER_U, z, k, channel: ch, vch: manningV(0.045, 0.4, Sch) });
+    let mx = 0;
+    for (const v of t) if (v > mx) mx = v;
+    for (let v = 0; v < pos.count; v++) tau.setX(v, (t[v] ?? 0) / Math.max(1e-6, mx));
     tau.needsUpdate = true;
     this.tauSorted = Float32Array.from(tau.array as Float32Array).sort();
   }
 
   /** Fracción del área de la cuenca cuya agua tarda menos que t (fracción del tiempo de concentración). */
   private areaWithin(t: number): number {
-    const a = this.tauSorted;
-    if (!a.length) return 0;
-    let lo = 0, hi = a.length;
-    while (lo < hi) {
-      const m = (lo + hi) >> 1;
-      if (a[m] <= t) lo = m + 1;
-      else hi = m;
-    }
-    return lo / a.length;
+    return fractionWithin(this.tauSorted, t);
   }
 
   private probeGround(p: THREE.Vector3): ProbeInfo | null {
@@ -366,7 +369,6 @@ export class BasinWorld {
       this.stage.scene.add(m);
     });
     this.station.position.y = this.h(this.station.position.x, this.station.position.z, S);
-    this.computeTau();
   }
 
   private paint(mix: Record<Cover, number>, seed: number): void {
@@ -402,6 +404,8 @@ export class BasinWorld {
     mixA.needsUpdate = true;
     col.needsUpdate = true;
     this.cover = cover;
+    // los tiempos de viaje dependen de la cobertura (rugosidad de la ladera): se recalculan con ella
+    this.computeTau();
     void COVER_COLOR;
     // árboles en el bosque, casas en el barrio
     this.veg.clear();

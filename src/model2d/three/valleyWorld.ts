@@ -232,7 +232,7 @@ function floodWaterMaterial(u: WaterUniforms): THREE.MeshStandardMaterial {
       .replace('#include <common>', '#include <common>\nattribute vec2 aFlow;\nattribute float aDepth;\nattribute float aFoam;\nvarying vec2 vFlow;\nvarying float vDepth;\nvarying float vFoam;\nvarying vec3 vWPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlow = aFlow; vDepth = aDepth; vFoam = aFoam;\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uDetail;\nuniform float uSc;\nuniform vec3 uSky;\nuniform vec3 uSkyTop;\nuniform vec4 uTune;\nvarying vec2 vFlow;\nvarying float vDepth;\nvarying float vFoam;\nvarying vec3 vWPos;\nfloat m2Foam = 0.0;\nfloat m2H0 = 0.0, m2Hx = 0.0, m2Hz = 0.0, m2K = 0.0;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nuniform float uTime;\nuniform float uDetail;\nuniform float uSc;\nuniform vec3 uSky;\nuniform vec3 uSkyTop;\nuniform vec4 uTune;\nvarying vec2 vFlow;\nvarying float vDepth;\nvarying float vFoam;\nvarying vec3 vWPos;\nfloat m2Foam = 0.0;\nfloat m2H0 = 0.0, m2Hx = 0.0, m2Hz = 0.0, m2K = 0.0, m2NearG = 1.0;\n${NOISE}`)
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
@@ -258,6 +258,7 @@ function floodWaterMaterial(u: WaterUniforms): THREE.MeshStandardMaterial {
           #undef M2W
           // lejos (más de un metro por píxel) el dibujo fino se apaga: no se ve como ruido
           float m2Near = 1.0 - smoothstep(0.35, 1.3, length(fwidth(P)));
+          m2NearG = m2Near;
           m2K = uDetail * (0.25 + 0.75 * clamp(sp / 1.4, 0.0, 1.0)) * m2Near;
           // orilla: espuma fina donde el agua es muy poca; corriente rápida: crestas blancas
           // la línea de la orilla: unos pocos píxeles desde donde la profundidad es cero (en una charca plana toda la
@@ -298,7 +299,9 @@ function floodWaterMaterial(u: WaterUniforms): THREE.MeshStandardMaterial {
           // el cielo reflejado: azul arriba y claro hacia el horizonte (lo lejano y lo rasante se ve más claro)
           vec3 m2R = (vec4(reflect(-m2V, normal), 0.0) * viewMatrix).xyz;
           vec3 skyR = mix(uSky, uSkyTop, pow(clamp(m2R.y, 0.0, 1.0), 0.7));
-          outgoingLight = mix(outgoingLight, skyR * (0.9 + 0.25 * m2H0 * m2K), (uTune.x + fr * uTune.y) * uDetail * (1.0 - m2Foam));
+          // de lejos, el reflejo rasante del cielo gana sobre el color del agua y la vuelve gris: se atenúa con la
+          // distancia para que el agua turbia siga viéndose café
+          outgoingLight = mix(outgoingLight, skyR * (0.9 + 0.25 * m2H0 * m2K), (uTune.x + fr * uTune.y) * uDetail * (1.0 - m2Foam) * mix(0.4, 1.0, m2NearG));
           outgoingLight += vec3(1.0, 0.97, 0.9) * pow(max(0.0, m2H0 - 0.55) * 2.2, 6.0) * 0.35 * m2K;
         }
         #include <opaque_fragment>`,
@@ -1880,6 +1883,11 @@ export class ValleyWorld {
   }
 
   /** Suelta una mancha de tinta en (x, y): la corriente la lleva. */
+  /** Imagen de la escena para el reporte de la corrida. */
+  snapshot(): string {
+    return this.stage.snapshot();
+  }
+
   releaseDye(x: number, y: number): void {
     const n = 120;
     for (let q = 0; q < n; q++) {

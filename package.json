@@ -21,7 +21,9 @@
     "test:pumps": "tsx tests/pumps/pump.test.ts",
     "test:measure": "tsx tests/measure/measure.test.ts",
     "test:house": "tsx tests/house/house.test.ts",
-    "test:model2d": "tsx tests/model2d/model2d.test.ts"
+    "test:model2d": "tsx tests/model2d/model2d.test.ts",
+    "test:readings": "tsx tests/readings/readings.test.ts",
+    "test:project": "tsx tests/model2d/project.test.ts"
   },
   "dependencies": {
     "geotiff": "^2.1.3",

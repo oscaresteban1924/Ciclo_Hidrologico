@@ -172,7 +172,7 @@ export function CuencaLab({ head, gl }: { head: ReactNode; gl: boolean }) {
       )}
       {gl && layer === 'viaje' && (
         <p className="hc-note">
-          Bandas de igual tiempo de viaje hasta la salida, cada {es(r.tc.used / 6, 1)} min: claras cerca de la salida, oscuras en lo más lejano (unos {es(r.tc.used, 0)} min, el tiempo de concentración). Reparto ilustrativo: en la ladera el agua corre unas 8 veces más despacio que en el cauce.
+          Bandas de igual tiempo de viaje hasta la salida, cada {es(r.tc.used / 6, 1)} min: claras cerca de la salida, oscuras en lo más lejano (unos {es(r.tc.used, 0)} min, el tiempo de concentración). El tiempo de cada punto sale de la pendiente del terreno y de la cobertura (método de velocidades del NRCS: más lento en el bosque, más rápido en el pavimento) y, ya en el cauce, de Manning; se escala al tiempo de concentración del panel.
         </p>
       )}
     </>

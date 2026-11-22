@@ -424,8 +424,8 @@ function readmeModel(o: RunOpts, refine: { name: string; c: number }[]): string 
     .join('\r\n');
 }
 
-/** Resultados de una corrida: profundidad, cota y velocidad máximas por píxel y las series. */
-export function resultsPackage(r: RunResult, name = 'corrida'): Uint8Array {
+/** Máximos de una corrida por píxel (profundidad, cota, velocidad) y su georreferencia. */
+export function maxGrids(r: RunResult): { depth: Float32Array; wse: Float32Array; vel: Float32Array; NX: number; NY: number; geo: GeoTiffOpts } {
   const g = r.geom;
   const depth = new Float32Array(g.NX * g.NY), wse = new Float32Array(g.NX * g.NY), vel = new Float32Array(g.NX * g.NY);
   for (let k = 0; k < depth.length; k++) {
@@ -443,6 +443,15 @@ export function resultsPackage(r: RunResult, name = 'corrida'): Uint8Array {
   const valley = g.site === 'valle';
   const dom = valley ? null : domainOf(g.site);
   const geo = { E0: valley ? ORIGIN.E : (dom?.E0 ?? 0), N0: valley ? ORIGIN.N : (dom?.N0 ?? 0), px: g.px, epsg: valley ? EPSG : (dom?.epsg ?? null) };
+  return { depth, wse, vel, NX: g.NX, NY: g.NY, geo };
+}
+
+/** Resultados de una corrida: profundidad, cota y velocidad máximas por píxel y las series. */
+export function resultsPackage(r: RunResult, name = 'corrida'): Uint8Array {
+  const g = r.geom;
+  const { depth, wse, vel, geo } = maxGrids(r);
+  const valley = g.site === 'valle';
+  const dom = valley ? null : domainOf(g.site);
   const s = r.series;
   const rows = ['tiempo_min;caudal_entrada_m3s;caudal_salida_m3s;caudal_puente_m3s;cota_puente_m;volumen_m3'];
   s.t.forEach((t, k) => rows.push([t / 60, s.qin[k], s.qout[k], s.qBridge[k], s.wseBridge[k], s.vol[k]].map((v, j) => (Number.isFinite(v) ? v.toFixed(j === 0 ? 1 : 3) : '').replace('.', ',')).join(';')));

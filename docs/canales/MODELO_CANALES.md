@@ -232,7 +232,7 @@ La resolución trata el alcantarillado y el drenaje urbano. Las alcantarillas ba
 
 ## 8 bis. Lecturas del agua en la escena
 
-En las siete partes, al pasar el puntero sobre el agua (o al tocarla) aparece una ficha con la profundidad, la velocidad media, el número de Froude, la energía específica y la cota del agua en ese punto, interpoladas entre las estaciones que dibujan el agua. El número de Froude de la ficha toma la profundidad como profundidad hidráulica, lo que vale para secciones anchas o rectangulares; en una sección trapecial angosta el valor exacto, el del panel, es algo mayor. En las alcantarillas se leen por separado el agua represada a la entrada, la de adentro, la de la salida y la que pasa por encima de la vía.
+En las siete partes, al pasar el puntero sobre el agua (o al tocarla) aparece una ficha con la profundidad, la velocidad media, el número de Froude, la energía específica y la cota del agua en ese punto, interpoladas entre las estaciones que dibujan el agua. El número de Froude de la ficha usa la profundidad hidráulica A/T: en «El canal y su sección» con la geometría de la sección elegida (rectangular, trapecial o circular), igual que el panel; en las demás partes los canales son rectangulares y A/T es la profundidad. En las alcantarillas se leen por separado el agua represada a la entrada, la de adentro, la de la salida y la que pasa por encima de la vía.
 
 ## 9. Límites
 

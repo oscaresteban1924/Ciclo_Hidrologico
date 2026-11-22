@@ -20,6 +20,8 @@ import { FlowTools, PLACE, TimeBar, VexChoice, frameTime, sg, usePlayback, valle
 import { PARTICLE_SPEED, ValleyWorld, type ClickTool } from './three/valleyWorld';
 import { hecrasPackage, resultsPackage } from './exports';
 import { downloadBytes } from '../lib/download';
+import { ProjectFiles, RasLoader, RasReport, ReportButton } from './ProjectTools';
+import type { RasComparison } from './project';
 
 type ResLayer = ModelScene['layer'];
 
@@ -110,6 +112,7 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const [particles, setParticles] = useState(true);
   const [lineX, setLineX] = useState(330);
   const [msg, setMsg] = useState('');
+  const [cmp, setCmp] = useState<{ key: string; c: RasComparison } | null>(null);
   const opts = useMemo(() => modelRun(s), [s]);
   const run = useModelRun(s.crs === 'origen' ? opts : null, false);
   const terr = useMemo(() => terrainFor(modelTerrain(s)), [s.source, s.burn]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -118,6 +121,8 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const live = run.status === 'corriendo' ? run.live : null;
   const res = run.status === 'listo' || run.status === 'inestable' ? run.res : null;
   const sum = run.status === 'listo' ? run.sum : null;
+  // la comparación con HEC-RAS vale solo para la corrida con la que se hizo
+  const rasCmp = cmp && res && cmp.key === run.key ? cmp.c : null;
   // guardar la corrida terminada para comparar
   useEffect(() => {
     if (run.status !== 'listo' || !run.sum || !run.res) return;
@@ -180,6 +185,8 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   const ctx = useMemo<Ctx>(() => ({ s, hist, sum }), [s, hist, sum]);
   const { done, fresh, clearFresh } = useRetos(RETOS, ctx);
   const set = (p: Partial<ModelScene>) => setS((x) => ({ ...x, ...p }));
+  // al abrir un proyecto se queda en el paso actual: el estudiante decide cuándo correrlo
+  const openProject = (p: ModelScene) => setS((x) => ({ ...p, step: x.step }));
   const go = (k: number) => set({ step: Math.max(0, Math.min(STEPS.length - 1, k)) });
   const QT = quantile(AMS_FIT, s.T);
   const estC = (2.5 * s.dt) / s.c;
@@ -229,15 +236,18 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
   // ---- controles de cada paso
   const controls: Record<string, ReactNode> = {
     proyeccion: (
-      <DockChoice
-        label="Sistema de coordenadas del proyecto"
-        value={s.crs}
-        options={[
-          { value: 'origen', label: 'MAGNA-SIRGAS 2018 / Origen-Nacional (EPSG:9377)' },
-          { value: 'geograficas', label: 'Geográficas en grados (EPSG:4326)' },
-        ]}
-        onChange={(v) => set({ crs: v as ModelScene['crs'] })}
-      />
+      <>
+        <DockChoice
+          label="Sistema de coordenadas del proyecto"
+          value={s.crs}
+          options={[
+            { value: 'origen', label: 'MAGNA-SIRGAS 2018 / Origen-Nacional (EPSG:9377)' },
+            { value: 'geograficas', label: 'Geográficas en grados (EPSG:4326)' },
+          ]}
+          onChange={(v) => set({ crs: v as ModelScene['crs'] })}
+        />
+        <ProjectFiles s={s} onOpen={openProject} />
+      </>
     ),
     terreno: (
       <>
@@ -390,10 +400,13 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
               Resultados de la corrida (ZIP)
             </button>
           )}
+          {res && sum && <ReportButton s={s} res={res} sum={sum} QT={QT} cmp={rasCmp} snapshot={() => world.current?.snapshot() ?? ''} />}
         </div>
         <p className="q3-small" aria-live="polite">
           {msg || 'Terreno y coberturas en GeoTIFF, área 2D, bordes, líneas de quiebre y regiones en shapefile, hidrograma en CSV y un LEAME. Coordenadas ficticias en EPSG:9377 (sobre el mar, declaradas como tales).'}
         </p>
+        {res && <RasLoader res={res} onResult={(c) => setCmp(c ? { key: run.key, c } : null)} />}
+        <ProjectFiles s={s} onOpen={openProject} />
       </>
     ),
   };
@@ -495,6 +508,7 @@ export function ModeloLab({ head, gl }: { head: ReactNode; gl: boolean }) {
             <HazardBars areas={sum.townHazard} />
           </>
         )}
+        {rasCmp && <RasReport c={rasCmp} onClear={() => setCmp(null)} />}
       </div>
     ),
     diseno: <DesignTab part="modelo" set={MODEL2D_TOOLS.modelo} room={ROOM} />,

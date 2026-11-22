@@ -39,6 +39,8 @@ export interface ProbeInfo {
   strong?: number;
 }
 
+let kbSeq = 0;
+
 interface Probe {
   obj: THREE.Object3D;
   read: (pt: THREE.Vector3, hit: THREE.Intersection) => ProbeInfo | null;
@@ -80,6 +82,14 @@ export class QStage {
   private disposed = false;
   private hoverAt = 0;
   private probes: Probe[] = [];
+  /** Región que anuncia la lectura al lector de pantalla (con el teclado y al tocar). */
+  private live: HTMLParagraphElement;
+  private liveTimer = 0;
+  /** Punto de lectura del teclado (en píxeles del lienzo) y su marca. */
+  private kb: { x: number; y: number } | null = null;
+  private kbEl: HTMLDivElement | null = null;
+  /** Objeto que ya mostró su lectura con un primer toque: el segundo toque actúa. */
+  private armed: { obj: THREE.Object3D; at: number } | null = null;
   private probeEl: HTMLDivElement | null = null;
   private probeDot: THREE.Mesh | null = null;
   private probeTimer = 0;
@@ -118,6 +128,17 @@ export class QStage {
     cv.setAttribute('role', 'img');
     cv.setAttribute('aria-label', opts.label);
     container.appendChild(cv);
+    // con el teclado: un punto de lectura que se mueve con las flechas; lo que se lee se anuncia al lector de pantalla
+    const help = document.createElement('p');
+    help.className = 'sr-only';
+    help.id = `q3-kb-${++kbSeq}`;
+    help.textContent = 'Con las flechas se mueve un punto de lectura sobre la escena y se leen los datos de ese punto. Enter actúa como un toque. Escape oculta la lectura. Mayúsculas con las flechas gira la vista.';
+    container.appendChild(help);
+    cv.setAttribute('aria-describedby', help.id);
+    this.live = document.createElement('p');
+    this.live.className = 'sr-only';
+    this.live.setAttribute('aria-live', 'polite');
+    container.appendChild(this.live);
     this.labelLayer = document.createElement('div');
     this.labelLayer.className = 'q3-labels';
     container.appendChild(this.labelLayer);
@@ -167,8 +188,13 @@ export class QStage {
     cv.addEventListener('pointerleave', () => {
       cv.style.cursor = '';
       this.onHover?.(null);
-      this.hideProbe();
+      if (!this.kb) this.hideProbe();
     });
+    // antes que los controles de la cámara (que usan las flechas para desplazar la vista)
+    cv.addEventListener('keydown', this.onKey, { capture: true });
+    cv.addEventListener('blur', () => this.hideKb());
+    // en desarrollo, la escena queda a mano para las pruebas automáticas (recorrer todas las fichas)
+    if (import.meta.env.DEV) (window as unknown as { __q3: QStage }).__q3 = this;
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(container);
     this.resize();
@@ -353,16 +379,122 @@ export class QStage {
     this.down = null;
     if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7 || performance.now() - d.t > 700) return;
     const r = this.hit(e.clientX, e.clientY);
-    if (r) r.p.onPick(r.h.point.clone(), r.h);
-    // con el dedo no hay puntero que pase: el toque muestra la lectura un momento
-    else if (e.pointerType === 'touch' && this.probeAt(e.clientX, e.clientY)) {
-      window.clearTimeout(this.probeTimer);
-      this.probeTimer = window.setTimeout(() => this.hideProbe(), 3500);
+    if (e.pointerType !== 'touch') {
+      if (r) r.p.onPick(r.h.point.clone(), r.h);
+      return;
+    }
+    // con el dedo no hay puntero que pase: el primer toque muestra la lectura; si el objeto además hace algo (cerrar
+    // una válvula, mover la sonda), lo hace el segundo toque
+    const now = performance.now();
+    if (r && this.armed && this.armed.obj === r.p.obj && now - this.armed.at < 5000) {
+      this.armed = null;
+      r.p.onPick(r.h.point.clone(), r.h);
+      this.probeAt(e.clientX, e.clientY, true);
+      this.holdProbe();
+      return;
+    }
+    if (this.probeAt(e.clientX, e.clientY, true, r?.p)) {
+      this.armed = r ? { obj: r.p.obj, at: now } : null;
+      this.holdProbe();
+    } else if (r) r.p.onPick(r.h.point.clone(), r.h);
+  };
+
+  /** La lectura de un toque queda unos segundos. */
+  private holdProbe(): void {
+    window.clearTimeout(this.probeTimer);
+    this.probeTimer = window.setTimeout(() => {
+      this.hideProbe();
+      this.armed = null;
+    }, 5000);
+  }
+
+  // ------------------------------------------------------------ teclado
+  private onKey = (e: KeyboardEvent) => {
+    if (!this.probes.length && !this.picks.length) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const cv = this.renderer.domElement;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    const step = Math.max(8, Math.round(Math.min(W, H) * 0.035));
+    let dx = 0, dy = 0, act = false;
+    switch (e.key) {
+      case 'ArrowLeft':
+        dx = -step;
+        break;
+      case 'ArrowRight':
+        dx = step;
+        break;
+      case 'ArrowUp':
+        dy = -step;
+        break;
+      case 'ArrowDown':
+        dy = step;
+        break;
+      case 'Enter':
+      case ' ':
+        act = true;
+        break;
+      case 'Escape':
+        if (!this.kb) return;
+        this.hideKb();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      default:
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!this.kb) this.kb = { x: W / 2, y: H / 2 };
+    else {
+      this.kb.x = Math.max(4, Math.min(W - 4, this.kb.x + dx));
+      this.kb.y = Math.max(4, Math.min(H - 4, this.kb.y + dy));
+    }
+    this.drawKb();
+    const r = cv.getBoundingClientRect();
+    const cx = r.left + this.kb.x, cy = r.top + this.kb.y;
+    const pk = this.hit(cx, cy);
+    this.onHover?.(pk?.p.hint ?? null);
+    if (act) {
+      if (pk) pk.p.onPick(pk.h.point.clone(), pk.h);
+      else this.announce('Aquí no hay nada que tocar.');
+    }
+    if (!this.probeAt(cx, cy, true, act ? undefined : pk?.p)) {
+      this.hideProbe();
+      if (!act) this.announce(pk?.p.hint ? `${pk.p.hint}.` : 'Sin datos en este punto.');
     }
   };
 
+  private drawKb(): void {
+    if (!this.kb) return;
+    if (!this.kbEl) {
+      const el = document.createElement('div');
+      el.className = 'q3-kbcursor';
+      el.setAttribute('aria-hidden', 'true');
+      this.container.appendChild(el);
+      this.kbEl = el;
+    }
+    this.kbEl.style.display = 'block';
+    this.kbEl.style.transform = `translate(${Math.round(this.kb.x)}px, ${Math.round(this.kb.y)}px)`;
+  }
+
+  private hideKb(): void {
+    if (!this.kb) return;
+    this.kb = null;
+    if (this.kbEl) this.kbEl.style.display = 'none';
+    this.hideProbe();
+  }
+
+  /** Anuncia un texto al lector de pantalla (se espera un momento para no leer cada paso de las flechas). */
+  private announce(t: string): void {
+    window.clearTimeout(this.liveTimer);
+    this.liveTimer = window.setTimeout(() => {
+      this.live.textContent = t;
+    }, 350);
+  }
+
   private onMove = (e: PointerEvent) => {
     if (e.buttons || e.pointerType === 'touch') return;
+    if (this.kb) this.hideKb();
     const now = performance.now();
     if (now - this.hoverAt < 60) return;
     this.hoverAt = now;
@@ -395,21 +527,28 @@ export class QStage {
     return m;
   }
 
-  private probeAt(clientX: number, clientY: number): boolean {
+  /**
+   * Lee el punto de la pantalla: el primer objeto con ficha que dé una lectura (si uno no tiene datos ahí, se sigue
+   * con lo que está detrás). `say` la anuncia al lector de pantalla; `pick`, si el objeto además hace algo al
+   * tocarlo, lo agrega a la ficha.
+   */
+  private probeAt(clientX: number, clientY: number, say = false, pick?: Pickable): boolean {
     if (!this.probes.length) return false;
     const r = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(ndc, this.camera);
     const objs = this.probes.filter((p) => p.obj.visible).map((p) => p.obj);
-    for (const h of this.ray.intersectObjects(objs, true)) {
+    hits: for (const h of this.ray.intersectObjects(objs, true)) {
       let o: THREE.Object3D | null = h.object;
       while (o) {
         const p = this.probes.find((q) => q.obj === o);
         if (p) {
           const info = p.read(h.point.clone(), h);
-          if (!info) return false;
+          if (!info) continue hits;
+          if (pick) info.rows = [...info.rows, ['Para actuar', `${pick.hint ?? 'toca otra vez'}${pick.hint ? ' (toca otra vez o Enter)' : ''}`]];
           this.probeLast = { p, pt: h.point.clone(), h, x: clientX - r.left, y: clientY - r.top, at: performance.now() };
           this.showProbe(info, clientX - r.left, clientY - r.top, h.point);
+          if (say) this.announce(`${info.title}. ${info.rows.map(([k, v]) => `${k}: ${v}`).join('. ')}.`);
           return true;
         }
         o = o.parent;
@@ -454,6 +593,16 @@ export class QStage {
     if (this.probeEl) this.probeEl.style.display = 'none';
     if (this.probeDot) this.probeDot.visible = false;
     this.probeLast = null;
+  }
+
+  /** Imagen de la escena tal como se ve (para los reportes): se dibuja un cuadro y se copia en JPEG. */
+  snapshot(quality = 0.86): string {
+    this.finisher.render();
+    try {
+      return this.renderer.domElement.toDataURL('image/jpeg', quality);
+    } catch {
+      return '';
+    }
   }
 
   /** Vuelve a leer el último punto (la escena cambió: otro instante, otro caudal). */
@@ -554,7 +703,9 @@ export class QStage {
   dispose(): void {
     this.disposed = true;
     window.clearTimeout(this.probeTimer);
+    window.clearTimeout(this.liveTimer);
     this.probeEl?.remove();
+    this.kbEl?.remove();
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     this.controls.dispose();

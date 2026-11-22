@@ -9,6 +9,7 @@
 // 1/7) y el agua con aire del resalto se ve blanca.
 
 import * as THREE from 'three';
+import { froude, specificEnergy } from '../../three/readings';
 
 export interface Station {
   /** Posición a lo largo del canal (m). */
@@ -727,13 +728,22 @@ export function slab(mat: THREE.Material, x0: number, x1: number, y0: number, y1
 export const WATER = { clear: '#2f84b5', turbid: '#8a7350', silty: '#4f8a7a', lab: '#4fa3d8' };
 
 /**
- * Lectura del agua de un canal en un punto: profundidad, velocidad, número de Froude (con la profundidad como
- * profundidad hidráulica, lo que vale para secciones anchas y rectangulares) y energía específica.
+ * Lectura del agua de un canal en un punto: profundidad, velocidad, número de Froude (con la profundidad hidráulica A/T
+ * cuando la escena da la sección; si no, con la profundidad, lo que vale para secciones rectangulares y anchas) y
+ * energía específica.
  */
-export function waterProbe(w: WaterBody, x: number, title = 'El agua aquí', extra: [string, string][] = []): { title: string; rows: [string, string][]; strong: number } | null {
+export function waterProbe(
+  w: WaterBody,
+  x: number,
+  title = 'El agua aquí',
+  extra: [string, string][] = [],
+  hydDepth?: (y: number) => number,
+): { title: string; rows: [string, string][]; strong: number } | null {
   const s = w.sampleAt(x);
   if (!s) return null;
-  const g = 9.81, Fr = s.vel / Math.sqrt(g * Math.max(1e-4, s.depth)), E = s.depth + (s.vel * s.vel) / (2 * g);
+  // número de Froude con la profundidad hidráulica A/T (si la escena conoce la sección; si no, la profundidad)
+  const D = hydDepth ? hydDepth(s.depth) : s.depth;
+  const Fr = froude(s.vel, D), E = specificEnergy(s.depth, s.vel);
   const f = (v: number, d: number) => v.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
   const dd = s.depth < 0.1 ? 3 : 2;
   return {

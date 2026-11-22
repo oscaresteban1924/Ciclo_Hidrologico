@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { STEPS } from '../content/steps';
-import { RESERVOIR_IDS } from '../content/elements';
+import { ELEMENT_BY_ID, KIND_NAMES, RESERVOIR_IDS } from '../content/elements';
 import { UI } from '../content/ui';
 import { setAmbient, startAmbient, stopAmbient } from '../lib/audio';
 import type { SceneSpec } from '../state/spec';
@@ -205,7 +205,25 @@ export function SceneView({ spec, onCompare }: { spec: SceneSpec; onCompare?: (p
     if (ev.button !== 0) return;
     drag.current = { sx: ev.clientX, sy: ev.clientY, px: pan.x, py: pan.y, moved: false };
   };
+  // lectura al pasar el cursor (solo en exploración libre: en el paso de los reservorios daría la respuesta)
+  const [hover, setHover] = useState<{ x: number; y: number; id: string } | null>(null);
+  const hoverAt = (ev: React.PointerEvent<SVGSVGElement>) => {
+    if (ev.pointerType !== 'mouse' || state.mode !== 'explore' || state.tool || drag.current?.moved) {
+      if (hover) setHover(null);
+      return;
+    }
+    const rect = ev.currentTarget.getBoundingClientRect();
+    const [x, y] = mapper.toScene(ev.clientX - rect.left, ev.clientY - rect.top);
+    const id = hitTest(x, y, snowlineRef.current);
+    const wrap = wrapRef.current?.getBoundingClientRect();
+    if (!id || !ELEMENT_BY_ID[id] || !wrap) {
+      if (hover) setHover(null);
+      return;
+    }
+    setHover({ x: ev.clientX - wrap.left, y: ev.clientY - wrap.top, id });
+  };
   const onPointerMove = (ev: React.PointerEvent<SVGSVGElement>) => {
+    hoverAt(ev);
     const d = drag.current;
     if (!d || !canPan) return;
     const dx = ev.clientX - d.sx;
@@ -282,6 +300,8 @@ export function SceneView({ spec, onCompare }: { spec: SceneSpec; onCompare?: (p
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
+        onPointerLeave={() => setHover(null)}
+        style={hover ? { cursor: 'pointer' } : undefined}
       >
         <Defs />
         <SurfaceClips />
@@ -409,6 +429,13 @@ export function SceneView({ spec, onCompare }: { spec: SceneSpec; onCompare?: (p
         </button>
       </div>
       {state.legendOpen && <Legend onClose={() => dispatch({ type: 'legend', open: false })} />}
+      {hover && (
+        <div className={`scene-hover${hover.x > size.w - 280 ? ' is-left' : ''}`} style={{ left: hover.x, top: hover.y }} aria-hidden="true">
+          <b>{ELEMENT_BY_ID[hover.id].name}</b>
+          <span>{KIND_NAMES[ELEMENT_BY_ID[hover.id].kind]}</span>
+          <small>{state.selected === hover.id ? 'Ya está abierto en el panel' : 'Haz clic para ver qué es y cómo se conecta'}</small>
+        </div>
+      )}
       {hintOn && (
         <p className="scene-hint" key={`${focus.x}-${focus.y}`}>
           Arrastra para recorrer el paisaje

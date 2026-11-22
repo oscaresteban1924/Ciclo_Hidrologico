@@ -208,7 +208,14 @@ export class UniformWorld {
     }
     sc.add(this.leaves);
     for (const w of [this.water, this.flood]) w.setEnvironment(stage.scene.environment);
-    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, 'El canal'));
+    // con la sección del canal: profundidad hidráulica A/T (en la trapecial es menor que la profundidad)
+    const hd = (y: number) => {
+      const sec = this.v ? SHAPES[this.v.inp.shape] : null;
+      if (!sec) return y;
+      const g = geom(sec, Math.min(y, sec.shape === 'circ' ? sec.D * 0.999 : y));
+      return g.T > 1e-6 ? g.A / g.T : y;
+    };
+    stage.addProbe(this.water.group, (p) => waterProbe(this.water, p.x, 'El canal', [], hd));
     stage.addProbe(this.flood.group, (p) => waterProbe(this.flood, p.x, 'El agua que se sale del canal'));
     stage.view(this.views.general, false);
   }

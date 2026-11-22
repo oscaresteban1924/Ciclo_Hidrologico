@@ -1046,9 +1046,48 @@ Cada sala se documenta en su `MODELO_*.md`, sección «La escena» o «Lecturas�
 **Pendiente.**
 
 - No se probó en un equipo con GPU, y la página publicada no se abrió desde este entorno.
-- La sala «Ciclo hidrológico» (ilustración en SVG, que ya tenía su lectura al pasar el puntero) no cambió en esta ronda.
-- Las casas de Medellín vienen de su propio generador y del catastro: no usan las casas nuevas.
+- La sala «Ciclo hidrológico» (ilustración en SVG) no cambió en esta ronda. *(Corrección posterior: no tenía lectura al pasar el puntero, solo respondía al clic; se agregó en la ronda siguiente.)*
+- Las casas de Medellín vienen de su propio generador y del catastro: no usan las casas nuevas. *(Ya tenían fachadas de su propio atlas.)*
 - No todas las zonas de lectura se recorrieron con el puntero: en la casa, las fichas de los aparatos se leyeron por la acometida, pero no por cada aparato.
+
+## 4 quattuordecquatricies. Lecturas accesibles, simplificaciones corregidas y herramientas de la sala 2D (ejecutada)
+
+**Pedido.** «Procede con todo», sobre la lista de lo que faltaba subsanar tras la ronda anterior.
+
+**Qué cambió.**
+
+| Tema | Archivos | Qué hace ahora |
+|---|---|---|
+| Lecturas con teclado y lector de pantalla | `src/quality/three/stage.ts`, `src/city/CityLab.tsx` | Con la escena enfocada, las flechas mueven un punto de lectura (un anillo con cruz), `Enter` o la barra espaciadora actúan donde está y `Esc` lo oculta. Cada ficha se anuncia en una región viva y la escena describe cómo usarla. En Medellín el punto recorre la maqueta del sector y `Enter` elige lo que hay debajo. |
+| Toque en pantallas táctiles | `src/quality/three/stage.ts` | El primer toque muestra la ficha; el segundo, sobre el mismo objeto y antes de 5 s, actúa (por ejemplo, cerrar una válvula de la red). La ficha dice cómo actuar. |
+| Lecturas que no salían | `src/pumps/three/pumpWorlds.ts`, `src/house/three/houseWorld.ts`, `stage.ts` | La pequeña central: tubería de presión con sus anclajes, casa de máquinas y generador. La casa: lecturas propias en los modos «factura» (lectura del medidor y fuga) y «lluvia» (de dónde sale el agua del sanitario y lo que pide al tanque). Si un objeto no tiene dato en ese instante, la búsqueda sigue con lo que hay detrás. |
+| «Pasan 0,0 m³/s» en la rotura del jarillón | `src/model2d/EstructurasLab.tsx` | El dato era correcto: el río bajó del fondo de la rotura. El texto ahora lo dice («ya no pasa agua: el río bajó del fondo de la rotura»), o «todavía no pasa agua», o el sentido del flujo. |
+| Isócronas de la cuenca | `src/basins/travel.ts`, `basinWorld.ts` | Antes, distancia al cauce con un factor fijo para la ladera. Ahora, el método de velocidades del NRCS (NEH-630, cap. 15: V = k·√S con k por cobertura) por la ruta de mayor pendiente (D8), y Manning en el cauce; los tiempos se escalan al tiempo de concentración del panel. |
+| Froude en los canales | `src/three/readings.ts`, `src/canals/three/canalKit.ts` | Con la profundidad hidráulica A/T en lugar del tirante, como corresponde en secciones no rectangulares. |
+| Agua lejana en la sala 2D | `src/model2d/three/valleyWorld.ts` | El reflejo del cielo se atenúa con la distancia, para que el agua lejana conserve su color de agua turbia. |
+| Proyecto, reporte y comparación con HEC-RAS | `src/model2d/project.ts`, `ProjectTools.tsx` | Guardar y abrir el proyecto (JSON validado dato por dato), reporte HTML de la corrida con una imagen de la escena, y comparación con la profundidad máxima de HEC-RAS (GeoTIFF): áreas, índice F, aciertos, falsas alarmas, sesgo y RMSE, con un mapa de acuerdo y su tabla. Ver `docs/modelo2d/MODELO_2D.md`. |
+| Ciclo del agua | `src/scene/SceneView.tsx` | En la exploración libre, al pasar el puntero se nombra el elemento del paisaje (nombre y tipo) y un clic lo abre en el panel. En el recorrido guiado no aparece, porque el paso de los reservorios pide encontrarlos. La ronda anterior decía que esta sala «ya tenía su lectura al pasar el puntero»: no era así, solo respondía al clic. |
+| Herramientas de verificación | `tools/verificacion/fichas.py`, `superposiciones.py` | `fichas.py` recorre todas las lecturas de cada parte en el navegador: proyecta cada objeto con lectura, pide la ficha en ese punto y prueba el punto del teclado. `superposiciones.py` ahora registra los errores de la página y de la consola (salvo los avisos de WebGL del dibujo por software) y falla si hay alguno. |
+
+**Comprobado.**
+
+- Tipos sin errores. Pruebas: calidad 26/26, canales 33/33, cuencas 12/12, acueducto 12/12, aguas subterráneas 9/9, presas 8/8, laderas 9/9, bombas 11/11, medir 10/10, casa 8/8, lecturas 11/11 (nuevas, `docs/LECTURAS_PRUEBAS.md`) y proyecto de la sala 2D 9/9 (nuevas, `docs/modelo2d/PRUEBAS_PROYECTO.md`). Modelación 2D 28/28 y Medellín 64/64 (su informe se regeneró). Las dos compilaciones cumplen.
+- Recorrido de fichas (`fichas.py`, Chrome con dibujo por software, 35 partes con escena 3D): 124 objetos con lectura; 101 dieron su ficha, 16 estaban tapados por otro objeto que respondió con su propia ficha, 7 no se probaron por estar fuera de la vista o ocultos en esa parte (dos tubos del borde de la red del barrio, el aparato oculto de la casa y dos objetos ocultos de los canales); **ninguno sin lectura** y ningún error de la página o la consola. El punto del teclado se vio y se anunció en cada sala.
+- Sala 2D en el navegador: se guardó el proyecto, se cambió la malla, se volvió a abrir y la malla volvió a 20 m; se corrió, se descargaron los resultados, se cargó su propio GeoTIFF de profundidad como si fuera de HEC-RAS y la lectura del mapa de acuerdo dio «mojado en los dos · sala 2,35 m, HEC-RAS 2,35 m»; el reporte salió con la imagen de la escena y sin valores vacíos. Sin errores en la consola.
+- Ciclo del agua: 22 de 25 puntos de una rejilla sobre la escena nombraron un elemento (atmósfera, nube, páramo, río, vegetación, humedad del suelo, océano, acuífero); en el recorrido guiado no apareció ninguna ficha.
+- ESTADO_SUPERPOSICIONES
+
+**Decisiones que se mantienen.**
+
+- En la sala 2D las casas de tres pisos se ven altas porque la exageración vertical se aplica por igual al terreno, al agua y a las casas: así la profundidad del agua contra una fachada se lee en la misma escala. Achicar solo las casas haría parecer más profunda el agua.
+- Las casas de Medellín ya tenían fachadas de su propio atlas (`sectorScene.buildBuildings`); la ronda anterior lo reportó mal como pendiente.
+
+**Pendiente.**
+
+- No se probó en un equipo con GPU ni en tabletas o teléfonos físicos.
+- No se probó con lectores de pantalla reales (NVDA, VoiceOver): se verificaron las regiones vivas, los nombres y las descripciones accesibles.
+- La comparación con HEC-RAS se probó con GeoTIFF escritos por la propia sala; no con una salida real de RAS Mapper.
+- Las tres partes de «Calidad del agua» que no son escenas 3D (del río a la llave, de la casa al río, la ciudad y la lluvia) no tienen fichas al pasar el puntero.
 
 ## 5. Rendimiento medido
 
@@ -1138,7 +1177,7 @@ La aplicación mide el costo en cada equipo al entrar y recomienda 2 m si no alc
   - La trayectoria de los vehículos y el material flotante son ilustrativos; el criterio que mueve un vehículo (H2) sí es calculado.
 - **Calibración** de los parámetros de cobertura con datos locales.
 - **Modelación 2D.**
-  - No se comparó con corridas de HEC-RAS sobre el mismo terreno; el paquete descargado permite hacerlo.
+  - No se comparó con corridas de HEC-RAS sobre el mismo terreno; el paquete descargado permite hacerlo y la sala ya compara la profundidad máxima que devuelve RAS Mapper.
   - De los formatos de GeoTIFF se probaron el sin comprimir y el comprimido con deflate; los decodificadores LZW, PackBits y JPEG van incluidos pero no se probaron con archivos reales.
   - El puente usa coeficientes de manual sin calibrar; la rotura del jarillón es geométrica (no calcula la erosión del material).
   - El aspecto del agua, las estelas y la tinta se revisaron solo con dibujo por software (unos 2 s por cuadro en este entorno, a 1280 × 820); no se midió en un equipo con GPU.

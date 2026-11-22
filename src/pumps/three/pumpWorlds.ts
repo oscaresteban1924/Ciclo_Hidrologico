@@ -980,6 +980,7 @@ export class HydroWorld {
       const a = new THREE.Mesh(new THREE.BoxGeometry(s.D * 2.6, s.D * 2.2, 2.4), concreteMaterial('#bbb7ad'));
       a.position.copy(ppts[k]).add(V3(0, -s.D * 0.5, 0));
       a.castShadow = a.receiveShadow = true;
+      a.userData.pen = true;
       this.site.add(a);
     }
     // casa de máquinas: muros, techo y frente de vidrio para ver la turbina
@@ -1006,6 +1007,7 @@ export class HydroWorld {
     ph.add(roof, front);
     ph.position.set(xf + 2, 0, 12);
     this.site.add(ph);
+    this.powerhouse = ph;
     // turbina y generador según el tipo
     this.runner = new THREE.Group();
     const tc = V3(xf + 2, yTurb, 12);
@@ -1063,6 +1065,7 @@ export class HydroWorld {
       this.site.add(shaft, deck);
     }
     this.site.add(this.runner, genBox);
+    this.genBox = genBox;
     // descarga al río
     const tailGeo = new THREE.PlaneGeometry(3, 12, 1, 6);
     tailGeo.rotateX(-Math.PI / 2);
@@ -1121,6 +1124,9 @@ export class HydroWorld {
     return (this.g.Hg - this.yr(Math.max(0, x))) / SLOPE + 7 + 1.4;
   }
 
+  private powerhouse: THREE.Object3D | null = null;
+  private genBox: THREE.Object3D | null = null;
+
   private probeHydro(o: THREE.Object3D): ProbeInfo | null {
     const s = this.st;
     if (!s) return null;
@@ -1129,7 +1135,7 @@ export class HydroWorld {
       return false;
     };
     const names: Record<string, string> = { pelton: 'Pelton', francis: 'Francis', kaplan: 'Kaplan', banki: 'Banki (flujo cruzado)' };
-    if (this.pen && o === this.pen.mesh)
+    if ((this.pen && isIn(this.pen.mesh)) || o.userData.pen)
       return {
         title: 'Tubería de presión',
         rows: [
@@ -1140,7 +1146,7 @@ export class HydroWorld {
         ],
         strong: 3,
       };
-    if (isIn(this.runner))
+    if (isIn(this.runner) || isIn(this.powerhouse) || isIn(this.genBox))
       return {
         title: `Turbina ${names[s.turbine] ?? s.turbine}`,
         rows: [
