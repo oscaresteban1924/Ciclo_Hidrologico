@@ -290,7 +290,7 @@ def modelo2d(pg, screen, shots, report):
             pg.evaluate(BTN, 'Zonificación de la amenaza'); pg.wait_for_timeout(12000)
             top(pg); check(pg, screen, 'modelo2d-zonas', shots, report)
         if tag == 'modelo':
-            for k in (3, 6, 7, 8):
+            for k in (3, 6, 7, 8, 9):
                 pg.evaluate("(k) => { const b = document.querySelectorAll('.m2-steps button')[k]; if (b) b.click(); }", k); pg.wait_for_timeout(2500)
                 top(pg); check(pg, screen, f'modelo2d-paso{k + 1}', shots, report)
             # la creciente en el tiempo: el mapa a la mitad de la corrida (si ya corrió)
